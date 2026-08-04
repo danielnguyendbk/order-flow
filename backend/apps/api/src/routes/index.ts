@@ -2,13 +2,20 @@ import { Router } from "express";
 
 import type { AuthServicePort } from "../modules/auth/auth.service.js";
 import { createAuthRouter } from "../modules/auth/auth.routes.js";
+import { createAdminItemRouter, createPublicItemRouter } from "../modules/menu/item.routes.js";
+import type { ItemServicePort } from "../modules/menu/item.service.js";
 
 export function createApiRouter(
   authService: AuthServicePort,
   mountOperationalRoutes = true,
+  itemService?: ItemServicePort,
 ): Router {
   const router = Router();
   router.use(createAuthRouter(authService));
+  if (itemService) {
+    router.use("/menu/items", createPublicItemRouter(itemService));
+    router.use("/admin/menu-items", createAdminItemRouter(authService, itemService));
+  }
 
   // Loaded lazily so auth and isolated module tests do not initialize Prisma.
   if (mountOperationalRoutes) {
