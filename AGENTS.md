@@ -13,7 +13,8 @@ order-flow/
     ├── README.md                     # Short workspace overview
     ├── docker-compose.yml            # Local PostgreSQL 16 service
     ├── docs/
-    │   └── api-contract.md           # Planned HTTP route inventory
+    │   ├── api-contract.md           # Planned HTTP route inventory
+    │   └── openapi.yaml              # Importable Postman/OpenAPI contract for all routes
     ├── apps/
     │   ├── api/                      # HTTP API service
     │   │   └── src/
@@ -84,6 +85,7 @@ This is an initial skeleton, not yet a runnable application:
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
 - Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
+- Postman/API generation: import `backend/docs/openapi.yaml`; keep it synchronized with route behavior and `api-contract.md`.
 - Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.

@@ -1,0 +1,1101 @@
+openapi: 3.1.0
+info:
+  title: Order Flow API
+  version: 1.0.0
+  description: |
+    Contract for the Order Flow HTTP API. Import this file directly into
+    Postman, or attach it to Postman AI when generating collections, examples,
+    mocks, tests, or server implementations.
+
+    Operations marked `x-implementation-status: implemented` exist in the
+    current API. Operations marked `planned` are contracts for upcoming work.
+servers:
+  - url: http://localhost:3001
+    description: Local development
+  - url: https://api.example.com
+    description: Production placeholder
+
+tags:
+  - name: Telegram Auth
+  - name: Admin Auth
+  - name: Public Menu
+  - name: Admin Employees
+  - name: Admin Menu Categories
+  - name: Admin Menu Items
+
+paths:
+  /api/v1/telegram/session:
+    post:
+      tags: [Telegram Auth]
+      operationId: createTelegramSession
+      summary: Create a session from signed Telegram Web App data
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramSessionRequest"
+            example:
+              initData: "query_id=...&user=...&auth_date=...&hash=..."
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/auth/login:
+    post:
+      tags: [Admin Auth]
+      operationId: adminLogin
+      summary: Log in an owner account
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+            example:
+              username: owner
+              password: strong-password
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/auth/refresh:
+    post:
+      tags: [Admin Auth]
+      operationId: refreshAdminSession
+      summary: Rotate a refresh token and issue a new token pair
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token pair refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/auth/logout:
+    post:
+      tags: [Admin Auth]
+      operationId: adminLogout
+      summary: Revoke the current in-memory session
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/auth/me:
+    get:
+      tags: [Admin Auth]
+      operationId: getCurrentAdmin
+      summary: Get the authenticated owner profile
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current owner profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/menu/categories:
+    get:
+      tags: [Public Menu]
+      operationId: listPublicMenuCategories
+      summary: List active public menu categories
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: Active categories ordered by display order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuCategoryListResponse"
+
+  /api/v1/menu/items:
+    get:
+      tags: [Public Menu]
+      operationId: listPublicMenuItems
+      summary: List available public menu items
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/CategoryIdQuery"
+        - $ref: "#/components/parameters/SearchQuery"
+      responses:
+        "200":
+          description: Available menu items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItemListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/admin/employees:
+    get:
+      tags: [Admin Employees]
+      operationId: listEmployees
+      summary: List employees
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/LimitQuery"
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/UserRoleQuery"
+        - $ref: "#/components/parameters/UserStatusQuery"
+      responses:
+        "200":
+          description: Paginated employees
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Admin Employees]
+      operationId: createEmployee
+      summary: Create an employee
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmployeeRequest"
+      responses:
+        "201":
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/employees/{employeeId}:
+    parameters:
+      - $ref: "#/components/parameters/EmployeeIdPath"
+    get:
+      tags: [Admin Employees]
+      operationId: getEmployee
+      summary: Get an employee by ID
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Employee details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Admin Employees]
+      operationId: updateEmployee
+      summary: Partially update an employee
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEmployeeRequest"
+      responses:
+        "200":
+          description: Employee updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/employees/{employeeId}/activate:
+    post:
+      tags: [Admin Employees]
+      operationId: activateEmployee
+      summary: Activate an employee
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeIdPath"
+      responses:
+        "200":
+          description: Employee activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/employees/{employeeId}/deactivate:
+    post:
+      tags: [Admin Employees]
+      operationId: deactivateEmployee
+      summary: Deactivate an employee
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EmployeeIdPath"
+      responses:
+        "200":
+          description: Employee deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/menu-categories:
+    get:
+      tags: [Admin Menu Categories]
+      operationId: listAdminMenuCategories
+      summary: List all menu categories
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Menu categories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuCategoryListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Admin Menu Categories]
+      operationId: createMenuCategory
+      summary: Create a menu category
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMenuCategoryRequest"
+      responses:
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuCategoryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/menu-categories/{categoryId}:
+    parameters:
+      - $ref: "#/components/parameters/CategoryIdPath"
+    patch:
+      tags: [Admin Menu Categories]
+      operationId: updateMenuCategory
+      summary: Partially update a menu category
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMenuCategoryRequest"
+      responses:
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuCategoryResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Admin Menu Categories]
+      operationId: deleteMenuCategory
+      summary: Delete an unused menu category
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Category deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/menu-items:
+    get:
+      tags: [Admin Menu Items]
+      operationId: listAdminMenuItems
+      summary: List all menu items
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/LimitQuery"
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/CategoryIdQuery"
+        - name: isAvailable
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Paginated menu items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMenuItemListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Admin Menu Items]
+      operationId: createMenuItem
+      summary: Create a menu item
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMenuItemRequest"
+      responses:
+        "201":
+          description: Menu item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItemResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/menu-items/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/ItemIdPath"
+    get:
+      tags: [Admin Menu Items]
+      operationId: getMenuItem
+      summary: Get a menu item by ID
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Menu item details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItemResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Admin Menu Items]
+      operationId: updateMenuItem
+      summary: Partially update a menu item
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMenuItemRequest"
+      responses:
+        "200":
+          description: Menu item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuItemResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Admin Menu Items]
+      operationId: deleteMenuItem
+      summary: Delete an unused menu item
+      x-implementation-status: planned
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Menu item deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    EmployeeIdPath:
+      name: employeeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryIdPath:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ItemIdPath:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CategoryIdQuery:
+      name: categoryId
+      in: query
+      schema:
+        type: string
+        format: uuid
+    SearchQuery:
+      name: search
+      in: query
+      schema:
+        type: string
+        maxLength: 150
+    PageQuery:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    LimitQuery:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    UserRoleQuery:
+      name: role
+      in: query
+      schema:
+        $ref: "#/components/schemas/EmployeeRole"
+    UserStatusQuery:
+      name: status
+      in: query
+      schema:
+        $ref: "#/components/schemas/UserStatus"
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed
+              details:
+                - path: username
+                  message: Required
+    Unauthorized:
+      description: Authentication failed or session expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Invalid or expired token
+    Forbidden:
+      description: Authenticated account lacks permission or is inactive
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: The operation conflicts with existing data or business rules
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    TelegramSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [initData]
+      properties:
+        initData:
+          type: string
+          minLength: 1
+          maxLength: 10000
+
+    AdminLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          minLength: 8
+          maxLength: 200
+
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    UserRole:
+      type: string
+      enum: [OWNER, SERVICE_STAFF, BARISTA]
+    EmployeeRole:
+      type: string
+      enum: [SERVICE_STAFF, BARISTA]
+    UserStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    AuthUser:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, username, telegramUserId, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        username:
+          type: [string, "null"]
+        telegramUserId:
+          type: [string, "null"]
+          description: Telegram bigint serialized as a string
+        role:
+          $ref: "#/components/schemas/UserRole"
+
+    AuthSession:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Access-token lifetime in seconds
+        user:
+          $ref: "#/components/schemas/AuthUser"
+
+    AuthSessionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthSession"
+    UserResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthUser"
+
+    Employee:
+      type: object
+      additionalProperties: false
+      required: [id, fullName, role, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          maxLength: 150
+        telegramUserId:
+          type: [string, "null"]
+        telegramChatId:
+          type: [string, "null"]
+        username:
+          type: [string, "null"]
+        role:
+          $ref: "#/components/schemas/EmployeeRole"
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateEmployeeRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, telegramUserId, role]
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 150
+        telegramUserId:
+          type: string
+          pattern: "^[1-9][0-9]*$"
+        telegramChatId:
+          type: [string, "null"]
+          pattern: "^-?[0-9]+$"
+        username:
+          type: [string, "null"]
+          maxLength: 100
+        role:
+          $ref: "#/components/schemas/EmployeeRole"
+
+    UpdateEmployeeRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+          maxLength: 150
+        telegramUserId:
+          type: string
+          pattern: "^[1-9][0-9]*$"
+        telegramChatId:
+          type: [string, "null"]
+          pattern: "^-?[0-9]+$"
+        username:
+          type: [string, "null"]
+          maxLength: 100
+        role:
+          $ref: "#/components/schemas/EmployeeRole"
+
+    EmployeeResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Employee"
+    EmployeeListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Employee"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    MenuCategory:
+      type: object
+      additionalProperties: false
+      required: [id, name, displayOrder, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        displayOrder:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateMenuCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        displayOrder:
+          type: integer
+          minimum: 0
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+
+    UpdateMenuCategoryRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        displayOrder:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+
+    MenuCategoryResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MenuCategory"
+    MenuCategoryListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuCategory"
+
+    MenuItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - categoryId
+        - name
+        - description
+        - price
+        - isAvailable
+        - imageUrl
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        categoryId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 150
+        description:
+          type: [string, "null"]
+        price:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Price in VND
+        isAvailable:
+          type: boolean
+        imageUrl:
+          type: [string, "null"]
+          format: uri
+        displayOrder:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateMenuItemRequest:
+      type: object
+      additionalProperties: false
+      required: [categoryId, name, price]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        description:
+          type: [string, "null"]
+        price:
+          type: integer
+          format: int64
+          minimum: 0
+        isAvailable:
+          type: boolean
+          default: true
+        imageUrl:
+          type: [string, "null"]
+          format: uri
+        displayOrder:
+          type: integer
+          minimum: 0
+          default: 0
+
+    UpdateMenuItemRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        description:
+          type: [string, "null"]
+        price:
+          type: integer
+          format: int64
+          minimum: 0
+        isAvailable:
+          type: boolean
+        imageUrl:
+          type: [string, "null"]
+          format: uri
+        displayOrder:
+          type: integer
+          minimum: 0
+
+    MenuItemResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MenuItem"
+    MenuItemListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+    PaginatedMenuItemListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuItem"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+
+    PaginationMeta:
+      type: object
+      additionalProperties: false
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
+    ErrorDetail:
+      type: object
+      properties:
+        path:
+          type: string
+        message:
+          type: string
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
