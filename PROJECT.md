@@ -189,11 +189,11 @@ Admin Dashboard
 
 | Thành viên | Vai trò | Phạm vi phụ trách |
 |------------|----------|-------------------|
-| Nhân | Kỹ sư Nền tảng Backend | Authentication, Authorization, Employee, Menu, Shared Infrastructure |
-| Tâm | Kỹ sư Phát triển Nghiệp vụ Backend | Order, Kitchen Workflow, Delivery |
-| Thái | Kỹ sư Hệ thống Thanh toán | Payment, SePay, Revenue, Reconciliation |
-| Khoa | Kỹ sư Tích hợp Hệ thống | Telegram Bot, Notification, Integration, E2E Testing |
-| ... | Kỹ sư Frontend | Website quản trị và Dashboard |
+| Nhân | Nền tảng Backend | Authentication, Authorization, Employee, Menu, Shared Infrastructure |
+| Tâm | Phát triển Nghiệp vụ Backend | Order, Kitchen Workflow, Delivery |
+| Thái | Hệ thống Thanh toán | Payment, SePay, Revenue, Reconciliation |
+| Khoa | Tích hợp Hệ thống | Telegram Bot, Notification, Integration, E2E Testing |
+| Đạt |  Frontend | Website quản trị và Dashboard |
 
 ---
 
