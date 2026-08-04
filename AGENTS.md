@@ -66,15 +66,21 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 ## Current implementation state
 
-This is an initial skeleton, not yet a runnable application:
+- The API is an Express app with order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- `backend/apps/telegram-bot` is a TypeScript/Telegraf workspace with its own `package.json`, lockfile, environment template, Vitest configuration and notification-worker skeleton.
+- The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/session`, stores only an ephemeral Bot session, and renders role-specific menus.
+- Service staff can create a backend-owned draft order through Telegram: category → item → quantity → note → review; they can add, edit, delete, or cancel draft items. Price and total are always supplied by the API.
+- The Bot/API draft-order contract is documented in `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`; backend integration routes still need to conform to that contract before a live end-to-end run.
+- Bot unit tests cover authentication, role menus, draft creation, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
 
-- `apps/api/src/app.ts` only returns `{ name: "order-flow-api" }`.
-- `apps/telegram-bot/src/bot.ts` only returns `{ name: "order-flow-telegram-bot" }`.
-- `admin-web`, API subdirectories, Telegram bot subdirectories, and shared packages are placeholders kept by `.gitkeep` files.
-- `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`, but defines no models yet.
-- `seed.ts` has no seed data yet.
-- `docker-compose.yml` runs PostgreSQL 16 Alpine on port `5432`, with database/user/password `order_flow` and persistent volume `postgres_data`.
-- No root or workspace package manifest, lockfile, TypeScript config, environment example, tests, or CI configuration exists yet.
+## Progress log — 2026-08-04
+
+- `feat-tele` was pushed at `ad2991d` (`feat(telegram): add service staff draft order flow`).
+- `feat-tele` was merged into `dev` and pushed at `bc844e8`; `dev` is the current checked-out branch and tracks `origin/dev`.
+- Verified after the merge:
+  - `cd backend && npm.cmd run check:bot`
+  - `cd backend && npm.cmd run test:bot` — 14 tests passed.
+- Next Telegram dependencies: implement/align the real backend Telegram-session, menu and draft-order endpoints; then add Cash/QR, barista queue/Ready, and real notification outbox integration.
 
 ## Navigation shortcuts
 
