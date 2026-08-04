@@ -30,3 +30,32 @@ npm install
 
 Row Level Security must be enabled for every table exposed through the
 browser Supabase client. Never use a Supabase service-role key in admin-web.
+
+## API service
+
+The Fastify API lives in `apps/api`. Install and run it with:
+
+```bash
+cd apps/api
+npm install
+npm run dev
+```
+
+Authentication uses a process-local memory cache for sessions and the
+server-only variables shown in the repository `.env.example`. Only SHA-256
+refresh-token hashes are cached; restarting the API logs out every user, and
+multiple API instances do not share sessions. Use Redis before horizontally
+scaling the API.
+
+Apply `prisma/sql/2026-08-04_users_rls.sql` to prevent the `users` table and
+its password hashes from being read through Supabase's public Data API. The API
+automatically finds `.env.local` from its current directory or any parent
+directory.
+
+Useful checks:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```

@@ -17,12 +17,12 @@ order-flow/
     ├── apps/
     │   ├── api/                      # HTTP API service
     │   │   └── src/
-    │   │       ├── app.ts            # API factory placeholder (`createApp`)
+    │   │       ├── app.ts            # Fastify application factory (`createApp`)
     │   │       ├── config/           # Runtime/application configuration
     │   │       ├── jobs/             # Background/scheduled jobs
     │   │       ├── middleware/       # HTTP middleware
     │   │       ├── routes/           # Route registration
-    │   │       └── modules/          # Domain modules (listed below)
+    │   │       └── modules/          # Domain modules (listed below); auth is implemented
     │   ├── telegram-bot/             # Telegram bot service
     │   │   └── src/
     │   │       ├── bot.ts            # Bot factory placeholder (`createBot`)
@@ -67,13 +67,13 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 This is an initial skeleton, not yet a runnable application:
 
-- `apps/api/src/app.ts` only returns `{ name: "order-flow-api" }`.
+- `apps/api` is a runnable Fastify service; the auth module implements admin JWT sessions and verified Telegram Web App sessions. Session state is held by a bounded process-local memory cache in `auth-session.store.ts`.
 - `apps/telegram-bot/src/bot.ts` only returns `{ name: "order-flow-telegram-bot" }`.
-- `admin-web`, API subdirectories, Telegram bot subdirectories, and shared packages are placeholders kept by `.gitkeep` files.
+- Most non-auth API modules, Telegram bot subdirectories, admin-web UI directories, and shared packages remain placeholders kept by `.gitkeep` files.
 - `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`, but defines no models yet.
 - `seed.ts` has no seed data yet.
 - `docker-compose.yml` runs PostgreSQL 16 Alpine on port `5432`, with database/user/password `order_flow` and persistent volume `postgres_data`.
-- No root or workspace package manifest, lockfile, TypeScript config, environment example, tests, or CI configuration exists yet.
+- API dependencies, TypeScript config, auth tests, and a root environment example exist; there is still no root workspace manifest or CI configuration.
 
 ## Navigation shortcuts
 
@@ -84,6 +84,7 @@ This is an initial skeleton, not yet a runnable application:
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
 - Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
+- Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 
