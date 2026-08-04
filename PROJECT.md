@@ -193,7 +193,7 @@ Admin Dashboard
 | Tâm | Kỹ sư Phát triển Nghiệp vụ Backend | Order, Kitchen Workflow, Delivery |
 | Thái | Kỹ sư Hệ thống Thanh toán | Payment, SePay, Revenue, Reconciliation |
 | Khoa | Kỹ sư Tích hợp Hệ thống | Telegram Bot, Notification, Integration, E2E Testing |
-| ... | Kỹ sư Frontend | Website quản trị và Dashboard |
+| Đạt | Kỹ sư Frontend | Website quản trị và Dashboard |
 
 ---
 
