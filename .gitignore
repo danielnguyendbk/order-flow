@@ -1,0 +1,16 @@
+# Local environment files contain secrets and must never be committed.
+.env
+.env.*
+!.env.example
+
+# JavaScript / TypeScript dependencies and build output.
+node_modules/
+.next/
+dist/
+build/
+coverage/
+
+# Local tooling.
+.DS_Store
+*.log
+

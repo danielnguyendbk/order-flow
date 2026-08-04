@@ -12,6 +12,8 @@ order-flow/
 └── backend/
     ├── README.md                     # Short workspace overview
     ├── docker-compose.yml            # Local PostgreSQL 16 service
+    ├── docs/
+    │   └── api-contract.md           # Planned HTTP route inventory
     ├── apps/
     │   ├── api/                      # HTTP API service
     │   │   └── src/
@@ -34,7 +36,7 @@ order-flow/
     │       └── src/
     │           ├── app/               # Application pages/layout
     │           ├── components/        # Reusable UI components
-    │           ├── services/          # API/client services
+    │           ├── services/          # API clients; `supabase.ts` is the browser client
     │           └── types/             # Admin-web-specific types
     ├── packages/
     │   ├── shared-types/              # Types shared across applications
@@ -68,7 +70,7 @@ This is an initial skeleton, not yet a runnable application:
 - `apps/api/src/app.ts` only returns `{ name: "order-flow-api" }`.
 - `apps/telegram-bot/src/bot.ts` only returns `{ name: "order-flow-telegram-bot" }`.
 - `admin-web`, API subdirectories, Telegram bot subdirectories, and shared packages are placeholders kept by `.gitkeep` files.
-- `schema.prisma` configures Prisma Client and PostgreSQL through `DATABASE_URL`, but defines no models yet.
+- `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`, but defines no models yet.
 - `seed.ts` has no seed data yet.
 - `docker-compose.yml` runs PostgreSQL 16 Alpine on port `5432`, with database/user/password `order_flow` and persistent volume `postgres_data`.
 - No root or workspace package manifest, lockfile, TypeScript config, environment example, tests, or CI configuration exists yet.
@@ -81,6 +83,9 @@ This is an initial skeleton, not yet a runnable application:
 - Database work: start at `backend/prisma/schema.prisma` and `backend/prisma/seed.ts`.
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
+- Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
+- Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
+- Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 
 ## Maintenance rule
 
