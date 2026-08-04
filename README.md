@@ -1,4 +1,4 @@
-# 🚀 ACIS Flow
+# 🚀 OrderFlow
 
 > **Smart F&B Operations Platform for Small & Medium Businesses**
 
@@ -227,15 +227,7 @@ Các trường hợp cần kiểm thử:
 
 ------------------------------------------------------------------------
 
-# 👨‍💻 Team Responsibilities
 
-  Member      Responsibility
-  ----------- -----------------------------------------
-  Backend 1   Foundation, Auth, Employee, Menu
-  Backend 2   Order, Kitchen Workflow, Delivery
-  Backend 3   Payment, SePay, Revenue, Audit
-  Backend 4   Telegram Bot, Notification, Integration
-  Frontend    Dashboard & Admin UI
 
 
 
