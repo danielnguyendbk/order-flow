@@ -35,7 +35,6 @@ B --> F[Express.js API]
 E --> F
 
 F --> G[(PostgreSQL)]
-F --> H[(Redis)]
 I[SePay] -->|Webhook| F
 ```
 
@@ -78,13 +77,9 @@ READY --> DELIVERED
 ------------------------------------------------------------------------
 
 # ⚙️ Tech Stack
-
-  Layer           Technology
-  --------------- -----------------------------------
   Backend         Node.js + Express.js + TypeScript
   ORM             Prisma
   Database        PostgreSQL
-  Cache / Queue   Redis + BullMQ
   Bot             Telegraf.js
   Frontend        Next.js
   Auth            JWT
@@ -242,45 +237,6 @@ Các trường hợp cần kiểm thử:
   Backend 4   Telegram Bot, Notification, Integration
   Frontend    Dashboard & Admin UI
 
-------------------------------------------------------------------------
 
-# 🌳 Git Workflow
 
-``` text
-main
-develop
 
-feature/backend-foundation-auth
-feature/order-lifecycle
-feature/payment-sepay
-feature/telegram-bot
-```
-
-------------------------------------------------------------------------
-
-# 🛣 Roadmap
-
-## MVP
-
--   [x] Authentication
--   [x] Menu
--   [x] Order
--   [x] Payment
--   [x] Telegram Bot
--   [x] Dashboard
-
-## Future
-
--   [ ] Inventory
--   [ ] Loyalty
--   [ ] AI Analytics
--   [ ] Mobile App
--   [ ] Multi Branch
-
-------------------------------------------------------------------------
-
-# 📄 License
-
-MIT License
-
-Copyright © ACIS Flow Team
