@@ -1,28 +1,18 @@
-import type { FastifyInstance } from "fastify";
+import { Router } from "express";
 
 import { AuthController } from "./auth.controller.js";
 import { requireAdminAuth } from "./auth.middleware.js";
 import type { AuthServicePort } from "./auth.service.js";
 
-export interface AuthRoutesOptions {
-  authService: AuthServicePort;
+export function createAuthRouter(authService: AuthServicePort): Router {
+  const router = Router();
+  const controller = new AuthController(authService);
+  const adminAuth = requireAdminAuth(authService);
+
+  router.post("/telegram/session", controller.telegramSession);
+  router.post("/admin/auth/login", controller.adminLogin);
+  router.post("/admin/auth/refresh", controller.refresh);
+  router.post("/admin/auth/logout", adminAuth, controller.logout);
+  router.get("/admin/auth/me", adminAuth, controller.me);
+  return router;
 }
-
-export async function authRoutes(
-  app: FastifyInstance,
-  options: AuthRoutesOptions,
-): Promise<void> {
-  const controller = new AuthController(options.authService);
-  const adminAuth = requireAdminAuth(options.authService);
-
-  app.post("/telegram/session", controller.telegramSession);
-  app.post("/admin/auth/login", controller.adminLogin);
-  app.post("/admin/auth/refresh", controller.refresh);
-  app.post(
-    "/admin/auth/logout",
-    { preHandler: adminAuth },
-    controller.logout,
-  );
-  app.get("/admin/auth/me", { preHandler: adminAuth }, controller.me);
-}
-

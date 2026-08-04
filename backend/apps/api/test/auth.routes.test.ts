@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import request from "supertest";
 
 import { createApp } from "../src/app.js";
 import { AppError } from "../src/core/errors.js";
@@ -73,68 +74,50 @@ class FakeAuthService implements AuthServicePort {
   }
 }
 
-test("admin auth routes support login, refresh, me, and logout", async (context) => {
+test("admin auth routes support login, refresh, me, and logout", async () => {
   const authService = new FakeAuthService();
-  const app = await createApp({ authService });
-  context.after(() => app.close());
+  const app = createApp({ authService });
 
-  const login = await app.inject({
-    method: "POST",
-    url: "/api/v1/admin/auth/login",
-    payload: { username: "owner", password: "correct-password" },
-  });
-  assert.equal(login.statusCode, 200);
-  assert.deepEqual(login.json(), { data: session });
+  const login = await request(app)
+    .post("/api/v1/admin/auth/login")
+    .send({ username: "owner", password: "correct-password" });
+  assert.equal(login.status, 200);
+  assert.deepEqual(login.body, { data: session });
 
-  const refresh = await app.inject({
-    method: "POST",
-    url: "/api/v1/admin/auth/refresh",
-    payload: { refreshToken: "refresh-token" },
-  });
-  assert.equal(refresh.statusCode, 200);
+  const refresh = await request(app)
+    .post("/api/v1/admin/auth/refresh")
+    .send({ refreshToken: "refresh-token" });
+  assert.equal(refresh.status, 200);
 
-  const me = await app.inject({
-    method: "GET",
-    url: "/api/v1/admin/auth/me",
-    headers: { authorization: "Bearer access-token" },
-  });
-  assert.equal(me.statusCode, 200);
-  assert.deepEqual(me.json(), { data: user });
+  const me = await request(app)
+    .get("/api/v1/admin/auth/me")
+    .set("authorization", "Bearer access-token");
+  assert.equal(me.status, 200);
+  assert.deepEqual(me.body, { data: user });
 
-  const logout = await app.inject({
-    method: "POST",
-    url: "/api/v1/admin/auth/logout",
-    headers: { authorization: "Bearer access-token" },
-  });
-  assert.equal(logout.statusCode, 204);
+  const logout = await request(app)
+    .post("/api/v1/admin/auth/logout")
+    .set("authorization", "Bearer access-token");
+  assert.equal(logout.status, 204);
   assert.equal(authService.logoutCalls, 1);
 });
 
-test("admin auth routes reject invalid input and missing bearer token", async (context) => {
-  const app = await createApp({ authService: new FakeAuthService() });
-  context.after(() => app.close());
+test("admin auth routes reject invalid input and missing bearer token", async () => {
+  const app = createApp({ authService: new FakeAuthService() });
 
-  const invalidLogin = await app.inject({
-    method: "POST",
-    url: "/api/v1/admin/auth/login",
-    payload: { username: "", password: "short" },
-  });
-  assert.equal(invalidLogin.statusCode, 400);
-  assert.equal(invalidLogin.json().error.code, "VALIDATION_ERROR");
+  const invalidLogin = await request(app)
+    .post("/api/v1/admin/auth/login")
+    .send({ username: "", password: "short" });
+  assert.equal(invalidLogin.status, 400);
+  assert.equal(invalidLogin.body.error.code, "VALIDATION_ERROR");
 
-  const missingToken = await app.inject({
-    method: "GET",
-    url: "/api/v1/admin/auth/me",
-  });
-  assert.equal(missingToken.statusCode, 401);
-  assert.equal(missingToken.json().error.code, "UNAUTHORIZED");
+  const missingToken = await request(app).get("/api/v1/admin/auth/me");
+  assert.equal(missingToken.status, 401);
+  assert.equal(missingToken.body.error.code, "UNAUTHORIZED");
 
-  const invalidCredentials = await app.inject({
-    method: "POST",
-    url: "/api/v1/admin/auth/login",
-    payload: { username: "owner", password: "incorrect-password" },
-  });
-  assert.equal(invalidCredentials.statusCode, 401);
-  assert.equal(invalidCredentials.json().error.code, "INVALID_CREDENTIALS");
+  const invalidCredentials = await request(app)
+    .post("/api/v1/admin/auth/login")
+    .send({ username: "owner", password: "incorrect-password" });
+  assert.equal(invalidCredentials.status, 401);
+  assert.equal(invalidCredentials.body.error.code, "INVALID_CREDENTIALS");
 });
-

@@ -1,4 +1,9 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import express, {
+  type Application,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import { ZodError } from "zod";
 
 import { createDatabasePool } from "./config/database.js";
@@ -8,63 +13,82 @@ import { AuthRepository } from "./modules/auth/auth.repository.js";
 import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
 import { AuthService, type AuthServicePort } from "./modules/auth/auth.service.js";
 import { AuthTokenService } from "./modules/auth/auth.tokens.js";
-import { apiRoutes } from "./routes/index.js";
+import { createApiRouter } from "./routes/index.js";
 
 export interface CreateAppOptions {
   authService?: AuthServicePort;
-  logger?: boolean;
+  mountOperationalRoutes?: boolean;
 }
 
-export async function createApp(
-  options: CreateAppOptions = {},
-): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? false });
+export function createApp(options: CreateAppOptions = {}): Application {
+  const app = express();
   let authService = options.authService;
+  let dispose = async () => undefined;
 
   if (!authService) {
     const env = getEnv();
     const pool = createDatabasePool(env);
-    const repository = new AuthRepository(pool);
     const sessions = new MemoryAuthSessionStore(env.AUTH_SESSION_CACHE_MAX);
     authService = new AuthService(
-      repository,
+      new AuthRepository(pool),
       sessions,
       new AuthTokenService(env),
       env,
     );
-    app.addHook("onClose", async () => {
+    dispose = async () => {
       sessions.clear();
       await pool.end();
-    });
+    };
   }
 
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof ZodError) {
-      return reply.code(400).send({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Request validation failed",
-          details: error.issues.map((issue) => ({
-            path: issue.path.join("."),
-            message: issue.message,
-          })),
-        },
-      });
-    }
+  app.locals.dispose = dispose;
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true }));
 
-    if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({
-        error: { code: error.code, message: error.message },
-      });
-    }
+  app.get("/health", (_request, response) => {
+    response.json({ status: "ok", service: "order-flow-api" });
+  });
+  app.use(
+    "/api/v1",
+    createApiRouter(
+      authService,
+      options.mountOperationalRoutes ?? options.authService === undefined,
+    ),
+  );
 
-    request.log.error(error);
-    return reply.code(500).send({
-      error: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
+  app.use((_request: Request, response: Response) => {
+    response.status(404).json({
+      error: { code: "NOT_FOUND", message: "Route not found" },
     });
   });
 
-  app.get("/health", async () => ({ status: "ok" }));
-  await app.register(apiRoutes, { authService });
+  app.use(
+    (error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+      if (error instanceof ZodError) {
+        response.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Request validation failed",
+            details: error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+        });
+        return;
+      }
+      if (error instanceof AppError) {
+        response.status(error.statusCode).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      console.error(error);
+      response.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
+      });
+    },
+  );
+
   return app;
 }

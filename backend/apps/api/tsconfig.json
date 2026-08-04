@@ -1,17 +1,26 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "rootDir": ".",
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/app.ts",
+    "src/server.ts",
+    "src/config/**/*.ts",
+    "src/core/**/*.ts",
+    "src/middleware/**/*.ts",
+    "src/modules/auth/**/*.ts",
+    "src/modules/employees/**/*.ts",
+    "src/modules/menu/**/*.ts",
+    "src/routes/**/*.ts",
+    "test/**/*.ts"
+  ]
 }
-

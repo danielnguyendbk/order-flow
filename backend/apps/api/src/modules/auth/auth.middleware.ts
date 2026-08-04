@@ -1,18 +1,19 @@
-import type { FastifyRequest } from "fastify";
+import type { NextFunction, Request, Response } from "express";
 
 import { AppError } from "../../core/errors.js";
 import type { AuthServicePort } from "./auth.service.js";
 import type { AccessIdentity } from "./auth.types.js";
 
-declare module "fastify" {
-  interface FastifyRequest {
-    auth: AccessIdentity;
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: AccessIdentity;
+    }
   }
 }
 
-function readBearerToken(request: FastifyRequest): string {
-  const authorization = request.headers.authorization;
-  const [scheme, token, extra] = authorization?.split(" ") ?? [];
+function readBearerToken(request: Request): string {
+  const [scheme, token, extra] = request.headers.authorization?.split(" ") ?? [];
   if (scheme?.toLowerCase() !== "bearer" || !token || extra) {
     throw new AppError("UNAUTHORIZED", "Bearer token is required");
   }
@@ -20,8 +21,20 @@ function readBearerToken(request: FastifyRequest): string {
 }
 
 export function requireAdminAuth(authService: AuthServicePort) {
-  return async function adminAuthMiddleware(request: FastifyRequest): Promise<void> {
-    request.auth = await authService.authenticate(readBearerToken(request), "OWNER");
+  return async function adminAuthMiddleware(
+    request: Request,
+    _response: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      request.auth = await authService.authenticate(
+        readBearerToken(request),
+        "OWNER",
+      );
+      next();
+    } catch (error) {
+      next(error);
+    }
   };
 }
 

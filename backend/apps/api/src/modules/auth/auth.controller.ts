@@ -1,5 +1,6 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { NextFunction, Request, Response } from "express";
 
+import { AppError } from "../../core/errors.js";
 import type { AuthServicePort } from "./auth.service.js";
 import {
   adminLoginSchema,
@@ -7,7 +8,7 @@ import {
   telegramSessionSchema,
 } from "./auth.schemas.js";
 
-function metadata(request: FastifyRequest) {
+function metadata(request: Request) {
   return {
     ipAddress: request.ip,
     userAgent: request.headers["user-agent"],
@@ -17,39 +18,61 @@ function metadata(request: FastifyRequest) {
 export class AuthController {
   constructor(private readonly authService: AuthServicePort) {}
 
-  telegramSession = async (request: FastifyRequest, reply: FastifyReply) => {
-    const input = telegramSessionSchema.parse(request.body);
-    const session = await this.authService.createTelegramSession(
-      input.initData,
-      metadata(request),
-    );
-    return reply.code(201).send({ data: session });
+  telegramSession = async (request: Request, response: Response, next: NextFunction) => {
+    try {
+      const input = telegramSessionSchema.parse(request.body);
+      const session = await this.authService.createTelegramSession(
+        input.initData,
+        metadata(request),
+      );
+      response.status(201).json({ data: session });
+    } catch (error) {
+      next(error);
+    }
   };
 
-  adminLogin = async (request: FastifyRequest, reply: FastifyReply) => {
-    const input = adminLoginSchema.parse(request.body);
-    const session = await this.authService.loginAdmin(
-      input.username,
-      input.password,
-      metadata(request),
-    );
-    return reply.code(200).send({ data: session });
+  adminLogin = async (request: Request, response: Response, next: NextFunction) => {
+    try {
+      const input = adminLoginSchema.parse(request.body);
+      const session = await this.authService.loginAdmin(
+        input.username,
+        input.password,
+        metadata(request),
+      );
+      response.status(200).json({ data: session });
+    } catch (error) {
+      next(error);
+    }
   };
 
-  refresh = async (request: FastifyRequest, reply: FastifyReply) => {
-    const input = refreshSchema.parse(request.body);
-    const session = await this.authService.refresh(input.refreshToken);
-    return reply.code(200).send({ data: session });
+  refresh = async (request: Request, response: Response, next: NextFunction) => {
+    try {
+      const input = refreshSchema.parse(request.body);
+      response.status(200).json({
+        data: await this.authService.refresh(input.refreshToken),
+      });
+    } catch (error) {
+      next(error);
+    }
   };
 
-  logout = async (request: FastifyRequest, reply: FastifyReply) => {
-    await this.authService.logout(request.auth);
-    return reply.code(204).send();
+  logout = async (request: Request, response: Response, next: NextFunction) => {
+    try {
+      if (!request.auth) throw new AppError("UNAUTHORIZED", "Authentication required");
+      await this.authService.logout(request.auth);
+      response.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   };
 
-  me = async (request: FastifyRequest, reply: FastifyReply) => {
-    const user = await this.authService.me(request.auth);
-    return reply.code(200).send({ data: user });
+  me = async (request: Request, response: Response, next: NextFunction) => {
+    try {
+      if (!request.auth) throw new AppError("UNAUTHORIZED", "Authentication required");
+      response.status(200).json({ data: await this.authService.me(request.auth) });
+    } catch (error) {
+      next(error);
+    }
   };
 }
 
