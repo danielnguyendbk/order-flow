@@ -94,18 +94,21 @@ READY --> DELIVERED
 # 📁 Project Structure
 
 ``` text
-acis-flow/
-├── apps/
-│   ├── api/
-│   ├── telegram-bot/
-│   └── admin-web/
-├── packages/
-│   ├── shared-types/
-│   └── shared-utils/
-├── prisma/
-├── docker/
-├── docs/
-├── docker-compose.yml
+order-flow/
+├── backend/
+│   ├── apps/
+│   │   ├── api/
+│   │   └── telegram-bot/
+│   ├── packages/
+│   │   ├── shared-types/
+│   │   └── shared-utils/
+│   ├── prisma/
+│   ├── docker/
+│   ├── docs/
+│   └── docker-compose.yml
+├── frontend/
+│   ├── src/
+│   └── public/
 └── README.md
 ```
 

@@ -4,11 +4,17 @@ Use this file as the first-stop repository map. Read it before scanning the tree
 
 ## Repository layout
 
-The repository currently contains one workspace under `backend/`.
+The repository currently contains two main workspaces: `backend/` and `frontend/`.
 
 ```text
 order-flow/
 ├── AGENTS.md                         # This persistent project map
+├── frontend/                         # Next.js Admin Web Application
+│   ├── src/
+│   │   ├── app/                      # App Router (pages: dashboard, orders, payments, etc.)
+│   │   ├── components/               # Reusable UI components
+│   │   └── lib/                      # Utility functions and data models
+│   └── public/                       # Static assets
 └── backend/
     ├── README.md                     # Short workspace overview
     ├── docker-compose.yml            # Local PostgreSQL 16 service
@@ -32,12 +38,7 @@ order-flow/
     │   │       ├── middleware/        # Bot middleware
     │   │       ├── scenes/            # Multi-step conversation flows
     │   │       └── services/          # Bot-facing integrations/services
-    │   └── admin-web/                # Admin web application
-    │       └── src/
-    │           ├── app/               # Application pages/layout
-    │           ├── components/        # Reusable UI components
-    │           ├── services/          # API clients; `supabase.ts` is the browser client
-    │           └── types/             # Admin-web-specific types
+    │   └── admin-web/                # (Deprecated placeholder)
     ├── packages/
     │   ├── shared-types/              # Types shared across applications
     │   ├── shared-constants/          # Constants shared across applications
@@ -90,3 +91,12 @@ This is an initial skeleton, not yet a runnable application:
 ## Maintenance rule
 
 When adding, removing, or repurposing a top-level app, package, domain module, or infrastructure component, update this map in the same change.
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
