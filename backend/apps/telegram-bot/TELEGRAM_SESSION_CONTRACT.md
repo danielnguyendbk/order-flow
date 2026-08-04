@@ -37,3 +37,27 @@ an unknown Telegram user. Error bodies have the shape:
 
 The bot calls this endpoint again for every callback; a Telegram session must
 never be used as the authorization source.
+
+## Draft order contract
+
+The Bot uses these endpoints for the service-staff draft flow. Every request
+uses the same internal-secret header and authenticated Telegram user context.
+The API must verify ownership, active employee status, item availability, and
+that the order is still `paymentStatus=UNPAID` and
+`fulfillmentStatus=PENDING_PAYMENT`.
+
+| Endpoint | Request | Response |
+| --- | --- | --- |
+| `POST /orders` | none | draft order |
+| `GET /menu/categories` | none | active categories |
+| `GET /menu/items?categoryId=:id` | none | active/inactive menu items with `id`, `name`, `price`, `isActive` |
+| `POST /orders/:orderId/items` | `menuItemId`, `quantity`, optional `note` | updated draft order |
+| `PATCH /orders/:orderId/items/:itemId` | optional `quantity` and/or `note` | updated draft order |
+| `DELETE /orders/:orderId/items/:itemId` | none | updated draft order |
+| `GET /orders/:orderId` | none | current draft order |
+| `POST /orders/:orderId/cancel` | none | `204` or cancellation result |
+
+A draft-order response contains `id`, `code`, `paymentStatus`,
+`fulfillmentStatus`, `totalAmount`, and `items`. An item contains `id`,
+`menuItemId`, `name`, `quantity`, `unitPrice`, and optional `note`. The API
+calculates all prices and `totalAmount`; the Bot never sends a client total.

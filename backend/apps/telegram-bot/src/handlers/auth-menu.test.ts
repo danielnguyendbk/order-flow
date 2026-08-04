@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { BackendApiError, type BackendApi } from "../api/backend-client.js";
+import { BackendApiError } from "../api/backend-client.js";
+import type { EmployeeAuthenticationApi } from "../auth/employee-auth.js";
 import type { EmployeeSession } from "../types.js";
 import { handleCallback, type CallbackHandlerContext } from "./callback.handler.js";
 import { handleStart, type StartHandlerContext } from "./start.handler.js";
@@ -19,7 +20,7 @@ const barista: EmployeeSession = {
   role: "BARISTA",
 };
 
-function apiReturning(employee: EmployeeSession): BackendApi {
+function apiReturning(employee: EmployeeSession): EmployeeAuthenticationApi {
   return { createTelegramSession: vi.fn().mockResolvedValue(employee) };
 }
 
@@ -72,7 +73,7 @@ describe("Telegram authentication and role menu", () => {
 
   it.each([401, 403, 404])("blocks an unregistered or inactive employee (%i)", async (status) => {
     const ctx = startContext(serviceStaff.telegramUserId);
-    const api: BackendApi = {
+    const api: EmployeeAuthenticationApi = {
       createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Denied", status, "EMPLOYEE_INACTIVE")),
     };
 
@@ -96,7 +97,7 @@ describe("Telegram authentication and role menu", () => {
     expect(stale.answers).toEqual(["Thao tác không còn hợp lệ."]);
 
     const inactive = callbackContext("service:order:create", serviceStaff.telegramUserId);
-    const api: BackendApi = {
+    const api: EmployeeAuthenticationApi = {
       createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Inactive", 403, "EMPLOYEE_INACTIVE")),
     };
     await handleCallback(inactive, api);

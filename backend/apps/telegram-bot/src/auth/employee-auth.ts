@@ -13,9 +13,11 @@ export interface EmployeeAuthContext {
   session: BotSession;
 }
 
+export type EmployeeAuthenticationApi = Pick<BackendApi, "createTelegramSession">;
+
 export async function authenticateEmployee(
   ctx: EmployeeAuthContext,
-  api: BackendApi,
+  api: EmployeeAuthenticationApi,
 ): Promise<EmployeeSession> {
   const telegramUserId = ctx.from?.id;
   if (!telegramUserId) throw new MissingTelegramIdentityError();

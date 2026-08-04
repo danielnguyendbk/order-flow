@@ -1,7 +1,7 @@
 import type { Telegraf } from "telegraf";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
-import { authenticateEmployee, MissingTelegramIdentityError } from "../auth/employee-auth.js";
+import { authenticateEmployee, type EmployeeAuthenticationApi, MissingTelegramIdentityError } from "../auth/employee-auth.js";
 import { roleMenu } from "../keyboards/role-menu.js";
 import type { BotContext, BotSession } from "../types.js";
 
@@ -19,7 +19,7 @@ export function isAccessDenied(error: unknown): boolean {
   return error instanceof BackendApiError && [401, 403, 404].includes(error.status);
 }
 
-export async function handleStart(ctx: StartHandlerContext, api: BackendApi): Promise<void> {
+export async function handleStart(ctx: StartHandlerContext, api: EmployeeAuthenticationApi): Promise<void> {
   try {
     const employee = await authenticateEmployee(ctx, api);
     await ctx.reply(`Chào ${employee.displayName}.`, roleMenu(employee.role));
