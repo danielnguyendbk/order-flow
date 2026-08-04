@@ -2,6 +2,28 @@
 
 Backend workspace skeleton for API, Telegram bot, admin web, shared packages, and Prisma.
 
+## Telegram bot (Khoa)
+
+The Telegram Bot scaffold lives in `apps/telegram-bot`. It authenticates each
+interaction against the API using the user's Telegram ID, renders role-specific
+inline menus, protects duplicate callbacks, and leaves every business decision
+to the backend. The notification worker uses BullMQ retries so a Telegram send
+failure cannot roll back a completed payment or order state change.
+The required Telegram authentication contract is documented in
+`apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
+
+```sh
+cp apps/telegram-bot/.env.example apps/telegram-bot/.env
+npm install
+npm run dev:bot
+npm run dev:notification-worker
+npm run test:bot
+```
+
+Use long polling locally. Set `TELEGRAM_WEBHOOK_DOMAIN` in production to switch
+the bot to webhook mode. The API should enqueue `NotificationJob` payloads only
+after its business transaction commits.
+
 ## Structure
 
 - `apps/api` - HTTP API service

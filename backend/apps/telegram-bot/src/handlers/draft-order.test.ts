@@ -1,0 +1,189 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { BackendApiError, type BackendApi } from "../api/backend-client.js";
+import type { DraftOrder, MenuCategory, MenuItem } from "../api/order-types.js";
+import type { BotSession, EmployeeSession } from "../types.js";
+import {
+  handleDraftCallback,
+  handleDraftText,
+  startDraftOrder,
+  type DraftOrderCallbackContext,
+  type DraftOrderContext,
+} from "./draft-order.handler.js";
+
+const employee: EmployeeSession = {
+  employeeId: "employee-1",
+  telegramUserId: 1001,
+  displayName: "Minh Anh",
+  role: "SERVICE_STAFF",
+};
+
+const categories: MenuCategory[] = [{ id: "tea", name: "Trà" }];
+const menuItems: MenuItem[] = [
+  { id: "tea-peach", categoryId: "tea", name: "Trà đào", price: 30_000, isActive: true },
+  { id: "sold-out", categoryId: "tea", name: "Hết hàng", price: 25_000, isActive: false },
+];
+
+function order(overrides: Partial<DraftOrder> = {}): DraftOrder {
+  return {
+    id: "order-1",
+    code: "OF-001",
+    paymentStatus: "UNPAID",
+    fulfillmentStatus: "PENDING_PAYMENT",
+    totalAmount: 70_000,
+    items: [{ id: "line-1", menuItemId: "tea-peach", name: "Trà đào", quantity: 2, unitPrice: 30_000, note: "Ít đá" }],
+    ...overrides,
+  };
+}
+
+function api(overrides: Partial<BackendApi> = {}): BackendApi {
+  return {
+    createTelegramSession: vi.fn().mockResolvedValue(employee),
+    createDraftOrder: vi.fn().mockResolvedValue(order({ items: [], totalAmount: 0 })),
+    getMenuCategories: vi.fn().mockResolvedValue(categories),
+    getMenuItems: vi.fn().mockResolvedValue(menuItems),
+    addDraftOrderItem: vi.fn().mockResolvedValue(order()),
+    updateDraftOrderItem: vi.fn().mockResolvedValue(order()),
+    deleteDraftOrderItem: vi.fn().mockResolvedValue(order({ items: [], totalAmount: 0 })),
+    getDraftOrder: vi.fn().mockResolvedValue(order()),
+    cancelDraftOrder: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function draftContext(session: DraftOrderContext["session"] = {}): DraftOrderContext & { replies: string[] } {
+  const replies: string[] = [];
+  return {
+    from: { id: employee.telegramUserId },
+    session,
+    replies,
+    reply: async (message) => void replies.push(message),
+  };
+}
+
+function callbackContext(data: string, session: DraftOrderContext["session"]): DraftOrderCallbackContext & { replies: string[]; answers: string[] } {
+  const replies: string[] = [];
+  const answers: string[] = [];
+  return {
+    from: { id: employee.telegramUserId },
+    session,
+    callbackId: "callback-1",
+    callbackData: data,
+    replies,
+    answers,
+    reply: async (message) => void replies.push(message),
+    answerCallback: async (message) => void answers.push(message ?? ""),
+  };
+}
+
+describe("Telegram draft order flow", () => {
+  it("creates a backend draft and starts at category selection", async () => {
+    const ctx = draftContext();
+    const backend = api();
+
+    await startDraftOrder(ctx, backend);
+
+    expect(backend.createDraftOrder).toHaveBeenCalledWith(employee.telegramUserId);
+    expect(ctx.session.draftOrder).toMatchObject({ orderId: "order-1", step: "CATEGORY" });
+    expect(ctx.replies).toEqual(["Chọn danh mục món:"]);
+  });
+
+  it("accepts an active menu item, records quantity and note, then renders the server total", async () => {
+    const session = { draftOrder: { orderId: "order-1", step: "CATEGORY" as const } };
+    const backend = api();
+
+    await handleDraftCallback(callbackContext("draft:category:tea", session), backend);
+    await handleDraftCallback(callbackContext("draft:item:tea-peach", session), backend);
+    expect(session.draftOrder).toMatchObject({ step: "QUANTITY", selectedMenuItemId: "tea-peach" });
+
+    const quantity = { ...draftContext(session), text: "2" };
+    await handleDraftText(quantity, backend);
+    expect(session.draftOrder?.step).toBe("NOTE");
+
+    const note = { ...draftContext(session), text: "Ít đá" };
+    await handleDraftText(note, backend);
+    expect(backend.addDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", {
+      menuItemId: "tea-peach",
+      quantity: 2,
+      note: "Ít đá",
+    });
+    expect(note.replies.at(-1)).toContain("Tổng tiền: 70.000");
+  });
+
+  it("allows quantity, note and deletion changes from the review screen", async () => {
+    const session = { draftOrder: { orderId: "order-1", step: "REVIEW" as const } };
+    const backend = api();
+
+    await handleDraftCallback(callbackContext("draft:edit:line-1", session), backend);
+    await handleDraftCallback(callbackContext("draft:edit-quantity:line-1", session), backend);
+    await handleDraftText({ ...draftContext(session), text: "3" }, backend);
+    expect(backend.updateDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", "line-1", { quantity: 3 });
+
+    await handleDraftCallback(callbackContext("draft:edit-note:line-1", session), backend);
+    await handleDraftText({ ...draftContext(session), text: "-" }, backend);
+    expect(backend.updateDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", "line-1", { note: "" });
+
+    await handleDraftCallback(callbackContext("draft:delete:line-1", session), backend);
+    expect(backend.deleteDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", "line-1");
+  });
+
+  it("rejects invalid quantity and inactive menu items without changing the draft", async () => {
+    const session: BotSession = {
+      draftOrder: { orderId: "order-1", step: "QUANTITY", selectedMenuItemId: "tea-peach", quantity: undefined },
+    };
+    const backend = api();
+    const quantity = { ...draftContext(session), text: "0" };
+    await handleDraftText(quantity, backend);
+    expect(quantity.replies).toEqual(["Số lượng phải là số nguyên từ 1 đến 99."]);
+
+    const activeDraft = session.draftOrder!;
+    activeDraft.step = "ITEM";
+    activeDraft.categoryId = "tea";
+    const inactive = callbackContext("draft:item:sold-out", session);
+    await handleDraftCallback(inactive, backend);
+    expect(inactive.replies).toEqual(["Món không còn được bán."]);
+    expect(backend.addDraftOrderItem).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired draft and prevents duplicate callbacks while one is pending", async () => {
+    const expired = callbackContext("draft:add-more", {});
+    await handleDraftCallback(expired, api());
+    expect(expired.answers).toEqual(["Phiên tạo đơn đã hết hạn. Hãy tạo đơn mới."]);
+
+    let releaseCategories: (() => void) | undefined;
+    const pendingCategories = new Promise<MenuCategory[]>((resolve) => {
+      releaseCategories = () => resolve(categories);
+    });
+    const session = { draftOrder: { orderId: "order-1", step: "CATEGORY" as const } };
+    const backend = api({ getMenuCategories: vi.fn().mockReturnValue(pendingCategories) });
+    const first = handleDraftCallback(callbackContext("draft:category:tea", session), backend);
+    const second = callbackContext("draft:category:tea", session);
+    await handleDraftCallback(second, backend);
+    expect(second.answers).toEqual(["Yêu cầu này đang được xử lý."]);
+    releaseCategories?.();
+    await first;
+  });
+
+  it("does not review an order once the backend marks it paid", async () => {
+    const session = { draftOrder: { orderId: "order-1", step: "REVIEW" as const } };
+    const backend = api({ getDraftOrder: vi.fn().mockResolvedValue(order({ paymentStatus: "PAID" })) });
+    const ctx = callbackContext("draft:back:review", session);
+
+    await handleDraftCallback(ctx, backend);
+
+    expect(ctx.replies).toEqual(["Đơn không còn ở trạng thái có thể chỉnh sửa."]);
+    expect(ctx.session.draftOrder).toBeUndefined();
+  });
+
+  it("does not expose an order that the backend says belongs to another employee", async () => {
+    const session = { draftOrder: { orderId: "other-order", step: "REVIEW" as const } };
+    const backend = api({
+      getDraftOrder: vi.fn().mockRejectedValue(new BackendApiError("Order ownership denied", 403, "ORDER_FORBIDDEN")),
+    });
+    const ctx = callbackContext("draft:back:review", session);
+
+    await handleDraftCallback(ctx, backend);
+
+    expect(ctx.replies).toEqual(["Đơn này không thuộc quyền thao tác của bạn."]);
+  });
+});
