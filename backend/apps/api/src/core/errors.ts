@@ -5,7 +5,8 @@ export type ErrorCode =
   | "FORBIDDEN"
   | "ACCOUNT_INACTIVE"
   | "INVALID_TELEGRAM_DATA"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "CONFLICT";
 
 const statusByCode: Record<ErrorCode, number> = {
   VALIDATION_ERROR: 400,
@@ -15,6 +16,7 @@ const statusByCode: Record<ErrorCode, number> = {
   ACCOUNT_INACTIVE: 403,
   INVALID_TELEGRAM_DATA: 401,
   NOT_FOUND: 404,
+  CONFLICT: 409,
 };
 
 export class AppError extends Error {
@@ -30,4 +32,3 @@ export class AppError extends Error {
     this.statusCode = statusByCode[code];
   }
 }
-
