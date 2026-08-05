@@ -20,9 +20,19 @@ npm run dev:notification-worker
 npm run test:bot
 ```
 
-Use long polling locally. Set `TELEGRAM_WEBHOOK_DOMAIN` in production to switch
-the bot to webhook mode. The API should enqueue `NotificationJob` payloads only
-after its business transaction commits.
+The development scripts load `apps/telegram-bot/.env` automatically. Keep the
+file local and never commit its token or shared secrets. The bot itself requires
+`TELEGRAM_BOT_TOKEN`, `API_BASE_URL`, and `BOT_INTERNAL_SECRET`; only the
+notification worker additionally requires `REDIS_URL`.
+Process-level environment variables take precedence over values in `.env`, so
+clear or update any stale shell variables after rotating a Telegram token.
+
+Use long polling locally. In production, set an HTTPS origin in
+`TELEGRAM_WEBHOOK_DOMAIN` and a random `TELEGRAM_WEBHOOK_SECRET_TOKEN` to switch
+the bot to authenticated webhook mode. Build with `npm run build:bot`, then run
+`npm run start:bot` with environment variables injected by the deployment
+platform. The API should enqueue `NotificationJob` payloads only after its
+business transaction commits.
 
 ## Structure
 

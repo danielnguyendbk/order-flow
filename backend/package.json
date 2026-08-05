@@ -2,11 +2,13 @@
   "name": "order-flow-backend",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6"
   },
   "scripts": {
-    "dev:bot": "tsx apps/telegram-bot/src/index.ts",
-    "dev:notification-worker": "tsx apps/telegram-bot/src/worker.ts",
+    "dev:bot": "tsx --env-file=apps/telegram-bot/.env apps/telegram-bot/src/index.ts",
+    "dev:notification-worker": "tsx --env-file=apps/telegram-bot/.env apps/telegram-bot/src/worker.ts",
+    "start:bot": "node apps/telegram-bot/dist/index.js",
+    "start:notification-worker": "node apps/telegram-bot/dist/worker.js",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts"
