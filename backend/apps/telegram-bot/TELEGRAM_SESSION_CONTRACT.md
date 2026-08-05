@@ -27,9 +27,18 @@ Successful response (`200`):
 }
 ```
 
-`role` must be one of `SERVICE_STAFF`, `BARISTA`, or `MANAGER`. Return `401`
-for an invalid bot secret; return `403` for an inactive employee and `404` for
-an unknown Telegram user. Error bodies have the shape:
+`role` must be one of `SERVICE_STAFF`, `BARISTA`, or `MANAGER`; the database
+`OWNER` role is exposed to the Bot as `MANAGER`. `telegramUserId` must be a
+positive JavaScript safe integer. Error responses are:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `400` | `TELEGRAM_USER_ID_INVALID` | Invalid request identity |
+| `401` | `BOT_AUTH_INVALID` | Invalid internal Bot secret |
+| `403` | `EMPLOYEE_INACTIVE` | Employee is inactive |
+| `404` | `EMPLOYEE_NOT_FOUND` | Telegram user is not registered |
+
+Error bodies have the shape:
 
 ```json
 { "code": "EMPLOYEE_INACTIVE", "message": "Employee is inactive" }

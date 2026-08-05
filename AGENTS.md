@@ -66,21 +66,27 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 ## Current implementation state
 
-- The API is an Express app with order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf workspace with its own `package.json`, lockfile, environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/session`, stores only an ephemeral Bot session, and renders role-specific menus.
 - Service staff can create a backend-owned draft order through Telegram: category → item → quantity → note → review; they can add, edit, delete, or cancel draft items. Price and total are always supplied by the API.
-- The Bot/API draft-order contract is documented in `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`; backend integration routes still need to conform to that contract before a live end-to-end run.
-- Bot unit tests cover authentication, role menus, draft creation, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
+- The Telegram session route is implemented end-to-end; the remaining menu and draft-order backend routes still need to conform to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md` before that flow can run live.
+- Bot tests cover authentication, role menus, the Bot-to-API HTTP boundary, draft creation, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
+
+## Progress log — 2026-08-05
+
+- `feat-tele` implements `POST /api/v1/telegram/session` against `public.users`, including internal-secret authentication, active-state enforcement, role mapping and Bot response validation.
+- Verified locally: API auth checks and 11 tests pass; Bot type-check/build and 32 tests pass. The optional repository integration test requires a disposable `TEST_DATABASE_URL`.
+- The full legacy API build still depends on adding the existing order/menu/user models to `prisma/schema.prisma` and resolving Express 5 parameter typings outside the Telegram-session module.
 
 ## Progress log — 2026-08-04
 
 - `feat-tele` was pushed at `ad2991d` (`feat(telegram): add service staff draft order flow`).
-- `feat-tele` was merged into `dev` and pushed at `bc844e8`; `dev` is the current checked-out branch and tracks `origin/dev`.
+- `feat-tele` was merged into `dev` and pushed at `bc844e8` at that point in the project history.
 - Verified after the merge:
   - `cd backend && npm.cmd run check:bot`
   - `cd backend && npm.cmd run test:bot` — 14 tests passed.
-- Next Telegram dependencies: implement/align the real backend Telegram-session, menu and draft-order endpoints; then add Cash/QR, barista queue/Ready, and real notification outbox integration.
+- Next Telegram dependencies: implement/align the real backend menu and draft-order endpoints; then add Cash/QR, barista queue/Ready, and real notification outbox integration.
 
 ## Navigation shortcuts
 

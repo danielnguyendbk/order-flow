@@ -4,7 +4,7 @@ import { BackendApiError } from "../api/backend-client.js";
 import type { EmployeeAuthenticationApi } from "../auth/employee-auth.js";
 import type { EmployeeSession } from "../types.js";
 import { handleCallback, type CallbackHandlerContext } from "./callback.handler.js";
-import { handleStart, type StartHandlerContext } from "./start.handler.js";
+import { handleStart, isAccessDenied, type StartHandlerContext } from "./start.handler.js";
 
 const serviceStaff: EmployeeSession = {
   employeeId: "employee-service",
@@ -71,7 +71,7 @@ describe("Telegram authentication and role menu", () => {
     expect(buttonLabels(ctx.replies[0][1])).toEqual(["Đơn chờ pha chế", "Lịch sử pha chế"]);
   });
 
-  it.each([401, 403, 404])("blocks an unregistered or inactive employee (%i)", async (status) => {
+  it.each([403, 404])("blocks an unregistered or inactive employee (%i)", async (status) => {
     const ctx = startContext(serviceStaff.telegramUserId);
     const api: EmployeeAuthenticationApi = {
       createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Denied", status, "EMPLOYEE_INACTIVE")),
@@ -80,6 +80,32 @@ describe("Telegram authentication and role menu", () => {
     await handleStart(ctx, api);
 
     expect(ctx.replies[0][0]).toContain("chưa được đăng ký hoặc đã bị vô hiệu hóa");
+    expect(ctx.session.employee).toBeUndefined();
+  });
+
+  it("treats an invalid internal secret as a service configuration error", async () => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    const error = new BackendApiError("Invalid bot credentials", 401, "BOT_AUTH_INVALID");
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(error),
+    };
+
+    await handleStart(ctx, api);
+
+    expect(isAccessDenied(error)).toBe(false);
+    expect(ctx.replies).toHaveLength(1);
+    expect(ctx.session.employee).toBeUndefined();
+  });
+
+  it("clears a stale employee session before a failed re-authentication", async () => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    ctx.session.employee = serviceStaff;
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Inactive", 403, "EMPLOYEE_INACTIVE")),
+    };
+
+    await handleStart(ctx, api);
+
     expect(ctx.session.employee).toBeUndefined();
   });
 

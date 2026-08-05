@@ -74,4 +74,19 @@ describe("BackendClient", () => {
       });
     }
   });
+
+  it("rejects a malformed Telegram session response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ employeeId: "employee-1", telegramUserId: 123, role: "OWNER" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ));
+
+    const client = new BackendClient("http://localhost:3000/api/v1", "internal-secret");
+    await expect(client.createTelegramSession(123)).rejects.toMatchObject({
+      status: 502,
+      code: "SESSION_RESPONSE_INVALID",
+    });
+  });
 });

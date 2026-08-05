@@ -42,10 +42,14 @@ export class BackendClient implements BackendApi {
   ) {}
 
   async createTelegramSession(telegramUserId: number): Promise<EmployeeSession> {
-    return this.request<EmployeeSession>("/telegram/session", {
+    const session = await this.request<unknown>("/telegram/session", {
       method: "POST",
       body: { telegramUserId },
     });
+    if (!isEmployeeSession(session)) {
+      throw new BackendApiError("Backend returned an invalid Telegram session", 502, "SESSION_RESPONSE_INVALID");
+    }
+    return session;
   }
 
   createDraftOrder(telegramUserId: number): Promise<DraftOrder> {
@@ -126,4 +130,18 @@ export class BackendClient implements BackendApi {
 
     return response.json() as Promise<T>;
   }
+}
+
+function isEmployeeSession(value: unknown): value is EmployeeSession {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Partial<EmployeeSession>;
+  return (
+    typeof session.employeeId === "string" &&
+    session.employeeId.length > 0 &&
+    Number.isSafeInteger(session.telegramUserId) &&
+    Number(session.telegramUserId) > 0 &&
+    typeof session.displayName === "string" &&
+    session.displayName.length > 0 &&
+    ["SERVICE_STAFF", "BARISTA", "MANAGER"].includes(session.role ?? "")
+  );
 }

@@ -2,13 +2,15 @@
 
 Base path: `/api/v1`
 
-Status: **planned** — this document is the route inventory for upcoming implementation. Routes listed here are not considered implemented until their handlers, validation, authorization, and tests exist.
+Status: **mixed** — routes remain planned unless their section explicitly marks them implemented.
 
 ## Telegram session
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/telegram/session` | Create or establish a Telegram user session |
+
+Implementation status: **implemented**. The route validates the internal Bot secret and Telegram user ID, resolves the employee from `public.users`, and rejects unknown or inactive employees.
 
 ## Admin authentication
 

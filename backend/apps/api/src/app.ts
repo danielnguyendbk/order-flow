@@ -2,6 +2,10 @@ import express, { Application, Request, Response, NextFunction } from "express";
 import { createOrderRouter }  from "./modules/orders/order.routes";
 import { createBaristaRouter } from "./modules/barista/barista.routes";
 import { createAdminRouter }  from "./modules/admin/admin.routes";
+import {
+  createTelegramSessionRouter,
+  type TelegramSessionRouterOptions,
+} from "./modules/auth/telegram-session.routes";
 
 // ── BigInt JSON serialization fix ─────────────────────────────
 // Prisma returns BigInt for columns declared as bigint.
@@ -15,6 +19,8 @@ import { createAdminRouter }  from "./modules/admin/admin.routes";
  * Creates and configures the Express application.
  *
  * Route map (/api/v1):
+ *
+ *   POST   /telegram/session
  *
  *   POST   /orders
  *   GET    /orders
@@ -34,7 +40,11 @@ import { createAdminRouter }  from "./modules/admin/admin.routes";
  *   GET    /admin/orders/:orderId
  *   POST   /admin/orders/:orderId/override-status
  */
-export function createApp(): Application {
+export interface AppOptions {
+  telegramSession?: TelegramSessionRouterOptions;
+}
+
+export function createApp(options: AppOptions = {}): Application {
   const app = express();
 
   // ── Middleware ────────────────────────────────────────────────
@@ -52,6 +62,12 @@ export function createApp(): Application {
   apiV1.use("/orders",  createOrderRouter());
   apiV1.use("/barista", createBaristaRouter());
   apiV1.use("/admin",   createAdminRouter());
+  apiV1.use(
+    "/telegram",
+    createTelegramSessionRouter(
+      options.telegramSession ?? { internalSecret: process.env.BOT_INTERNAL_SECRET ?? "" },
+    ),
+  );
 
   app.use("/api/v1", apiV1);
 
@@ -74,13 +90,3 @@ export function createApp(): Application {
 
   return app;
 }
-
-// ── Entry point ───────────────────────────────────────────────
-const PORT = process.env.PORT ?? 3000;
-const app  = createApp();
-
-app.listen(PORT, () => {
-  console.log(`[order-flow-api] listening on http://localhost:${PORT}`);
-});
-
-export default app;
