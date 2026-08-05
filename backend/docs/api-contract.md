@@ -21,12 +21,30 @@ Implementation status: **implemented**. The route validates the internal Bot sec
 | `POST` | `/api/v1/admin/auth/logout` | End an administrator session |
 | `GET` | `/api/v1/admin/auth/me` | Return the current administrator profile |
 
-## Public menu
+## Telegram service-staff menu
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/menu/categories` | List public menu categories |
 | `GET` | `/api/v1/menu/items` | List public menu items |
+
+Implementation status: **implemented for authenticated Telegram service staff**. Both routes re-check the employee identity and active state.
+
+## Telegram service-staff orders
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/orders` | Create an empty backend-owned draft |
+| `GET` | `/api/v1/orders?mine=true` | List the employee's recent orders |
+| `GET` | `/api/v1/orders/:orderId` | Get an owned order and current status |
+| `POST` | `/api/v1/orders/:orderId/items` | Add an available menu item at the backend price |
+| `PATCH` | `/api/v1/orders/:orderId/items/:itemId` | Update quantity or note while editable |
+| `DELETE` | `/api/v1/orders/:orderId/items/:itemId` | Delete an item and recalculate total |
+| `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid draft |
+| `POST` | `/api/v1/orders/:orderId/payments/qr` | Start an idempotent QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Atomically confirm CASH and queue the order |
+
+Implementation status: **implemented**. All routes require the Bot secret and an active `SERVICE_STAFF` Telegram identity. Ownership, editability, menu availability and payment transitions are enforced by the API.
 
 ## Admin employees
 
@@ -65,6 +83,7 @@ Implementation status: **implemented**. The route validates the internal Bot sec
 | Telegram session | `apps/api/src/modules/auth/` with Telegram integration as needed |
 | Admin authentication | `apps/api/src/modules/auth/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
+| Telegram service-staff orders and payments | `apps/api/src/modules/orders/` |
 | Admin employees | `apps/api/src/modules/employees/` |
 
 ## Contract completion checklist

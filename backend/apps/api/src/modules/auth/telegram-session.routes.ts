@@ -6,7 +6,7 @@ import { PrismaTelegramEmployeeRepository } from "./telegram-session.repository"
 import { TelegramSessionError, TelegramSessionService } from "./telegram-session.service";
 import type { TelegramEmployeeRepository } from "./telegram-session.types";
 
-function secretMatches(provided: string | undefined, expected: string): boolean {
+export function secretMatches(provided: string | undefined, expected: string): boolean {
   if (!provided) return false;
   const providedDigest = createHash("sha256").update(provided).digest();
   const expectedDigest = createHash("sha256").update(expected).digest();

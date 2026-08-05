@@ -4,7 +4,9 @@ import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder, DraftOrderItem } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
 import { categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
+import { orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import { roleMenu } from "../keyboards/role-menu.js";
+import { formatOrderStatus } from "./order-status.handler.js";
 import { isAccessDenied } from "./start.handler.js";
 import type { BotContext, BotSession, DraftOrderSession, EmployeeSession } from "../types.js";
 
@@ -17,6 +19,7 @@ export interface DraftOrderContext {
   from?: { id: number };
   session: BotSession;
   reply(message: string, extra?: Keyboard): Promise<unknown>;
+  replyPhoto?(url: string, caption: string, extra?: Keyboard): Promise<unknown>;
 }
 
 export interface DraftOrderCallbackContext extends DraftOrderContext {
@@ -153,6 +156,8 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       || action === "draft:back:categories"
       || action === "draft:back:review"
       || action === "draft:note:skip"
+      || action === "draft:pay:cash"
+      || action === "draft:pay:qr"
       || action.startsWith("draft:category:")
       || action.startsWith("draft:item:")
       || action.startsWith("draft:edit:")
@@ -179,6 +184,23 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
 
     if (action === "draft:back:review") {
       await showReview(ctx, api, employee);
+      return;
+    }
+
+    if (action === "draft:pay:cash") {
+      const paidOrder = await api.confirmCashPayment(employee.telegramUserId, draft.orderId);
+      clearDraft(ctx);
+      await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder.id));
+      return;
+    }
+
+    if (action === "draft:pay:qr") {
+      const payment = await api.createQrPayment(employee.telegramUserId, draft.orderId);
+      clearDraft(ctx);
+      const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
+      const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
+      if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
+      else await ctx.reply(message, keyboard);
       return;
     }
 
@@ -326,6 +348,7 @@ export function registerDraftOrderHandlers(bot: Telegraf<BotContext>, api: Backe
         callbackId: ctx.callbackQuery.id,
         callbackData: ctx.match[0],
         reply: (message, extra) => ctx.reply(message, extra),
+        replyPhoto: (url, caption, extra) => ctx.replyWithPhoto({ url }, { caption, ...extra }),
         answerCallback: (message) => ctx.answerCbQuery(message),
       },
       api,

@@ -11,6 +11,9 @@ to the backend. The notification worker uses BullMQ retries so a Telegram send
 failure cannot roll back a completed payment or order state change.
 The required Telegram authentication contract is documented in
 `apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
+Service staff can create backend-owned drafts, choose CASH or SePay/VietQR,
+list their orders, and refresh payment/fulfillment status from Telegram. The
+API owns pricing, totals, ownership checks and payment transitions.
 
 ```sh
 cp apps/telegram-bot/.env.example apps/telegram-bot/.env

@@ -22,6 +22,10 @@ export function noteKeyboard() {
 
 export function reviewKeyboard(order: DraftOrder) {
   return Markup.inlineKeyboard([
+    ...(order.items.length ? [[
+      Markup.button.callback("Tiền mặt", "draft:pay:cash"),
+      Markup.button.callback("QR", "draft:pay:qr"),
+    ]] : []),
     [Markup.button.callback("Thêm món", "draft:add-more")],
     ...order.items.map((item) => [Markup.button.callback(`Sửa: ${item.name}`, `draft:edit:${item.id}`)]),
     [Markup.button.callback("Hủy đơn", "draft:cancel")],

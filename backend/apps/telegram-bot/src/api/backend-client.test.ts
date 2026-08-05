@@ -89,4 +89,35 @@ describe("BackendClient", () => {
       code: "SESSION_RESPONSE_INVALID",
     });
   });
+
+  it("calls mine, CASH and QR endpoints with the Telegram identity", async () => {
+    const order = {
+      id: "order-1",
+      code: "ORD-001",
+      paymentStatus: "PAID",
+      fulfillmentStatus: "QUEUED",
+      totalAmount: 30_000,
+      items: [],
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([order]), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(order), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ order, paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new BackendClient("http://localhost:3000/api/v1", "internal-secret");
+
+    await client.listMyOrders(123);
+    await client.confirmCashPayment(123, "order-1");
+    await client.createQrPayment(123, "order-1");
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "http://localhost:3000/api/v1/orders?mine=true",
+      "http://localhost:3000/api/v1/orders/order-1/payments/cash/confirm",
+      "http://localhost:3000/api/v1/orders/order-1/payments/qr",
+    ]);
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ "x-telegram-user-id": "123" }),
+    });
+  });
 });

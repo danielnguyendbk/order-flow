@@ -69,15 +69,18 @@ All module directories are under `backend/apps/api/src/modules/`:
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf workspace with its own `package.json`, lockfile, environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/session`, stores only an ephemeral Bot session, and renders role-specific menus.
-- Service staff can create a backend-owned draft order through Telegram: category → item → quantity → note → review; they can add, edit, delete, or cancel draft items. Price and total are always supplied by the API.
-- The Telegram session route is implemented end-to-end; the remaining menu and draft-order backend routes still need to conform to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md` before that flow can run live.
-- Bot tests cover authentication, role menus, the Bot-to-API HTTP boundary, draft creation, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
+- Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.
+- Telegram session, menu, draft-order, CASH/QR and order-status routes are implemented end-to-end according to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
+- The Prisma schema maps the existing users, menu, orders, payments and status-history SQL tables; the full API TypeScript build succeeds.
+- Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
 
 ## Progress log — 2026-08-05
 
+- `feat-tele` completes KHOA-003 with authenticated menu/draft APIs, transactional CASH/QR payment selection, mine/status endpoints and Telegram tracking/refresh handlers.
+- Full HTTP E2E tests cover category → item → quantity → note → review → CASH/QR → status; database integration tests remain opt-in through a disposable `TEST_DATABASE_URL`.
+- Verified for KHOA-003: Prisma generate/validate, full API check/build, 20 API tests, Bot check/build and 41 Bot tests all pass.
 - `feat-tele` implements `POST /api/v1/telegram/session` against `public.users`, including internal-secret authentication, active-state enforcement, role mapping and Bot response validation.
-- Verified locally: API auth checks and 11 tests pass; Bot type-check/build and 32 tests pass. The optional repository integration test requires a disposable `TEST_DATABASE_URL`.
-- The full legacy API build still depends on adding the existing order/menu/user models to `prisma/schema.prisma` and resolving Express 5 parameter typings outside the Telegram-session module.
+- Verified locally for KHOA-002: API auth checks and 11 tests pass; Bot type-check/build and 32 tests pass.
 
 ## Progress log — 2026-08-04
 
@@ -86,7 +89,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Verified after the merge:
   - `cd backend && npm.cmd run check:bot`
   - `cd backend && npm.cmd run test:bot` — 14 tests passed.
-- Next Telegram dependencies: implement/align the real backend menu and draft-order endpoints; then add Cash/QR, barista queue/Ready, and real notification outbox integration.
+- Next Telegram dependencies: add barista queue/Ready, SePay webhook reconciliation, and real notification outbox integration.
 
 ## Navigation shortcuts
 

@@ -23,10 +23,18 @@ export interface DraftOrderItem {
 export interface DraftOrder {
   id: string;
   code: string;
-  paymentStatus: "UNPAID" | "PENDING" | "PAID" | "UNDERPAID" | "OVERPAID" | "PAYMENT_REVIEW" | "REFUNDED";
+  paymentMethod?: "CASH" | "QR" | null;
+  paymentStatus: "UNPAID" | "PENDING" | "PAID" | "UNDERPAID" | "OVERPAID" | "REVIEW";
   fulfillmentStatus: "PENDING_PAYMENT" | "QUEUED" | "PREPARING" | "READY" | "DELIVERED" | "CANCELLED";
   totalAmount: number;
   items: DraftOrderItem[];
+}
+
+export interface QrPaymentResult {
+  order: DraftOrder;
+  paymentCode: string;
+  amount: number;
+  qrImageUrl: string;
 }
 
 export interface CreateOrderItemInput {

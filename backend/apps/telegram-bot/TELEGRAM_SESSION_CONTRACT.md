@@ -65,8 +65,18 @@ that the order is still `paymentStatus=UNPAID` and
 | `DELETE /orders/:orderId/items/:itemId` | none | updated draft order |
 | `GET /orders/:orderId` | none | current draft order |
 | `POST /orders/:orderId/cancel` | none | `204` or cancellation result |
+| `POST /orders/:orderId/payments/cash/confirm` | none | paid and queued order |
+| `POST /orders/:orderId/payments/qr` | none | order, payment code, amount and QR image URL |
+| `GET /orders?mine=true` | none | up to 20 most recent orders owned by the employee |
 
-A draft-order response contains `id`, `code`, `paymentStatus`,
+A draft-order response contains `id`, `code`, optional `paymentMethod`, `paymentStatus`,
 `fulfillmentStatus`, `totalAmount`, and `items`. An item contains `id`,
 `menuItemId`, `name`, `quantity`, `unitPrice`, and optional `note`. The API
 calculates all prices and `totalAmount`; the Bot never sends a client total.
+
+Every route above requires `x-bot-internal-secret` and
+`x-telegram-user-id`. The API re-checks that the employee is active and has
+the `SERVICE_STAFF` role on every request. CASH confirmation atomically moves
+the order to `paymentStatus=PAID` and `fulfillmentStatus=QUEUED`. QR creation
+sets `paymentStatus=PENDING`; the Bot refreshes `GET /orders/:orderId` to show
+the status written by payment reconciliation.

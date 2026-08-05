@@ -6,6 +6,8 @@
   },
   "scripts": {
     "dev:api": "npm --prefix apps/api run dev",
+    "check:api": "npm --prefix apps/api run check",
+    "test:api": "npm --prefix apps/api run test",
     "check:api:auth": "npm --prefix apps/api run check:auth",
     "test:api:auth": "npm --prefix apps/api run test:auth",
     "generate:prisma": "prisma generate --schema prisma/schema.prisma",

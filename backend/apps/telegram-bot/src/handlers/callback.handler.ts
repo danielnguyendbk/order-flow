@@ -13,7 +13,6 @@ type CallbackAction = {
 
 const actions: Record<string, CallbackAction> = {
   "service:order:create": { role: "SERVICE_STAFF" },
-  "service:orders:mine": { role: "SERVICE_STAFF", message: "Danh sách đơn đang được hoàn thiện." },
   "barista:queue": { role: "BARISTA", message: "Hàng đợi pha chế đang được hoàn thiện." },
   "barista:orders:mine": { role: "BARISTA", message: "Lịch sử pha chế đang được hoàn thiện." },
 };
@@ -66,7 +65,7 @@ export async function handleCallback(ctx: CallbackHandlerContext, api: EmployeeA
 export function registerCallbackHandlers(bot: Telegraf<BotContext>, api: BackendApi): void {
   bot.on("callback_query", async (ctx) => {
     const callbackData = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
-    if (callbackData?.startsWith("draft:")) return;
+    if (callbackData?.startsWith("draft:") || callbackData?.startsWith("order:") || callbackData === "service:orders:mine") return;
 
     if (callbackData === "service:order:create") {
       await ctx.answerCbQuery();

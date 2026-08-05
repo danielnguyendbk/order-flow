@@ -6,6 +6,10 @@ import {
   createTelegramSessionRouter,
   type TelegramSessionRouterOptions,
 } from "./modules/auth/telegram-session.routes";
+import {
+  createTelegramOrderRouter,
+  type TelegramOrderRouterOptions,
+} from "./modules/orders/telegram-order.routes";
 
 // ── BigInt JSON serialization fix ─────────────────────────────
 // Prisma returns BigInt for columns declared as bigint.
@@ -21,6 +25,10 @@ import {
  * Route map (/api/v1):
  *
  *   POST   /telegram/session
+ *   GET    /menu/categories
+ *   GET    /menu/items
+ *   POST   /orders/:orderId/payments/qr
+ *   POST   /orders/:orderId/payments/cash/confirm
  *
  *   POST   /orders
  *   GET    /orders
@@ -42,6 +50,7 @@ import {
  */
 export interface AppOptions {
   telegramSession?: TelegramSessionRouterOptions;
+  telegramOrders?: Omit<TelegramOrderRouterOptions, "internalSecret">;
 }
 
 export function createApp(options: AppOptions = {}): Application {
@@ -58,14 +67,16 @@ export function createApp(options: AppOptions = {}): Application {
 
   // ── API v1 routes ─────────────────────────────────────────────
   const apiV1 = express.Router();
+  const botInternalSecret = options.telegramSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
 
+  apiV1.use(createTelegramOrderRouter({ internalSecret: botInternalSecret, ...options.telegramOrders }));
   apiV1.use("/orders",  createOrderRouter());
   apiV1.use("/barista", createBaristaRouter());
   apiV1.use("/admin",   createAdminRouter());
   apiV1.use(
     "/telegram",
     createTelegramSessionRouter(
-      options.telegramSession ?? { internalSecret: process.env.BOT_INTERNAL_SECRET ?? "" },
+      options.telegramSession ?? { internalSecret: botInternalSecret },
     ),
   );
 

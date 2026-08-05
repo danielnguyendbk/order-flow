@@ -4,6 +4,7 @@ import type {
   DraftOrder,
   MenuCategory,
   MenuItem,
+  QrPaymentResult,
   UpdateOrderItemInput,
 } from "./order-types.js";
 
@@ -22,6 +23,9 @@ export interface BackendApi {
   deleteDraftOrderItem(telegramUserId: number, orderId: string, itemId: string): Promise<DraftOrder>;
   getDraftOrder(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   cancelDraftOrder(telegramUserId: number, orderId: string): Promise<void>;
+  listMyOrders(telegramUserId: number): Promise<DraftOrder[]>;
+  confirmCashPayment(telegramUserId: number, orderId: string): Promise<DraftOrder>;
+  createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult>;
 }
 
 export class BackendApiError extends Error {
@@ -87,6 +91,18 @@ export class BackendClient implements BackendApi {
 
   async cancelDraftOrder(telegramUserId: number, orderId: string): Promise<void> {
     await this.post<void>(`/orders/${encodeURIComponent(orderId)}/cancel`, telegramUserId);
+  }
+
+  listMyOrders(telegramUserId: number): Promise<DraftOrder[]> {
+    return this.get<DraftOrder[]>("/orders?mine=true", telegramUserId);
+  }
+
+  confirmCashPayment(telegramUserId: number, orderId: string): Promise<DraftOrder> {
+    return this.post<DraftOrder>(`/orders/${encodeURIComponent(orderId)}/payments/cash/confirm`, telegramUserId);
+  }
+
+  createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult> {
+    return this.post<QrPaymentResult>(`/orders/${encodeURIComponent(orderId)}/payments/qr`, telegramUserId);
   }
 
   async get<T>(path: string, telegramUserId: number): Promise<T> {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder, MenuCategory, MenuItem } from "../api/order-types.js";
+import { reviewKeyboard } from "../keyboards/draft-order.js";
 import type { BotSession, EmployeeSession } from "../types.js";
 import {
   handleDraftCallback,
@@ -47,6 +48,14 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     deleteDraftOrderItem: vi.fn().mockResolvedValue(order({ items: [], totalAmount: 0 })),
     getDraftOrder: vi.fn().mockResolvedValue(order()),
     cancelDraftOrder: vi.fn().mockResolvedValue(undefined),
+    listMyOrders: vi.fn().mockResolvedValue([order()]),
+    confirmCashPayment: vi.fn().mockResolvedValue(order({ paymentMethod: "CASH", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" })),
+    createQrPayment: vi.fn().mockResolvedValue({
+      order: order({ paymentMethod: "QR", paymentStatus: "PENDING" }),
+      paymentCode: "PAYOF001",
+      amount: 70_000,
+      qrImageUrl: "https://vietqr.app/img?amount=70000",
+    }),
     ...overrides,
   };
 }
@@ -77,6 +86,13 @@ function callbackContext(data: string, session: DraftOrderContext["session"]): D
 }
 
 describe("Telegram draft order flow", () => {
+  it("offers CASH and QR only when the review has items", () => {
+    const labels = reviewKeyboard(order()).reply_markup.inline_keyboard.flat().map((button) => button.text);
+    const emptyLabels = reviewKeyboard(order({ items: [], totalAmount: 0 })).reply_markup.inline_keyboard.flat().map((button) => button.text);
+    expect(labels).toEqual(expect.arrayContaining(["Tiền mặt", "QR"]));
+    expect(emptyLabels).not.toEqual(expect.arrayContaining(["Tiền mặt", "QR"]));
+  });
+
   it("creates a backend draft and starts at category selection", async () => {
     const ctx = draftContext();
     const backend = api();
@@ -185,5 +201,31 @@ describe("Telegram draft order flow", () => {
     await handleDraftCallback(ctx, backend);
 
     expect(ctx.replies).toEqual(["Đơn này không thuộc quyền thao tác của bạn."]);
+  });
+
+  it("completes a CASH order and clears the draft session", async () => {
+    const session = { draftOrder: { orderId: "order-1", step: "REVIEW" as const } };
+    const backend = api();
+    const ctx = callbackContext("draft:pay:cash", session);
+
+    await handleDraftCallback(ctx, backend);
+
+    expect(backend.confirmCashPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.session.draftOrder).toBeUndefined();
+    expect(ctx.replies.at(-1)).toContain("PAID");
+    expect(ctx.replies.at(-1)).toContain("QUEUED");
+  });
+
+  it("creates a QR payment and shows its payment code", async () => {
+    const session = { draftOrder: { orderId: "order-1", step: "REVIEW" as const } };
+    const backend = api();
+    const ctx = callbackContext("draft:pay:qr", session);
+
+    await handleDraftCallback(ctx, backend);
+
+    expect(backend.createQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.session.draftOrder).toBeUndefined();
+    expect(ctx.replies.at(-1)).toContain("PAYOF001");
+    expect(ctx.replies.at(-1)).toContain("PENDING");
   });
 });
