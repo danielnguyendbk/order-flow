@@ -34,7 +34,7 @@ Implementation status: **implemented for authenticated Telegram service staff**.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/orders` | Create an empty backend-owned draft |
+| `POST` | `/api/v1/orders` | Create or return the employee's existing open backend-owned draft |
 | `GET` | `/api/v1/orders?mine=true` | List the employee's recent orders |
 | `GET` | `/api/v1/orders/:orderId` | Get an owned order and current status |
 | `POST` | `/api/v1/orders/:orderId/items` | Add an available menu item at the backend price |

@@ -9,6 +9,10 @@ interaction against the API using the user's Telegram ID, renders role-specific
 inline menus, protects duplicate callbacks, and leaves every business decision
 to the backend. The notification worker uses BullMQ retries so a Telegram send
 failure cannot roll back a completed payment or order state change.
+Draft keyboards carry a compact state revision within Telegram's 64-byte
+callback limit. Stale buttons are cleared and replaced from backend state;
+concurrent and rapid sequential taps are guarded in the Bot and mutation
+endpoints remain idempotent or conditionally transactional.
 The required Telegram authentication contract is documented in
 `apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
 Service staff can create backend-owned drafts, choose CASH or SePay/VietQR,

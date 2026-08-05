@@ -10,6 +10,7 @@ import type {
   TelegramQrPaymentDto,
 } from "../../../api/src/modules/orders/telegram-order.service";
 import { BackendClient } from "../api/backend-client.js";
+import { draftCallbackData } from "../callbacks/callback-data.js";
 import type { BotSession } from "../types.js";
 import {
   handleDraftCallback,
@@ -142,10 +143,17 @@ function draftContext(session: BotSession, replies: string[]): DraftOrderContext
 }
 
 function callbackContext(data: string, session: BotSession, replies: string[]): DraftOrderCallbackContext {
+  const match = /^draft:(category|item):(.+)$/.exec(data);
+  const simple = data === "draft:pay:cash" ? "payCash" : data === "draft:pay:qr" ? "payQr" : undefined;
+  const callbackData = match
+    ? draftCallbackData(session.draftOrder!.callbackRevision, match[1] === "category" ? "category" : "item", match[2])
+    : simple
+      ? draftCallbackData(session.draftOrder!.callbackRevision, simple)
+      : data;
   return {
     ...draftContext(session, replies),
     callbackId: `callback-${data}`,
-    callbackData: data,
+    callbackData,
     answerCallback: async () => undefined,
   };
 }

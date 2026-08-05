@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import type { EmployeeSession } from "../types.js";
-import { deliverServiceOrder, showMyOrders, showOrderStatus, type OrderStatusContext } from "./order-status.handler.js";
+import { deliverServiceOrder, handleOrderStatusCallback, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -55,6 +55,23 @@ function context(): OrderStatusContext & { replies: string[] } {
   return { from: { id: employee.telegramUserId }, session: { employee }, replies, reply: async (message) => void replies.push(message) };
 }
 
+function callbackContext(data: string): OrderStatusCallbackContext & { replies: string[]; answers: string[]; clears: string[] } {
+  const replies: string[] = [];
+  const answers: string[] = [];
+  const clears: string[] = [];
+  return {
+    from: { id: employee.telegramUserId },
+    session: { employee },
+    callbackData: data,
+    replies,
+    answers,
+    clears,
+    reply: async (message) => void replies.push(message),
+    answerCallback: async (message) => void answers.push(message ?? ""),
+    clearCallbackMessage: async () => void clears.push("cleared"),
+  };
+}
+
 describe("Telegram order tracking", () => {
   it("lists only the authenticated employee's orders", async () => {
     const backend = api();
@@ -90,5 +107,28 @@ describe("Telegram order tracking", () => {
     await deliverServiceOrder(ctx, backend, "order-1");
     expect(backend.deliverOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
     expect(ctx.replies[0]).toContain("DELIVERED");
+  });
+
+  it("clears removed order callbacks and refreshes the current order list", async () => {
+    const backend = api();
+    const ctx = callbackContext("order:removed:order-1");
+
+    await handleOrderStatusCallback(ctx, backend);
+
+    expect(ctx.clears).toEqual(["cleared"]);
+    expect(backend.listMyOrders).toHaveBeenCalledWith(employee.telegramUserId);
+  });
+
+  it("clears a stale delivery keyboard and renders the backend's latest state", async () => {
+    const backend = api({
+      deliverOrder: vi.fn().mockRejectedValue(new BackendApiError("Not ready", 409, "ORDER_NOT_READY")),
+      getDraftOrder: vi.fn().mockResolvedValue(order({ paymentStatus: "PAID", fulfillmentStatus: "PREPARING" })),
+    });
+    const ctx = callbackContext("order:deliver:order-1");
+
+    await handleOrderStatusCallback(ctx, backend);
+
+    expect(ctx.clears).toEqual(["cleared"]);
+    expect(ctx.replies.at(-1)).toContain("PREPARING");
   });
 });

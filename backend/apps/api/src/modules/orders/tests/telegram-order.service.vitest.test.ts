@@ -6,6 +6,28 @@ import { TelegramOrderService } from "../telegram-order.service";
 const unusedDatabase = {} as PrismaClient;
 
 describe("TelegramOrderService input guards", () => {
+  it("returns the employee's existing open draft without creating a duplicate", async () => {
+    const existing = {
+      id: "order-1", orderCode: "ORD-001", createdByUserId: "staff-1", assignedBaristaId: null,
+      paymentMethod: null, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT", totalAmount: 0n,
+      customerNote: null, cancellationReason: null, paidAt: null, createdAt: new Date(), updatedAt: new Date(), items: [],
+    };
+    const database: any = {
+      order: { findFirst: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+      orderStatusHistory: { create: vi.fn() },
+    };
+    database.$transaction = vi.fn(async (operation: (tx: any) => unknown) => operation(database));
+
+    const result = await new TelegramOrderService(database as PrismaClient).createDraft("staff-1");
+
+    expect(result).toMatchObject({ id: "order-1", paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT" });
+    expect(database.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { createdByUserId: "staff-1", paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT" },
+    }));
+    expect(database.order.create).not.toHaveBeenCalled();
+    expect(database.orderStatusHistory.create).not.toHaveBeenCalled();
+  });
+
   it("rejects client quantities outside the Telegram contract before database access", async () => {
     const service = new TelegramOrderService(unusedDatabase);
     await expect(service.addItem("employee", "order", { menuItemId: "item", quantity: 0 })).rejects.toMatchObject({ code: "QUANTITY_INVALID" });

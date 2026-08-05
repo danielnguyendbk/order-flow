@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder, MenuCategory, MenuItem } from "../api/order-types.js";
+import { draftCallbackData, type DraftCallbackAction } from "../callbacks/callback-data.js";
 import { reviewKeyboard } from "../keyboards/draft-order.js";
 import type { BotSession, EmployeeSession } from "../types.js";
 import {
@@ -11,6 +12,7 @@ import {
   type DraftOrderCallbackContext,
   type DraftOrderContext,
 } from "./draft-order.handler.js";
+import { handleCreateOrderCallback } from "./callback.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -77,25 +79,55 @@ function draftContext(session: DraftOrderContext["session"] = {}): DraftOrderCon
   };
 }
 
-function callbackContext(data: string, session: DraftOrderContext["session"]): DraftOrderCallbackContext & { replies: string[]; answers: string[] } {
+function callbackContext(data: string, session: DraftOrderContext["session"]): DraftOrderCallbackContext & { replies: string[]; answers: string[]; clears: string[] } {
+  if (session.draftOrder && !session.draftOrder.callbackRevision) {
+    session.draftOrder.callbackRevision = "deadbeef";
+  }
+  const legacyMatch = /^draft:(category|item|edit|edit-quantity|edit-note|delete):(.+)$/.exec(data);
+  const legacyActions: Record<string, DraftCallbackAction> = {
+    cancel: "cancel",
+    "add-more": "addMore",
+    "back:categories": "backCategories",
+    "back:review": "backReview",
+    "note:skip": "skipNote",
+    "pay:cash": "payCash",
+    "pay:qr": "payQr",
+  };
+  const entityActions: Record<string, DraftCallbackAction> = {
+    category: "category",
+    item: "item",
+    edit: "edit",
+    "edit-quantity": "editQuantity",
+    "edit-note": "editNote",
+    delete: "delete",
+  };
+  const action = legacyActions[data.slice("draft:".length)];
+  const callbackData = legacyMatch
+    ? draftCallbackData(session.draftOrder?.callbackRevision ?? "deadbeef", entityActions[legacyMatch[1]]!, legacyMatch[2])
+    : action
+      ? draftCallbackData(session.draftOrder?.callbackRevision ?? "deadbeef", action)
+      : data;
   const replies: string[] = [];
   const answers: string[] = [];
+  const clears: string[] = [];
   return {
     from: { id: employee.telegramUserId },
     session,
     callbackId: "callback-1",
-    callbackData: data,
+    callbackData,
     replies,
     answers,
+    clears,
     reply: async (message) => void replies.push(message),
     answerCallback: async (message) => void answers.push(message ?? ""),
+    clearCallbackMessage: async () => void clears.push("cleared"),
   };
 }
 
 describe("Telegram draft order flow", () => {
   it("offers CASH and QR only when the review has items", () => {
-    const labels = reviewKeyboard(order()).reply_markup.inline_keyboard.flat().map((button) => button.text);
-    const emptyLabels = reviewKeyboard(order({ items: [], totalAmount: 0 })).reply_markup.inline_keyboard.flat().map((button) => button.text);
+    const labels = reviewKeyboard(order(), "deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
+    const emptyLabels = reviewKeyboard(order({ items: [], totalAmount: 0 }), "deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
     expect(labels).toEqual(expect.arrayContaining(["Tiền mặt", "QR"]));
     expect(emptyLabels).not.toEqual(expect.arrayContaining(["Tiền mặt", "QR"]));
   });
@@ -109,6 +141,17 @@ describe("Telegram draft order flow", () => {
     expect(backend.createDraftOrder).toHaveBeenCalledWith(employee.telegramUserId);
     expect(ctx.session.draftOrder).toMatchObject({ orderId: "order-1", step: "CATEGORY" });
     expect(ctx.replies).toEqual(["Chọn danh mục món:"]);
+  });
+
+  it("resumes an existing backend draft at review instead of hiding its items", async () => {
+    const ctx = draftContext();
+    const backend = api({ createDraftOrder: vi.fn().mockResolvedValue(order()) });
+
+    await startDraftOrder(ctx, backend);
+
+    expect(ctx.session.draftOrder?.step).toBe("REVIEW");
+    expect(backend.getMenuCategories).not.toHaveBeenCalled();
+    expect(ctx.replies.at(-1)).toContain("70.000");
   });
 
   it("accepts an active menu item, records quantity and note, then renders the server total", async () => {
@@ -171,7 +214,7 @@ describe("Telegram draft order flow", () => {
   it("rejects an expired draft and prevents duplicate callbacks while one is pending", async () => {
     const expired = callbackContext("draft:add-more", {});
     await handleDraftCallback(expired, api());
-    expect(expired.answers).toEqual(["Phiên tạo đơn đã hết hạn. Hãy tạo đơn mới."]);
+    expect(expired.answers).toEqual(["Nút này đã hết hạn."]);
 
     let releaseCategories: (() => void) | undefined;
     const pendingCategories = new Promise<MenuCategory[]>((resolve) => {
@@ -234,5 +277,60 @@ describe("Telegram draft order flow", () => {
     expect(ctx.session.draftOrder).toBeUndefined();
     expect(ctx.replies.at(-1)).toContain("PAYOF001");
     expect(ctx.replies.at(-1)).toContain("PENDING");
+  });
+
+  it("clears a stale keyboard and cannot apply a callback from another draft", async () => {
+    const session: BotSession = { draftOrder: { orderId: "order-2", step: "REVIEW", callbackRevision: "bbbbbbbb" } };
+    const backend = api({ getDraftOrder: vi.fn().mockResolvedValue(order({ id: "order-2" })) });
+    const stale = callbackContext(draftCallbackData("aaaaaaaa", "payCash"), session);
+
+    await handleDraftCallback(stale, backend);
+
+    expect(stale.clears).toEqual(["cleared"]);
+    expect(backend.confirmCashPayment).not.toHaveBeenCalled();
+    expect(backend.getDraftOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-2");
+  });
+
+  it("treats a legacy callback as stale and refreshes the active draft", async () => {
+    const session: BotSession = { draftOrder: { orderId: "order-1", step: "REVIEW", callbackRevision: "deadbeef" } };
+    const backend = api();
+    const legacy = callbackContext("ignored", session);
+    legacy.callbackData = "draft:pay:cash";
+
+    await handleDraftCallback(legacy, backend);
+
+    expect(legacy.clears).toEqual(["cleared"]);
+    expect(backend.confirmCashPayment).not.toHaveBeenCalled();
+    expect(backend.getDraftOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+  });
+
+  it("executes the same payment callback only once across sequential double-clicks", async () => {
+    const session: BotSession = { draftOrder: { orderId: "order-1", step: "REVIEW", callbackRevision: "deadbeef" } };
+    const backend = api();
+    const data = draftCallbackData("deadbeef", "payCash");
+
+    await handleDraftCallback(callbackContext(data, session), backend);
+    const repeated = callbackContext(data, session);
+    await handleDraftCallback(repeated, backend);
+
+    expect(backend.confirmCashPayment).toHaveBeenCalledTimes(1);
+    expect(repeated.clears).toEqual(["cleared"]);
+  });
+
+  it("prevents concurrent and sequential create-order double-clicks", async () => {
+    let releaseDraft: ((value: DraftOrder) => void) | undefined;
+    const pendingDraft = new Promise<DraftOrder>((resolve) => { releaseDraft = resolve; });
+    const backend = api({ createDraftOrder: vi.fn().mockReturnValue(pendingDraft) });
+    const session: BotSession = {};
+    const first = handleCreateOrderCallback(callbackContext("service:order:create", session), backend);
+    const concurrent = callbackContext("service:order:create", session);
+
+    await handleCreateOrderCallback(concurrent, backend);
+    expect(concurrent.answers.at(-1)).toContain("đang được xử lý");
+    releaseDraft?.(order({ items: [], totalAmount: 0 }));
+    await first;
+
+    await handleCreateOrderCallback(callbackContext("service:order:create", session), backend);
+    expect(backend.createDraftOrder).toHaveBeenCalledTimes(1);
   });
 });

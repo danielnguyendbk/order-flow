@@ -70,6 +70,10 @@ that the order is still `paymentStatus=UNPAID` and
 | `POST /orders/:orderId/payments/qr` | none | order, payment code, amount and QR image URL |
 | `GET /orders?mine=true` | none | up to 20 most recent orders owned by the employee |
 
+`POST /orders` is create-or-get for an employee's open
+`UNPAID/PENDING_PAYMENT` draft. Repeated or concurrent requests return the
+same draft, so a double-click cannot create two open orders.
+
 A draft-order response contains `id`, `code`, optional `paymentMethod`, `paymentStatus`,
 `fulfillmentStatus`, `totalAmount`, and `items`. An item contains `id`,
 `menuItemId`, `name`, `quantity`, `unitPrice`, and optional `note`. The API
@@ -81,6 +85,22 @@ the `SERVICE_STAFF` role on every request. CASH confirmation atomically moves
 the order to `paymentStatus=PAID` and `fulfillmentStatus=QUEUED`. QR creation
 sets `paymentStatus=PENDING`; the Bot refreshes `GET /orders/:orderId` to show
 the status written by payment reconciliation.
+
+## Inline callback contract
+
+Draft-order callback data uses the compact format
+`d:<8-hex-revision>:<action-code>[:entity-id]` and must be at most Telegram's
+64-byte `callback_data` limit. The Bot rotates the draft revision whenever it
+renders a new state. A callback whose revision does not match the active draft
+is stale: the Bot acknowledges it, removes the old inline keyboard, reloads
+the backend-owned state, and renders fresh controls.
+
+The Bot session keeps short-lived pending and completed action keys. Pending
+keys reject concurrent taps; completed keys reject rapid sequential replay.
+This is a UX guard only. Backend create, payment, claim, READY, and delivery
+operations remain authoritative and idempotent or use conditional transitions.
+Legacy `draft:*` callbacks are accepted by routing only so they can be cleared
+and refreshed; they are never executed as mutations.
 
 ## Barista order contract
 

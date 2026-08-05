@@ -74,10 +74,13 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Telegram session, menu, draft-order, CASH/QR and order-status routes are implemented end-to-end according to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
 - The Prisma schema maps the existing users, menu, orders, payments and status-history SQL tables; the full API TypeScript build succeeds.
 - Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
+- Inline draft keyboards use compact revisioned callback data from `backend/apps/telegram-bot/src/callbacks/`; stale keyboards are cleared and refreshed from backend state, and duplicate mutations are guarded in both the Bot and API.
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
 
 ## Progress log — 2026-08-05
 
+- `feat-tele` completes KHOA-005 with revisioned callbacks under 64 bytes, stale-keyboard removal and state refresh, centralized pending/completed callback guards, idempotent draft creation, and real Telegraf routing coverage.
+- Verified for KHOA-005: API and Bot type checks pass; 32 API tests and 73 Bot tests pass. The disposable PostgreSQL concurrency test remains opt-in through `TEST_DATABASE_URL`.
 - `feat-tele` completes KHOA-004 with authenticated Barista queue/detail/history endpoints, atomic claim/READY transitions, service-staff delivery, Telegram handlers/keyboards, unit tests and full HTTP E2E coverage.
 - Verified for KHOA-004: full API check with 31 tests and Bot check with 49 tests; the disposable database race/ownership test is opt-in through `TEST_DATABASE_URL`.
 - `feat-tele` completes KHOA-003 with authenticated menu/draft APIs, transactional CASH/QR payment selection, mine/status endpoints and Telegram tracking/refresh handlers.
@@ -99,6 +102,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - API work: start at `backend/apps/api/src/` and the relevant `modules/<domain>/` folder.
 - Telegram work: start at `backend/apps/telegram-bot/src/`.
+- Telegram callback protocol and replay guards: start at `backend/apps/telegram-bot/src/callbacks/`.
 - Admin UI work: start at `backend/apps/admin-web/src/`.
 - Database work: start at `backend/prisma/schema.prisma` and `backend/prisma/seed.ts`.
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.

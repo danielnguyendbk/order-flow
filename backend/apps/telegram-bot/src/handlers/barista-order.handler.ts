@@ -3,6 +3,7 @@ import type { Telegraf } from "telegraf";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { BaristaOrder, BaristaOrderHistory } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
+import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
 import { baristaHistoryKeyboard, baristaOrderKeyboard, baristaOrdersKeyboard } from "../keyboards/barista-order.js";
 import type { BotContext, BotSession, EmployeeSession } from "../types.js";
 import { isAccessDenied } from "./start.handler.js";
@@ -16,6 +17,7 @@ export interface BaristaOrderContext {
 export interface BaristaCallbackContext extends BaristaOrderContext {
   callbackData: string;
   answerCallback(message?: string): Promise<unknown>;
+  clearCallbackMessage?(): Promise<unknown>;
 }
 
 function formatMoney(amount: number): string {
@@ -94,17 +96,46 @@ export async function showBaristaOrder(ctx: BaristaOrderContext, api: BackendApi
   }
 }
 
+async function refreshBaristaState(
+  ctx: BaristaOrderContext,
+  api: BackendApi,
+  employee: EmployeeSession,
+  message: string,
+  orderId?: string,
+): Promise<void> {
+  await ctx.reply(message);
+  if (orderId) {
+    try {
+      const order = await api.getBaristaOrder(employee.telegramUserId, orderId);
+      await ctx.reply(formatBaristaOrder(order), baristaOrderKeyboard(order));
+      return;
+    } catch { /* Fall back to the current queue. */ }
+  }
+  const queue = await api.listBaristaQueue(employee.telegramUserId);
+  await ctx.reply(
+    queue.length ? "Hàng đợi mới nhất:" : "Hiện không có đơn nào đang chờ pha chế.",
+    queue.length ? baristaOrdersKeyboard(queue) : undefined,
+  );
+}
+
 export async function handleBaristaCallback(ctx: BaristaCallbackContext, api: BackendApi): Promise<void> {
   const key = ctx.callbackData;
   let answered = false;
-  const pending = new Set(ctx.session.pendingCallbacks ?? []);
-  if (pending.has(key)) {
-    await ctx.answerCallback("Yêu cầu này đang được xử lý.");
+  const acquireResult = acquireCallback(ctx.session, key);
+  if (acquireResult !== "acquired") {
+    await ctx.answerCallback(acquireResult === "processed" ? "Yêu cầu này đã được xử lý." : "Yêu cầu này đang được xử lý.");
+    if (acquireResult === "processed") {
+      await ctx.clearCallbackMessage?.().catch(() => undefined);
+      try {
+        const employee = await requireBarista(ctx, api);
+        const [, orderId] = parseAction(key);
+        if (employee) await refreshBaristaState(ctx, api, employee, "Trạng thái hiện tại đã được làm mới.", orderId);
+      } catch { /* The callback was already acknowledged. */ }
+    }
     return;
   }
-  pending.add(key);
-  ctx.session.pendingCallbacks = [...pending];
 
+  let completed = false;
   try {
     const employee = await requireBarista(ctx, api);
     if (!employee) {
@@ -128,37 +159,47 @@ export async function handleBaristaCallback(ctx: BaristaCallbackContext, api: Ba
 
     const [action, orderId] = parseAction(key);
     if (!action || !orderId) {
-      await ctx.reply("Thao tác không còn hợp lệ.");
+      await ctx.clearCallbackMessage?.().catch(() => undefined);
+      await refreshBaristaState(ctx, api, employee, "Thao tác cũ không còn hợp lệ. Hàng đợi đã được làm mới.");
       return;
     }
     if (action === "view") {
       const order = await api.getBaristaOrder(employee.telegramUserId, orderId);
       await ctx.reply(formatBaristaOrder(order), baristaOrderKeyboard(order));
+      completed = true;
       return;
     }
     if (action === "claim") {
       const order = await api.claimBaristaOrder(employee.telegramUserId, orderId);
       await ctx.reply(`Đã nhận đơn.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
+      completed = true;
       return;
     }
     if (action === "ready") {
       const order = await api.markBaristaOrderReady(employee.telegramUserId, orderId);
       await ctx.reply(`Đã đánh dấu pha chế xong.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
+      completed = true;
       return;
     }
     const history = await api.getBaristaOrderHistory(employee.telegramUserId, orderId);
     await ctx.reply(`Lịch sử đơn:\n${formatHistory(history)}`, baristaHistoryKeyboard(orderId));
+    completed = true;
   } catch (error) {
     if (!answered) {
       await ctx.answerCallback(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể xử lý yêu cầu.").catch(() => undefined);
     }
     if (error instanceof BackendApiError && ["ORDER_ALREADY_CLAIMED", "ORDER_STATE_CHANGED", "ORDER_NOT_CLAIMABLE", "ORDER_NOT_PREPARING"].includes(error.code ?? "")) {
-      await ctx.reply("Trạng thái đơn vừa thay đổi. Hãy làm mới hàng đợi hoặc chi tiết đơn.");
+      await ctx.clearCallbackMessage?.().catch(() => undefined);
+      const employee = ctx.session.employee;
+      const [, orderId] = parseAction(key);
+      if (employee?.role === "BARISTA") await refreshBaristaState(ctx, api, employee, "Trạng thái đơn vừa thay đổi. Dữ liệu mới nhất đã được tải lại.", orderId);
+      else await ctx.reply("Trạng thái đơn vừa thay đổi.");
     } else {
       await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể xử lý đơn pha chế. Hãy thử lại.");
     }
   } finally {
-    ctx.session.pendingCallbacks = (ctx.session.pendingCallbacks ?? []).filter((value) => value !== key);
+    if (completed) markCallbackCompleted(ctx.session, key);
+    releaseCallback(ctx.session, key);
   }
 }
 
@@ -169,12 +210,14 @@ function parseAction(data: string): ["view" | "claim" | "ready" | "history" | un
 
 export function registerBaristaOrderHandlers(bot: Telegraf<BotContext>, api: BackendApi): void {
   bot.action(/^barista:.*$/, async (ctx) => {
+    const callbackData = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : ctx.match[0];
     await handleBaristaCallback({
       from: ctx.from,
       session: ctx.session,
-      callbackData: ctx.match[0],
+      callbackData,
       reply: (message, extra) => ctx.reply(message, extra),
       answerCallback: (message) => ctx.answerCbQuery(message),
+      clearCallbackMessage: () => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
     }, api);
   });
 }

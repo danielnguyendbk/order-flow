@@ -3,6 +3,8 @@ import type { Telegraf } from "telegraf";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder, DraftOrderItem } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
+import { createCallbackRevision, parseDraftCallbackData } from "../callbacks/callback-data.js";
+import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
 import { categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
 import { orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import { roleMenu } from "../keyboards/role-menu.js";
@@ -26,18 +28,11 @@ export interface DraftOrderCallbackContext extends DraftOrderContext {
   callbackId: string;
   callbackData: string;
   answerCallback(message?: string): Promise<unknown>;
+  clearCallbackMessage?(): Promise<unknown>;
 }
 
-function callbackLock(ctx: DraftOrderCallbackContext, key: string): boolean {
-  const pending = new Set(ctx.session.pendingCallbacks ?? []);
-  if (pending.has(key)) return false;
-  pending.add(key);
-  ctx.session.pendingCallbacks = [...pending];
-  return true;
-}
-
-function releaseCallbackLock(ctx: DraftOrderCallbackContext, key: string): void {
-  ctx.session.pendingCallbacks = (ctx.session.pendingCallbacks ?? []).filter((pending) => pending !== key);
+async function clearStaleKeyboard(ctx: DraftOrderCallbackContext): Promise<void> {
+  await ctx.clearCallbackMessage?.().catch(() => undefined);
 }
 
 function clearDraft(ctx: DraftOrderContext): void {
@@ -46,6 +41,11 @@ function clearDraft(ctx: DraftOrderContext): void {
 
 function activeDraft(ctx: DraftOrderContext): DraftOrderSession | undefined {
   return ctx.session.draftOrder;
+}
+
+function rotateDraftRevision(draft: DraftOrderSession): string {
+  draft.callbackRevision = createCallbackRevision();
+  return draft.callbackRevision;
 }
 
 function isOpenDraft(order: DraftOrder): boolean {
@@ -71,15 +71,16 @@ async function requireServiceStaff(ctx: DraftOrderContext, api: BackendApi, empl
 }
 
 async function showCategories(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession): Promise<void> {
+  const draft = activeDraft(ctx);
+  if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
+  draft.step = "CATEGORY";
+  const revision = rotateDraftRevision(draft);
   const categories = await api.getMenuCategories(employee.telegramUserId);
   if (!categories.length) {
-    await ctx.reply("Hiện chưa có danh mục món nào. Bạn có thể hủy đơn nháp.", categoryKeyboard([]));
+    await ctx.reply("Hiện chưa có danh mục món nào. Bạn có thể hủy đơn nháp.", categoryKeyboard([], revision));
     return;
   }
-
-  const draft = activeDraft(ctx);
-  if (draft) draft.step = "CATEGORY";
-  await ctx.reply("Chọn danh mục món:", categoryKeyboard(categories));
+  await ctx.reply("Chọn danh mục món:", categoryKeyboard(categories, revision));
 }
 
 async function showReview(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession): Promise<void> {
@@ -97,7 +98,7 @@ async function showReview(ctx: DraftOrderContext, api: BackendApi, employee: Emp
   draft.selectedMenuItemName = undefined;
   draft.quantity = undefined;
   draft.editingOrderItemId = undefined;
-  await ctx.reply(formatReview(order), reviewKeyboard(order));
+  await ctx.reply(formatReview(order), reviewKeyboard(order, rotateDraftRevision(draft)));
 }
 
 async function showItemEditor(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession, itemId: string): Promise<void> {
@@ -110,7 +111,7 @@ async function showItemEditor(ctx: DraftOrderContext, api: BackendApi, employee:
 
   draft.step = "REVIEW";
   draft.editingOrderItemId = item.id;
-  await ctx.reply(`Chỉnh sửa ${item.name}:`, editItemKeyboard(item));
+  await ctx.reply(`Chỉnh sửa ${item.name}:`, editItemKeyboard(item, rotateDraftRevision(draft)));
 }
 
 export async function startDraftOrder(ctx: DraftOrderContext, api: BackendApi, employee?: EmployeeSession): Promise<void> {
@@ -121,22 +122,74 @@ export async function startDraftOrder(ctx: DraftOrderContext, api: BackendApi, e
       return;
     }
 
+    if (ctx.session.draftOrder) {
+      try {
+        const existing = await api.getDraftOrder(serviceStaff.telegramUserId, ctx.session.draftOrder.orderId);
+        if (isOpenDraft(existing)) {
+          if (existing.items.length) await showReview(ctx, api, serviceStaff);
+          else await showCategories(ctx, api, serviceStaff);
+          return;
+        }
+      } catch {
+        clearDraft(ctx);
+      }
+    }
+
     const order = await api.createDraftOrder(serviceStaff.telegramUserId);
     if (!isOpenDraft(order)) throw new Error("Backend did not create an editable draft order");
-    ctx.session.draftOrder = { orderId: order.id, step: "CATEGORY" };
-    await showCategories(ctx, api, serviceStaff);
+    ctx.session.draftOrder = { orderId: order.id, step: "CATEGORY", callbackRevision: createCallbackRevision() };
+    if (order.items.length) await showReview(ctx, api, serviceStaff);
+    else await showCategories(ctx, api, serviceStaff);
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : DRAFT_UNAVAILABLE_MESSAGE);
   }
 }
 
+async function refreshDraftState(
+  ctx: DraftOrderContext,
+  api: BackendApi,
+  employee: EmployeeSession,
+  message: string,
+): Promise<void> {
+  await ctx.reply(message);
+  const draft = activeDraft(ctx);
+  if (!draft) {
+    await ctx.reply("Menu đã được làm mới.", roleMenu(employee.role));
+    return;
+  }
+  try {
+    const current = await api.getDraftOrder(employee.telegramUserId, draft.orderId);
+    if (!isOpenDraft(current)) {
+      clearDraft(ctx);
+      await ctx.reply(`Đơn ${current.code} hiện ở trạng thái ${current.paymentStatus}/${current.fulfillmentStatus}.`, roleMenu(employee.role));
+      return;
+    }
+    if (current.items.length) await showReview(ctx, api, employee);
+    else await showCategories(ctx, api, employee);
+  } catch {
+    clearDraft(ctx);
+    await ctx.reply("Không thể khôi phục đơn nháp. Menu đã được làm mới.", roleMenu(employee.role));
+  }
+}
+
 export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: BackendApi): Promise<void> {
   const key = ctx.callbackData;
-  if (!callbackLock(ctx, key)) {
+  const acquireResult = acquireCallback(ctx.session, key);
+  if (acquireResult === "pending") {
     await ctx.answerCallback("Yêu cầu này đang được xử lý.");
     return;
   }
+  if (acquireResult === "processed") {
+    await clearStaleKeyboard(ctx);
+    await ctx.answerCallback("Yêu cầu này đã được xử lý.");
+    try {
+      const employee = await requireServiceStaff(ctx, api);
+      if (employee) await refreshDraftState(ctx, api, employee, "Trạng thái hiện tại đã được làm mới.");
+    } catch { /* The callback was already acknowledged. */ }
+    return;
+  }
 
+  let completed = false;
   try {
     const employee = await requireServiceStaff(ctx, api);
     if (!employee) {
@@ -145,78 +198,68 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
     }
 
     const draft = activeDraft(ctx);
-    if (!draft) {
-      await ctx.answerCallback(DRAFT_EXPIRED_MESSAGE);
-      return;
-    }
-
-    const action = ctx.callbackData;
-    const isKnownAction = action === "draft:cancel"
-      || action === "draft:add-more"
-      || action === "draft:back:categories"
-      || action === "draft:back:review"
-      || action === "draft:note:skip"
-      || action === "draft:pay:cash"
-      || action === "draft:pay:qr"
-      || action.startsWith("draft:category:")
-      || action.startsWith("draft:item:")
-      || action.startsWith("draft:edit:")
-      || action.startsWith("draft:edit-quantity:")
-      || action.startsWith("draft:edit-note:")
-      || action.startsWith("draft:delete:");
-    if (!isKnownAction) {
-      await ctx.answerCallback("Thao tác không còn hợp lệ.");
+    const callback = parseDraftCallbackData(key);
+    if (!draft || !callback || callback.revision !== draft.callbackRevision) {
+      await clearStaleKeyboard(ctx);
+      await ctx.answerCallback("Nút này đã hết hạn.");
+      await refreshDraftState(ctx, api, employee, "Thao tác cũ không còn hợp lệ. Trạng thái đã được làm mới.");
       return;
     }
 
     await ctx.answerCallback();
-    if (action === "draft:cancel") {
+    if (callback.action === "cancel") {
       await api.cancelDraftOrder(employee.telegramUserId, draft.orderId);
       clearDraft(ctx);
       await ctx.reply("Đã hủy đơn nháp.", roleMenu(employee.role));
+      completed = true;
       return;
     }
 
-    if (action === "draft:add-more" || action === "draft:back:categories") {
+    if (callback.action === "addMore" || callback.action === "backCategories") {
       await showCategories(ctx, api, employee);
+      completed = true;
       return;
     }
 
-    if (action === "draft:back:review") {
+    if (callback.action === "backReview") {
       await showReview(ctx, api, employee);
+      completed = true;
       return;
     }
 
-    if (action === "draft:pay:cash") {
+    if (callback.action === "payCash") {
       const paidOrder = await api.confirmCashPayment(employee.telegramUserId, draft.orderId);
       clearDraft(ctx);
       await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder));
+      completed = true;
       return;
     }
 
-    if (action === "draft:pay:qr") {
+    if (callback.action === "payQr") {
       const payment = await api.createQrPayment(employee.telegramUserId, draft.orderId);
       clearDraft(ctx);
       const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
       const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
       if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
       else await ctx.reply(message, keyboard);
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:category:")) {
-      const categoryId = action.slice("draft:category:".length);
+    if (callback.action === "category") {
+      const categoryId = callback.entityId!;
       const categories = await api.getMenuCategories(employee.telegramUserId);
       if (!categories.some((category) => category.id === categoryId)) throw new Error("Danh mục không còn hợp lệ.");
       const items = await api.getMenuItems(employee.telegramUserId, categoryId);
       draft.categoryId = categoryId;
       draft.step = "ITEM";
-      await ctx.reply(items.some((item) => item.isActive) ? "Chọn món:" : "Danh mục này hiện không có món đang bán.", itemKeyboard(items));
+      await ctx.reply(items.some((item) => item.isActive) ? "Chọn món:" : "Danh mục này hiện không có món đang bán.", itemKeyboard(items, rotateDraftRevision(draft)));
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:item:")) {
-      const menuItemId = action.slice("draft:item:".length);
+    if (callback.action === "item") {
+      const menuItemId = callback.entityId!;
       if (!draft.categoryId) throw new Error(DRAFT_EXPIRED_MESSAGE);
       const items = await api.getMenuItems(employee.telegramUserId, draft.categoryId);
       const item = items.find((candidate) => candidate.id === menuItemId && candidate.isActive);
@@ -224,44 +267,53 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       draft.selectedMenuItemId = item.id;
       draft.selectedMenuItemName = item.name;
       draft.step = "QUANTITY";
+      rotateDraftRevision(draft);
       await ctx.reply(`Nhập số lượng cho ${item.name} (1–99):`);
+      completed = true;
       return;
     }
 
-    if (action === "draft:note:skip") {
+    if (callback.action === "skipNote") {
       if (draft.step !== "NOTE" || !draft.selectedMenuItemId || !draft.quantity) throw new Error(DRAFT_EXPIRED_MESSAGE);
       await api.addDraftOrderItem(employee.telegramUserId, draft.orderId, {
         menuItemId: draft.selectedMenuItemId,
         quantity: draft.quantity,
       });
       await showReview(ctx, api, employee);
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:edit:")) {
-      await showItemEditor(ctx, api, employee, action.slice("draft:edit:".length));
+    if (callback.action === "edit") {
+      await showItemEditor(ctx, api, employee, callback.entityId!);
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:edit-quantity:")) {
-      const itemId = action.slice("draft:edit-quantity:".length);
+    if (callback.action === "editQuantity") {
+      const itemId = callback.entityId!;
       draft.editingOrderItemId = itemId;
       draft.step = "EDIT_QUANTITY";
+      rotateDraftRevision(draft);
       await ctx.reply("Nhập số lượng mới (1–99):");
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:edit-note:")) {
-      const itemId = action.slice("draft:edit-note:".length);
+    if (callback.action === "editNote") {
+      const itemId = callback.entityId!;
       draft.editingOrderItemId = itemId;
       draft.step = "EDIT_NOTE";
+      rotateDraftRevision(draft);
       await ctx.reply("Nhập ghi chú mới (hoặc gửi dấu - để xóa ghi chú):");
+      completed = true;
       return;
     }
 
-    if (action.startsWith("draft:delete:")) {
-      await api.deleteDraftOrderItem(employee.telegramUserId, draft.orderId, action.slice("draft:delete:".length));
+    if (callback.action === "delete") {
+      await api.deleteDraftOrderItem(employee.telegramUserId, draft.orderId, callback.entityId!);
       await showReview(ctx, api, employee);
+      completed = true;
       return;
     }
 
@@ -270,13 +322,19 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       await ctx.reply("Đơn này không thuộc quyền thao tác của bạn.");
     } else if (isAccessDenied(error)) {
       await ctx.reply("Tài khoản không còn được phép sử dụng.");
+    } else if (error instanceof BackendApiError && ["ORDER_NOT_EDITABLE", "ORDER_NOT_PAYABLE", "ORDER_ITEM_NOT_FOUND", "MENU_ITEM_UNAVAILABLE", "PAYMENT_METHOD_CONFLICT"].includes(error.code ?? "")) {
+      await clearStaleKeyboard(ctx);
+      const employee = ctx.session.employee;
+      if (employee?.role === "SERVICE_STAFF") await refreshDraftState(ctx, api, employee, "Trạng thái đơn vừa thay đổi. Dữ liệu mới nhất đã được tải lại.");
+      else await ctx.reply(DRAFT_UNAVAILABLE_MESSAGE);
     } else if (error instanceof Error && [DRAFT_EXPIRED_MESSAGE, "Danh mục không còn hợp lệ.", "Món không còn được bán.", "Món hoặc đơn không còn hợp lệ.", "Đơn không còn ở trạng thái có thể chỉnh sửa."].includes(error.message)) {
       await ctx.reply(error.message);
     } else {
       await ctx.reply(DRAFT_UNAVAILABLE_MESSAGE);
     }
   } finally {
-    releaseCallbackLock(ctx, key);
+    if (completed) markCallbackCompleted(ctx.session, key);
+    releaseCallback(ctx.session, key);
   }
 }
 
@@ -302,7 +360,7 @@ export async function handleDraftText(ctx: DraftOrderContext & { text: string },
       if (draft.step === "QUANTITY") {
         draft.quantity = quantity;
         draft.step = "NOTE";
-        await ctx.reply("Nhập ghi chú cho món, hoặc chọn Bỏ qua:", noteKeyboard());
+        await ctx.reply("Nhập ghi chú cho món, hoặc chọn Bỏ qua:", noteKeyboard(rotateDraftRevision(draft)));
       } else if (draft.editingOrderItemId) {
         await api.updateDraftOrderItem(employee.telegramUserId, draft.orderId, draft.editingOrderItemId, { quantity });
         await showReview(ctx, api, employee);
@@ -340,16 +398,18 @@ export async function handleDraftText(ctx: DraftOrderContext & { text: string },
 }
 
 export function registerDraftOrderHandlers(bot: Telegraf<BotContext>, api: BackendApi): void {
-  bot.action(/^draft:/, async (ctx) => {
+  bot.action(/^(?:d:.*|draft:.*)$/, async (ctx) => {
+    const callbackData = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : ctx.match[0];
     await handleDraftCallback(
       {
         from: ctx.from,
         session: ctx.session,
         callbackId: ctx.callbackQuery.id,
-        callbackData: ctx.match[0],
+        callbackData,
         reply: (message, extra) => ctx.reply(message, extra),
         replyPhoto: (url, caption, extra) => ctx.replyWithPhoto({ url }, { caption, ...extra }),
         answerCallback: (message) => ctx.answerCbQuery(message),
+        clearCallbackMessage: () => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
       },
       api,
     );

@@ -57,7 +57,14 @@ describe.skipIf(!database)("Telegram order disposable-database integration", () 
   });
 
   it("uses database price, enforces ownership and confirms CASH idempotently", async () => {
-    const draft = await service!.createDraft(employeeId);
+    const [draft, repeatedDraft] = await Promise.all([
+      service!.createDraft(employeeId),
+      service!.createDraft(employeeId),
+    ]);
+    expect(repeatedDraft.id).toBe(draft.id);
+    expect(await database!.order.count({
+      where: { createdByUserId: employeeId, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT" },
+    })).toBe(1);
     const withItem = await service!.addItem(employeeId, draft.id, { menuItemId, quantity: 2, note: "Ít đá" });
     expect(withItem.totalAmount).toBe(50_000);
     expect(withItem.items[0]).toMatchObject({ unitPrice: 25_000, quantity: 2, note: "Ít đá" });

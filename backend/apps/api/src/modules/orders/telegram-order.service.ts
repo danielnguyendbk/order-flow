@@ -144,7 +144,18 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
   public async createDraft(employeeId: string): Promise<TelegramOrderDto> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        const order = await this.database.$transaction(async (tx) => {
+        const order = await this.serializable(async (tx) => {
+          const existing = await tx.order.findFirst({
+            where: {
+              createdByUserId: employeeId,
+              paymentStatus: "UNPAID",
+              fulfillmentStatus: "PENDING_PAYMENT",
+            },
+            include: { items: true },
+            orderBy: { updatedAt: "desc" },
+          });
+          if (existing) return existing;
+
           const created = await tx.order.create({
             data: { orderCode: generateOrderCode(), createdByUserId: employeeId },
             include: { items: true },

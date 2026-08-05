@@ -114,12 +114,13 @@ describe("Telegram authentication and role menu", () => {
     await handleCallback(ctx, apiReturning(serviceStaff));
 
     expect(ctx.answers).toEqual(["Thao tác không còn hợp lệ."]);
-    expect(ctx.replies).toEqual([]);
+    expect(ctx.replies).toHaveLength(1);
   });
 
   it("rejects a stale callback and re-checks an inactive employee", async () => {
     const stale = callbackContext("service:order:removed", serviceStaff.telegramUserId);
     await handleCallback(stale, apiReturning(serviceStaff));
+    expect(stale.replies).toHaveLength(1);
     expect(stale.answers).toEqual(["Thao tác không còn hợp lệ."]);
 
     const inactive = callbackContext("service:order:create", serviceStaff.telegramUserId);
