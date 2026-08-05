@@ -53,9 +53,23 @@ export async function showOrderStatus(ctx: OrderStatusContext, api: BackendApi, 
       return;
     }
     const order = await api.getDraftOrder(employee.telegramUserId, orderId);
-    await ctx.reply(formatOrderStatus(order), orderStatusKeyboard(order.id));
+    await ctx.reply(formatOrderStatus(order), orderStatusKeyboard(order));
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải trạng thái đơn. Hãy thử lại.");
+  }
+}
+
+export async function deliverServiceOrder(ctx: OrderStatusContext, api: BackendApi, orderId: string): Promise<void> {
+  try {
+    const employee = await authenticateEmployee(ctx, api);
+    if (employee.role !== "SERVICE_STAFF") {
+      await ctx.reply("Bạn không có quyền giao đơn này.");
+      return;
+    }
+    const order = await api.deliverOrder(employee.telegramUserId, orderId);
+    await ctx.reply(`Đã xác nhận giao đơn.\n\n${formatOrderStatus(order)}`, orderStatusKeyboard(order));
+  } catch (error) {
+    await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể xác nhận giao đơn. Hãy làm mới trạng thái.");
   }
 }
 
@@ -68,6 +82,15 @@ export function registerOrderStatusHandlers(bot: Telegraf<BotContext>, api: Back
   bot.action(/^order:status:(.+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     await showOrderStatus(
+      { from: ctx.from, session: ctx.session, reply: (message, extra) => ctx.reply(message, extra) },
+      api,
+      ctx.match[1],
+    );
+  });
+
+  bot.action(/^order:deliver:(.+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    await deliverServiceOrder(
       { from: ctx.from, session: ctx.session, reply: (message, extra) => ctx.reply(message, extra) },
       api,
       ctx.match[1],

@@ -14,6 +14,9 @@ The required Telegram authentication contract is documented in
 Service staff can create backend-owned drafts, choose CASH or SePay/VietQR,
 list their orders, and refresh payment/fulfillment status from Telegram. The
 API owns pricing, totals, ownership checks and payment transitions.
+Baristas can list the paid queue, open order detail, atomically claim an order,
+mark their assigned order READY, and view status history. The API derives the
+actor from the Telegram identity and records each transition transactionally.
 
 ```sh
 cp apps/telegram-bot/.env.example apps/telegram-bot/.env

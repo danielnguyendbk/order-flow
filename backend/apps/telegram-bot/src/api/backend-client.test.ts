@@ -120,4 +120,28 @@ describe("BackendClient", () => {
       headers: expect.objectContaining({ "x-telegram-user-id": "123" }),
     });
   });
+
+  it("calls all Barista endpoints with the Telegram identity", async () => {
+    const response = new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response.clone()));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new BackendClient("http://localhost:3000/api/v1", "internal-secret");
+
+    await client.listBaristaQueue(202);
+    await client.listBaristaOrders(202);
+    await client.getBaristaOrder(202, "order-1");
+    await client.getBaristaOrderHistory(202, "order-1");
+    await client.claimBaristaOrder(202, "order-1");
+    await client.markBaristaOrderReady(202, "order-1");
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "http://localhost:3000/api/v1/barista/queue",
+      "http://localhost:3000/api/v1/barista/orders",
+      "http://localhost:3000/api/v1/barista/orders/order-1",
+      "http://localhost:3000/api/v1/barista/orders/order-1/history",
+      "http://localhost:3000/api/v1/orders/order-1/claim",
+      "http://localhost:3000/api/v1/orders/order-1/ready",
+    ]);
+    expect(fetchMock.mock.calls.every(([, init]) => init.headers["x-telegram-user-id"] === "202")).toBe(true);
+  });
 });

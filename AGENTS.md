@@ -70,12 +70,16 @@ All module directories are under `backend/apps/api/src/modules/`:
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf workspace with its own `package.json`, lockfile, environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/session`, stores only an ephemeral Bot session, and renders role-specific menus.
 - Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.
+- Baristas can complete the Telegram preparation flow: queue → detail → atomic claim → PREPARING → READY → history. Queue eligibility, active role, assignment ownership and state transitions are enforced by the API.
 - Telegram session, menu, draft-order, CASH/QR and order-status routes are implemented end-to-end according to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
 - The Prisma schema maps the existing users, menu, orders, payments and status-history SQL tables; the full API TypeScript build succeeds.
 - Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
+- Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
 
 ## Progress log — 2026-08-05
 
+- `feat-tele` completes KHOA-004 with authenticated Barista queue/detail/history endpoints, atomic claim/READY transitions, service-staff delivery, Telegram handlers/keyboards, unit tests and full HTTP E2E coverage.
+- Verified for KHOA-004: full API check with 31 tests and Bot check with 49 tests; the disposable database race/ownership test is opt-in through `TEST_DATABASE_URL`.
 - `feat-tele` completes KHOA-003 with authenticated menu/draft APIs, transactional CASH/QR payment selection, mine/status endpoints and Telegram tracking/refresh handlers.
 - Full HTTP E2E tests cover category → item → quantity → note → review → CASH/QR → status; database integration tests remain opt-in through a disposable `TEST_DATABASE_URL`.
 - Verified for KHOA-003: Prisma generate/validate, full API check/build, 20 API tests, Bot check/build and 41 Bot tests all pass.
@@ -89,7 +93,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Verified after the merge:
   - `cd backend && npm.cmd run check:bot`
   - `cd backend && npm.cmd run test:bot` — 14 tests passed.
-- Next Telegram dependencies: add barista queue/Ready, SePay webhook reconciliation, and real notification outbox integration.
+- Next Telegram dependencies: add SePay webhook reconciliation and real notification outbox integration.
 
 ## Navigation shortcuts
 

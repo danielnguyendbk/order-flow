@@ -38,6 +38,7 @@ function fakeService(overrides: Partial<TelegramOrderServiceContract> = {}): Tel
       amount: 30_000,
       qrImageUrl: "https://vietqr.app/img?amount=30000",
     }),
+    deliver: vi.fn().mockResolvedValue({ ...draft, fulfillmentStatus: "DELIVERED" }),
     ...overrides,
   };
 }
@@ -114,6 +115,9 @@ describe("Telegram service-staff order HTTP contract", () => {
     expect(await cash.json()).toMatchObject({ paymentMethod: "CASH", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" });
     expect(qr.status).toBe(200);
     expect(await qr.json()).toMatchObject({ paymentCode: "PAYORD001", amount: 30_000 });
+    const delivered = await apiRequest(baseUrl, "/orders/order-1/deliver", "POST", { requesterId: "attacker" });
+    expect(delivered.status).toBe(200);
+    expect(service.deliver).toHaveBeenCalledWith("employee-1", "order-1");
   });
 
   it("rejects invalid credentials and an employee who becomes inactive", async () => {

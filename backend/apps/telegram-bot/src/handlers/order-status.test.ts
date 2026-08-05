@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import type { EmployeeSession } from "../types.js";
-import { showMyOrders, showOrderStatus, type OrderStatusContext } from "./order-status.handler.js";
+import { deliverServiceOrder, showMyOrders, showOrderStatus, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -39,6 +39,13 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     listMyOrders: vi.fn().mockResolvedValue([order()]),
     confirmCashPayment: vi.fn().mockResolvedValue(order()),
     createQrPayment: vi.fn().mockResolvedValue({ order: order(), paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }),
+    deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
+    listBaristaQueue: vi.fn().mockResolvedValue([]),
+    listBaristaOrders: vi.fn().mockResolvedValue([]),
+    getBaristaOrder: vi.fn(),
+    getBaristaOrderHistory: vi.fn().mockResolvedValue([]),
+    claimBaristaOrder: vi.fn(),
+    markBaristaOrderReady: vi.fn(),
     ...overrides,
   };
 }
@@ -74,5 +81,14 @@ describe("Telegram order tracking", () => {
     await showOrderStatus(ctx, backend, "order-1");
     expect(ctx.session.employee).toBeUndefined();
     expect(backend.getDraftOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets the creating service staff deliver only a READY order through the backend", async () => {
+    const delivered = order({ paymentStatus: "PAID", fulfillmentStatus: "DELIVERED" });
+    const backend = api({ deliverOrder: vi.fn().mockResolvedValue(delivered) });
+    const ctx = context();
+    await deliverServiceOrder(ctx, backend, "order-1");
+    expect(backend.deliverOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.replies[0]).toContain("DELIVERED");
   });
 });

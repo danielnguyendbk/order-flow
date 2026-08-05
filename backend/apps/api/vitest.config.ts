@@ -5,7 +5,8 @@ export default defineConfig({
     include: [
       "src/modules/auth/tests/**/*.test.ts",
       "src/modules/orders/tests/**/*.vitest.test.ts",
+      "src/modules/barista/tests/**/*.test.ts",
     ],
-    exclude: ["src/modules/auth/tests/**/*.integration.test.ts"],
+    exclude: ["src/modules/**/tests/**/*.integration.test.ts"],
   },
 });

@@ -56,6 +56,13 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
       amount: 70_000,
       qrImageUrl: "https://vietqr.app/img?amount=70000",
     }),
+    deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
+    listBaristaQueue: vi.fn().mockResolvedValue([]),
+    listBaristaOrders: vi.fn().mockResolvedValue([]),
+    getBaristaOrder: vi.fn(),
+    getBaristaOrderHistory: vi.fn().mockResolvedValue([]),
+    claimBaristaOrder: vi.fn(),
+    markBaristaOrderReady: vi.fn(),
     ...overrides,
   };
 }

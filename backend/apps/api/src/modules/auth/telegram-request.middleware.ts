@@ -2,7 +2,11 @@ import type { NextFunction, Request, Response } from "express";
 
 import { PrismaTelegramEmployeeRepository } from "./telegram-session.repository";
 import { secretMatches } from "./telegram-session.routes";
-import type { TelegramEmployeeRecord, TelegramEmployeeRepository } from "./telegram-session.types";
+import type {
+  DatabaseEmployeeRole,
+  TelegramEmployeeRecord,
+  TelegramEmployeeRepository,
+} from "./telegram-session.types";
 
 export const TELEGRAM_EMPLOYEE_LOCAL = "telegramEmployee";
 
@@ -10,15 +14,17 @@ export interface TelegramRequestAuthOptions {
   internalSecret: string;
   employeeRepository?: TelegramEmployeeRepository;
   passThroughWithoutBotHeaders?: boolean;
+  roles?: DatabaseEmployeeRole[];
 }
 
 export function getTelegramEmployee(res: Response): TelegramEmployeeRecord {
   return res.locals[TELEGRAM_EMPLOYEE_LOCAL] as TelegramEmployeeRecord;
 }
 
-export function createRequireServiceStaff(options: TelegramRequestAuthOptions) {
+export function createRequireTelegramEmployee(options: TelegramRequestAuthOptions) {
   if (!options.internalSecret) throw new Error("BOT_INTERNAL_SECRET is required");
   const employees = options.employeeRepository ?? new PrismaTelegramEmployeeRepository();
+  const roles = options.roles ?? ["OWNER", "SERVICE_STAFF", "BARISTA"];
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (options.passThroughWithoutBotHeaders && !req.header("x-bot-internal-secret") && !req.header("x-telegram-user-id")) {
@@ -47,8 +53,8 @@ export function createRequireServiceStaff(options: TelegramRequestAuthOptions) {
         res.status(403).json({ code: "EMPLOYEE_INACTIVE", message: "Employee is inactive" });
         return;
       }
-      if (employee.role !== "SERVICE_STAFF") {
-        res.status(403).json({ code: "ROLE_FORBIDDEN", message: "Service staff role is required" });
+      if (!roles.includes(employee.role)) {
+        res.status(403).json({ code: "ROLE_FORBIDDEN", message: `One of these roles is required: ${roles.join(", ")}` });
         return;
       }
 
@@ -58,4 +64,12 @@ export function createRequireServiceStaff(options: TelegramRequestAuthOptions) {
       next(error);
     }
   };
+}
+
+export function createRequireServiceStaff(options: TelegramRequestAuthOptions) {
+  return createRequireTelegramEmployee({ ...options, roles: ["SERVICE_STAFF"] });
+}
+
+export function createRequireBarista(options: TelegramRequestAuthOptions) {
+  return createRequireTelegramEmployee({ ...options, roles: ["BARISTA"] });
 }

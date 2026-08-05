@@ -1,5 +1,7 @@
 import type { EmployeeSession } from "../types.js";
 import type {
+  BaristaOrder,
+  BaristaOrderHistory,
   CreateOrderItemInput,
   DraftOrder,
   MenuCategory,
@@ -26,6 +28,13 @@ export interface BackendApi {
   listMyOrders(telegramUserId: number): Promise<DraftOrder[]>;
   confirmCashPayment(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult>;
+  deliverOrder(telegramUserId: number, orderId: string): Promise<DraftOrder>;
+  listBaristaQueue(telegramUserId: number): Promise<BaristaOrder[]>;
+  listBaristaOrders(telegramUserId: number): Promise<BaristaOrder[]>;
+  getBaristaOrder(telegramUserId: number, orderId: string): Promise<BaristaOrder>;
+  getBaristaOrderHistory(telegramUserId: number, orderId: string): Promise<BaristaOrderHistory[]>;
+  claimBaristaOrder(telegramUserId: number, orderId: string): Promise<BaristaOrder>;
+  markBaristaOrderReady(telegramUserId: number, orderId: string): Promise<BaristaOrder>;
 }
 
 export class BackendApiError extends Error {
@@ -103,6 +112,34 @@ export class BackendClient implements BackendApi {
 
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult> {
     return this.post<QrPaymentResult>(`/orders/${encodeURIComponent(orderId)}/payments/qr`, telegramUserId);
+  }
+
+  deliverOrder(telegramUserId: number, orderId: string): Promise<DraftOrder> {
+    return this.post<DraftOrder>(`/orders/${encodeURIComponent(orderId)}/deliver`, telegramUserId);
+  }
+
+  listBaristaQueue(telegramUserId: number): Promise<BaristaOrder[]> {
+    return this.get<BaristaOrder[]>("/barista/queue", telegramUserId);
+  }
+
+  listBaristaOrders(telegramUserId: number): Promise<BaristaOrder[]> {
+    return this.get<BaristaOrder[]>("/barista/orders", telegramUserId);
+  }
+
+  getBaristaOrder(telegramUserId: number, orderId: string): Promise<BaristaOrder> {
+    return this.get<BaristaOrder>(`/barista/orders/${encodeURIComponent(orderId)}`, telegramUserId);
+  }
+
+  getBaristaOrderHistory(telegramUserId: number, orderId: string): Promise<BaristaOrderHistory[]> {
+    return this.get<BaristaOrderHistory[]>(`/barista/orders/${encodeURIComponent(orderId)}/history`, telegramUserId);
+  }
+
+  claimBaristaOrder(telegramUserId: number, orderId: string): Promise<BaristaOrder> {
+    return this.post<BaristaOrder>(`/orders/${encodeURIComponent(orderId)}/claim`, telegramUserId);
+  }
+
+  markBaristaOrderReady(telegramUserId: number, orderId: string): Promise<BaristaOrder> {
+    return this.post<BaristaOrder>(`/orders/${encodeURIComponent(orderId)}/ready`, telegramUserId);
   }
 
   async get<T>(path: string, telegramUserId: number): Promise<T> {

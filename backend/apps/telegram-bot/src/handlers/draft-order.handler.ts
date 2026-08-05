@@ -190,7 +190,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
     if (action === "draft:pay:cash") {
       const paidOrder = await api.confirmCashPayment(employee.telegramUserId, draft.orderId);
       clearDraft(ctx);
-      await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder.id));
+      await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder));
       return;
     }
 

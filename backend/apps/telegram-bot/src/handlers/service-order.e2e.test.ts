@@ -88,6 +88,11 @@ class InMemoryOrderService implements TelegramOrderServiceContract {
     order.paymentStatus = "PENDING";
     return { order: cloneOrder(order), paymentCode: `PAY${order.code.replaceAll("-", "")}`, amount: order.totalAmount, qrImageUrl: "https://vietqr.app/img?amount=60000" };
   }
+  async deliver(_employeeId: string, orderId: string) {
+    const order = this.required(orderId);
+    order.fulfillmentStatus = "DELIVERED";
+    return cloneOrder(order);
+  }
   markQrPaid(orderId: string): void {
     const order = this.required(orderId);
     order.paymentStatus = "PAID";

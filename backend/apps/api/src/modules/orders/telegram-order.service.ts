@@ -55,6 +55,7 @@ export interface TelegramOrderServiceContract {
   cancelDraft(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   confirmCash(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   createQr(employeeId: string, orderId: string): Promise<TelegramQrPaymentDto>;
+  deliver(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
 }
 
 export class TelegramOrderError extends Error {
@@ -325,6 +326,34 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
       amount: Number(result.order.totalAmount),
       qrImageUrl: qrUrl.toString(),
     };
+  }
+
+  public async deliver(employeeId: string, orderId: string): Promise<TelegramOrderDto> {
+    const order = await this.serializable(async (tx) => {
+      const current = await this.ownedOrder(tx, employeeId, orderId);
+      if (current.fulfillmentStatus === "DELIVERED") return current;
+      if (current.fulfillmentStatus !== "READY") {
+        throw new TelegramOrderError(409, "ORDER_NOT_READY", "Order must be ready before delivery");
+      }
+      const changed = await tx.order.updateMany({
+        where: { id: orderId, createdByUserId: employeeId, fulfillmentStatus: "READY" },
+        data: { fulfillmentStatus: "DELIVERED" },
+      });
+      if (changed.count !== 1) {
+        throw new TelegramOrderError(409, "ORDER_STATE_CHANGED", "Order state changed while processing the request");
+      }
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          statusDomain: "FULFILLMENT",
+          oldStatus: "READY",
+          newStatus: "DELIVERED",
+          changedByUserId: employeeId,
+        },
+      });
+      return this.ownedOrder(tx, employeeId, orderId);
+    });
+    return toOrderDto(order);
   }
 
   private async ownedOrder(database: PrismaClient | Prisma.TransactionClient, employeeId: string, orderId: string): Promise<OrderWithItems> {

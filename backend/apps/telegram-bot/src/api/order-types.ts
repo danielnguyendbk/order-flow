@@ -37,6 +37,33 @@ export interface QrPaymentResult {
   qrImageUrl: string;
 }
 
+export interface BaristaOrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  note?: string | null;
+}
+
+export interface BaristaOrder {
+  id: string;
+  code: string;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  totalAmount: number;
+  assignedBaristaId?: string | null;
+  createdAt: string;
+  items: BaristaOrderItem[];
+}
+
+export interface BaristaOrderHistory {
+  id: string;
+  statusDomain: string;
+  oldStatus?: string | null;
+  newStatus: string;
+  reason?: string | null;
+  createdAt: string;
+}
+
 export interface CreateOrderItemInput {
   menuItemId: string;
   quantity: number;

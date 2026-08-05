@@ -8,11 +8,16 @@ export function myOrdersKeyboard(orders: DraftOrder[]) {
   ]));
 }
 
-export function orderStatusKeyboard(orderId: string) {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback("Làm mới trạng thái", `order:status:${orderId}`)],
+export function orderStatusKeyboard(order: DraftOrder) {
+  const rows = [];
+  if (order.fulfillmentStatus === "READY") {
+    rows.push([Markup.button.callback("Đã giao khách", `order:deliver:${order.id}`)]);
+  }
+  rows.push(
+    [Markup.button.callback("Làm mới trạng thái", `order:status:${order.id}`)],
     [Markup.button.callback("Đơn của tôi", "service:orders:mine")],
-  ]);
+  );
+  return Markup.inlineKeyboard(rows);
 }
 
 export function qrPaymentKeyboard(orderId: string, qrImageUrl: string) {

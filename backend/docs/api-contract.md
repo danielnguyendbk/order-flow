@@ -43,8 +43,25 @@ Implementation status: **implemented for authenticated Telegram service staff**.
 | `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid draft |
 | `POST` | `/api/v1/orders/:orderId/payments/qr` | Start an idempotent QR payment |
 | `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Atomically confirm CASH and queue the order |
+| `POST` | `/api/v1/orders/:orderId/deliver` | Creator confirms handoff of a READY order |
 
 Implementation status: **implemented**. All routes require the Bot secret and an active `SERVICE_STAFF` Telegram identity. Ownership, editability, menu availability and payment transitions are enforced by the API.
+
+## Telegram Barista orders
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/barista/queue` | List oldest paid, queued and unassigned orders |
+| `GET` | `/api/v1/barista/orders` | List orders assigned to the current Barista |
+| `GET` | `/api/v1/barista/orders/:orderId` | Show an accessible queue/assigned order |
+| `GET` | `/api/v1/barista/orders/:orderId/history` | Show history for an assigned order |
+| `POST` | `/api/v1/orders/:orderId/claim` | Atomically claim a queued order |
+| `POST` | `/api/v1/orders/:orderId/ready` | Mark the assigned preparing order ready |
+
+Implementation status: **implemented**. These endpoints require the Bot
+secret and an active `BARISTA` Telegram identity. The backend derives the actor
+from the authenticated identity; claim and READY use conditional updates and
+write history within the same serializable transaction.
 
 ## Admin employees
 
@@ -84,6 +101,7 @@ Implementation status: **implemented**. All routes require the Bot secret and an
 | Admin authentication | `apps/api/src/modules/auth/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
 | Telegram service-staff orders and payments | `apps/api/src/modules/orders/` |
+| Telegram Barista queue and processing | `apps/api/src/modules/barista/` |
 | Admin employees | `apps/api/src/modules/employees/` |
 
 ## Contract completion checklist

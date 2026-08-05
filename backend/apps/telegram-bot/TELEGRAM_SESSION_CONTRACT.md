@@ -66,6 +66,7 @@ that the order is still `paymentStatus=UNPAID` and
 | `GET /orders/:orderId` | none | current draft order |
 | `POST /orders/:orderId/cancel` | none | `204` or cancellation result |
 | `POST /orders/:orderId/payments/cash/confirm` | none | paid and queued order |
+| `POST /orders/:orderId/deliver` | none | creator-owned order transitioned from `READY` to `DELIVERED` |
 | `POST /orders/:orderId/payments/qr` | none | order, payment code, amount and QR image URL |
 | `GET /orders?mine=true` | none | up to 20 most recent orders owned by the employee |
 
@@ -80,3 +81,26 @@ the `SERVICE_STAFF` role on every request. CASH confirmation atomically moves
 the order to `paymentStatus=PAID` and `fulfillmentStatus=QUEUED`. QR creation
 sets `paymentStatus=PENDING`; the Bot refreshes `GET /orders/:orderId` to show
 the status written by payment reconciliation.
+
+## Barista order contract
+
+Every request below requires `x-bot-internal-secret` and
+`x-telegram-user-id`. The API resolves the actor from the Telegram identity on
+every request and requires an active `BARISTA`; it never accepts a client
+supplied `baristaId` or `requesterId`.
+
+| Endpoint | Response |
+| --- | --- |
+| `GET /barista/queue` | Up to 20 oldest `PAID + QUEUED + unassigned` orders |
+| `GET /barista/orders` | Up to 20 most recently updated orders assigned to the Barista |
+| `GET /barista/orders/:orderId` | An unassigned queue order or an order assigned to the Barista |
+| `GET /barista/orders/:orderId/history` | Status history for an order assigned to the Barista |
+| `POST /orders/:orderId/claim` | Atomically assign the Barista and transition `QUEUED → PREPARING` |
+| `POST /orders/:orderId/ready` | Atomically transition the assigned order `PREPARING → READY` |
+
+Claim and READY write the order transition and its history entry in one
+serializable transaction. A concurrent/stale action returns `409`; another
+Barista's order returns `403`. Repeating a successful claim or READY action by
+the same Barista is idempotent. Delivery remains a service-staff action: only
+the employee who created the order can transition `READY → DELIVERED` through
+the authenticated Telegram endpoint.

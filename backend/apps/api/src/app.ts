@@ -10,6 +10,10 @@ import {
   createTelegramOrderRouter,
   type TelegramOrderRouterOptions,
 } from "./modules/orders/telegram-order.routes";
+import {
+  createTelegramBaristaRouter,
+  type TelegramBaristaRouterOptions,
+} from "./modules/barista/telegram-barista.routes";
 
 // ── BigInt JSON serialization fix ─────────────────────────────
 // Prisma returns BigInt for columns declared as bigint.
@@ -43,6 +47,8 @@ import {
  *
  *   GET    /barista/queue
  *   GET    /barista/orders
+ *   GET    /barista/orders/:orderId
+ *   GET    /barista/orders/:orderId/history
  *
  *   GET    /admin/orders
  *   GET    /admin/orders/:orderId
@@ -51,6 +57,7 @@ import {
 export interface AppOptions {
   telegramSession?: TelegramSessionRouterOptions;
   telegramOrders?: Omit<TelegramOrderRouterOptions, "internalSecret">;
+  telegramBarista?: Omit<TelegramBaristaRouterOptions, "internalSecret">;
 }
 
 export function createApp(options: AppOptions = {}): Application {
@@ -70,6 +77,7 @@ export function createApp(options: AppOptions = {}): Application {
   const botInternalSecret = options.telegramSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
 
   apiV1.use(createTelegramOrderRouter({ internalSecret: botInternalSecret, ...options.telegramOrders }));
+  apiV1.use(createTelegramBaristaRouter({ internalSecret: botInternalSecret, ...options.telegramBarista }));
   apiV1.use("/orders",  createOrderRouter());
   apiV1.use("/barista", createBaristaRouter());
   apiV1.use("/admin",   createAdminRouter());
