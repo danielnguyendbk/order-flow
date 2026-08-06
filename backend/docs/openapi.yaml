@@ -58,6 +58,7 @@ paths:
       operationId: adminLogin
       summary: Log in an owner account
       x-implementation-status: implemented
+      security: []
       requestBody:
         required: true
         content:
@@ -66,7 +67,7 @@ paths:
               $ref: "#/components/schemas/AdminLoginRequest"
             example:
               username: owner
-              password: strong-password
+              password: replace-with-SEED_OWNER_PASSWORD
       responses:
         "200":
           description: Login successful

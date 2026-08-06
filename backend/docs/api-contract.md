@@ -8,6 +8,10 @@ Routes explicitly marked **implemented** have handlers, validation, authorizatio
 
 Status: **implemented**
 
+Runtime note: Telegram authentication is optional. When `TELEGRAM_BOT_TOKEN`
+is empty, this endpoint returns HTTP `503` and the rest of the API remains
+available.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/api/v1/telegram/session` | Create or establish a Telegram user session |

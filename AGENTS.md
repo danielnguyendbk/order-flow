@@ -46,7 +46,7 @@ order-flow/
     │   └── eslint-config/             # Shared ESLint configuration
     └── prisma/
         ├── schema.prisma              # PostgreSQL Prisma schema
-        └── seed.ts                    # Database seed entry point
+        └── seed.ts                    # Idempotent initial OWNER seed entry point
 ```
 
 ## API domain modules
@@ -76,8 +76,9 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - `apps/api` is a runnable Express service; the auth module implements admin JWT sessions and verified Telegram Web App sessions. Session state is held by a bounded process-local memory cache in `auth-session.store.ts`.
 - Employee and menu modules are developed on dedicated feature branches; shared packages remain placeholders kept by `.gitkeep` files.
-- `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`, but defines no models yet.
-- `seed.ts` has no seed data yet.
+- `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`; it currently defines the initial `User`, `Order`, and `OrderItem` models and related enums.
+- `seed.ts` creates or refreshes the initial active `OWNER` from `SEED_OWNER_*`
+  environment variables and refuses implicit role promotion.
 - `docker-compose.yml` runs PostgreSQL 16 Alpine on port `5432`, with database/user/password `order_flow` and persistent volume `postgres_data`.
 - API dependencies, TypeScript config, auth tests, and a root environment example exist; there is still no root workspace manifest or CI configuration.
 
@@ -103,6 +104,17 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
+
+## Installed GitHub skills
+
+The GitHub plugin is installed. Use its skills for repository work as follows:
+
+- `github:github`: general repository orientation and triage; read or summarize Issues, PRs, patches, comments, labels, and repository state.
+- `github:gh-address-comments`: inspect unresolved PR review threads, requested changes, and inline comments, then implement the selected fixes.
+- `github:gh-fix-ci`: inspect and diagnose failing GitHub Actions checks and logs, then implement an approved fix.
+- `github:yeet`: intentionally stage and commit local changes, push the branch, and open a draft PR.
+
+Prefer the connected GitHub app for structured repository, Issue, and PR data. Use local `git` or `gh` only where needed for branch discovery, commits, pushes, or GitHub Actions logs. Before any write action, confirm the exact repository, branch, PR, Issue, or change scope; never include unrelated working-tree changes in a commit.
 
 ## Maintenance rule
 

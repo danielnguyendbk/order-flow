@@ -60,6 +60,12 @@ export class AuthService implements AuthServicePort {
     initData: string,
     metadata: RequestMetadata = {},
   ): Promise<AuthSessionResult> {
+    if (!this.env.TELEGRAM_BOT_TOKEN) {
+      throw new AppError(
+        "SERVICE_UNAVAILABLE",
+        "Telegram authentication is temporarily disabled",
+      );
+    }
     const telegram = verifyTelegramInitData(
       initData,
       this.env.TELEGRAM_BOT_TOKEN,

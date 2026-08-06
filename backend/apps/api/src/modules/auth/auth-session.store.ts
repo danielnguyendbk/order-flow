@@ -21,6 +21,8 @@ export interface AuthSessionStorePort {
   rotate(input: RotateSessionInput): boolean;
   revoke(sessionId: string, userId: string): void;
   clear(): void;
+  /** DEBUG ONLY: trả về snapshot các session đang active (chưa hết hạn). */
+  list(): CachedAuthSession[];
 }
 
 /**
@@ -77,6 +79,13 @@ export class MemoryAuthSessionStore implements AuthSessionStorePort {
 
   clear(): void {
     this.sessions.clear();
+  }
+
+  list(): CachedAuthSession[] {
+    const now = Date.now();
+    return [...this.sessions.values()].filter(
+      (s) => s.expiresAt.getTime() > now,
+    );
   }
 
   private getActive(

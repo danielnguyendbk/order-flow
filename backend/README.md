@@ -81,3 +81,18 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Initial owner seed
+
+Set `SEED_OWNER_FULL_NAME`, `SEED_OWNER_USERNAME`, and a password of at least
+12 characters in the repository `.env.local`, then run:
+
+```bash
+cd backend
+npm run db:generate
+npm run db:seed
+```
+
+The seed is idempotent for an existing `OWNER`: it refreshes the configured
+name, bcrypt password hash, and active status. It refuses to promote an
+existing non-owner account that happens to use the same username.

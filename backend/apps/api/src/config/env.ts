@@ -34,7 +34,7 @@ const envSchema = z.object({
     .positive()
     .default(30 * 24 * 60 * 60),
   AUTH_SESSION_CACHE_MAX: z.coerce.number().int().positive().default(10_000),
-  TELEGRAM_BOT_TOKEN: z.string().min(1),
+  TELEGRAM_BOT_TOKEN: z.string().default(""),
   TELEGRAM_AUTH_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(5 * 60),
 });
 

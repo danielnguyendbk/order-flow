@@ -109,3 +109,18 @@ test("admin login does not reveal whether username or password is wrong", async 
     );
   }
 });
+
+test("Telegram auth can be disabled without affecting API startup", async () => {
+  const telegramDisabledEnv = { ...env, TELEGRAM_BOT_TOKEN: "" };
+  const service = new AuthService(
+    new MemoryAuthRepository(),
+    new MemoryAuthSessionStore(telegramDisabledEnv.AUTH_SESSION_CACHE_MAX),
+    new AuthTokenService(telegramDisabledEnv),
+    telegramDisabledEnv,
+  );
+
+  await assert.rejects(
+    service.createTelegramSession("unused-while-disabled"),
+    (error) => error instanceof AppError && error.code === "SERVICE_UNAVAILABLE",
+  );
+});
