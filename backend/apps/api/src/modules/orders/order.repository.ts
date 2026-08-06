@@ -201,11 +201,20 @@ export class OrderRepository {
       const allItems = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal = calculateTotal(allItems);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }
@@ -219,6 +228,11 @@ export class OrderRepository {
     input:   UpdateItemInput
   ): Promise<Order> {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const existing = await tx.orderItem.findFirst({ where: { id: itemId, orderId } });
+      if (!existing) {
+        throw new Error(`Item ${itemId} not found in order ${orderId}`);
+      }
+
       const patch: any = {};
       if (input.quantity !== undefined) patch.quantity = input.quantity;
       if (input.note     !== undefined) patch.note     = input.note;
@@ -228,11 +242,20 @@ export class OrderRepository {
       const allItems = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal = calculateTotal(allItems);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }
@@ -242,16 +265,30 @@ export class OrderRepository {
    */
   public async deleteItem(orderId: string, itemId: string): Promise<Order> {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const existing = await tx.orderItem.findFirst({ where: { id: itemId, orderId } });
+      if (!existing) {
+        throw new Error(`Item ${itemId} not found in order ${orderId}`);
+      }
+
       await tx.orderItem.delete({ where: { id: itemId } });
 
       const remaining = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal  = calculateTotal(remaining);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }

@@ -8,6 +8,7 @@ jest.mock("@prisma/client", () => {
       create: jest.fn(),
       findUnique: jest.fn(),
     },
+    $transaction: jest.fn(),
   };
   return {
     PrismaClient: jest.fn().mockImplementation(() => mPrisma),
@@ -30,6 +31,28 @@ describe("OrderRepository", () => {
     prismaInstance = new PrismaClient();
     repository = new OrderRepository();
   });
+
+  function useTransaction(items: Array<{ unitPrice: bigint; quantity: number }>) {
+    const tx = {
+      orderItem: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: "item-1" }),
+        findMany: jest.fn().mockResolvedValue(items),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      order: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockImplementation(({ where: _where, include: _include }) => Promise.resolve({
+          id: "order-1",
+          totalAmount: items.reduce((total, item) => total + item.unitPrice * BigInt(item.quantity), 0n),
+          items,
+        })),
+      },
+    };
+    prismaInstance.$transaction.mockImplementation((callback: (client: any) => unknown) => callback(tx));
+    return tx;
+  }
 
   it("retries order code generation when the generated code collides", async () => {
     (generateOrderCode as jest.Mock)
@@ -97,5 +120,61 @@ describe("OrderRepository", () => {
       expect.objectContaining({ id: "history-1", newStatus: FulfillmentStatus.PENDING_PAYMENT }),
     ]);
     expect((order as any).history).toBeUndefined();
+  });
+
+  it("adds a price snapshot and recalculates the persisted total", async () => {
+    const tx = useTransaction([
+      { unitPrice: 20000n, quantity: 1 },
+      { unitPrice: 45000n, quantity: 2 },
+    ]);
+
+    const order = await repository.addItem("order-1", {
+      menuItemId: "menu-2",
+      itemName: "Cappuccino",
+      unitPrice: 45000n,
+      quantity: 2,
+      note: "Less ice",
+    });
+
+    expect(tx.orderItem.create).toHaveBeenCalledWith({
+      data: {
+        orderId: "order-1",
+        menuItemId: "menu-2",
+        itemName: "Cappuccino",
+        unitPrice: 45000n,
+        quantity: 2,
+        note: "Less ice",
+      },
+    });
+    expect(tx.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: "order-1",
+        paymentStatus: PaymentStatus.UNPAID,
+        fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT,
+      },
+      data: { totalAmount: 110000n },
+    }));
+    expect(order.totalAmount).toBe(110000n);
+  });
+
+  it("recalculates totals after update and delete", async () => {
+    const updateTx = useTransaction([
+      { unitPrice: 20000n, quantity: 3 },
+      { unitPrice: 15000n, quantity: 1 },
+    ]);
+
+    const updated = await repository.updateItem("order-1", "item-1", { quantity: 3 });
+
+    expect(updateTx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: "item-1" },
+      data: { quantity: 3 },
+    });
+    expect(updated.totalAmount).toBe(75000n);
+
+    const deleteTx = useTransaction([{ unitPrice: 15000n, quantity: 1 }]);
+    const deleted = await repository.deleteItem("order-1", "item-1");
+
+    expect(deleteTx.orderItem.delete).toHaveBeenCalledWith({ where: { id: "item-1" } });
+    expect(deleted.totalAmount).toBe(15000n);
   });
 });

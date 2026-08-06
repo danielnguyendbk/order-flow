@@ -62,6 +62,21 @@ Status: **implemented**
 - `GET /orders/:orderId` returns `items` and `timeline`, where `timeline` is status history ordered oldest-first.
 - Cancel body: `{ "reason": "...", "requesterId": "..." }`. Unpaid pending-payment orders can be cancelled and the cancellation is recorded in `timeline`.
 
+## Order items
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/orders/:orderId/items` | Add an item to an editable order |
+| `PATCH` | `/api/v1/orders/:orderId/items/:itemId` | Update item quantity or note |
+| `DELETE` | `/api/v1/orders/:orderId/items/:itemId` | Remove an item |
+
+- Item changes are allowed only while the order is `UNPAID` and `PENDING_PAYMENT`; an order with QR payment `PENDING` is not editable.
+- Add item resolves and snapshots the current menu item name and price from the backend. Client-supplied name, price, or total are ignored.
+- Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
+- Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
+
 ## Public menu
 
 | Method | Path | Purpose |
