@@ -216,6 +216,84 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/orders/{orderId}/items:
+    post:
+      tags: [Service Orders]
+      operationId: addOrderItem
+      summary: Add an item using the current backend price snapshot
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddOrderItemRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/orders/{orderId}/items/{itemId}:
+    patch:
+      tags: [Service Orders]
+      operationId: updateOrderItem
+      summary: Update an order item
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+        - $ref: "#/components/parameters/ItemIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderItemRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Service Orders]
+      operationId: deleteOrderItem
+      summary: Delete an order item
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+        - $ref: "#/components/parameters/ItemIdPath"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/orders/{orderId}/cancel:
     post:
       tags: [Service Orders]
@@ -881,6 +959,28 @@ components:
           minLength: 1
         requesterId:
           type: string
+    AddOrderItemRequest:
+      type: object
+      additionalProperties: false
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+    UpdateOrderItemRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: [string, "null"]
     OrderItem:
       type: object
       required: [id, orderId, menuItemId, itemName, unitPrice, quantity]

@@ -86,6 +86,21 @@ export function createApp(options: CreateAppOptions = {}): Application {
         });
         return;
       }
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number"
+      ) {
+        const httpError = error as { statusCode: number; message?: string };
+        response.status(httpError.statusCode).json({
+          error: {
+            code: httpError.statusCode === 404 ? "NOT_FOUND" : "ORDER_ERROR",
+            message: httpError.message ?? "Request failed",
+          },
+        });
+        return;
+      }
       console.error(error);
       response.status(500).json({
         error: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
