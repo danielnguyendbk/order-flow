@@ -42,6 +42,9 @@ export function createApp(options: CreateAppOptions = {}): Application {
   }
 
   app.locals.dispose = dispose;
+  app.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
 
