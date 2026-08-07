@@ -19,7 +19,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`card p-5 ${className}`}>
+    <section className={`card p-6 ${className}`}>
       {(title || right) && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -46,12 +46,12 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4 pt-1 pb-2">
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">{title}</h1>
-        {description && <p className="mt-1.5 text-sm text-muted whitespace-nowrap truncate sm:truncate-none">{description}</p>}
+        <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-ink lg:text-[26px]">{title}</h1>
+        {description && <p className="mt-1.5 text-sm font-normal text-muted">{description}</p>}
       </div>
-      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2.5">{children}</div>}
     </div>
   );
 }
@@ -73,16 +73,29 @@ const STAT_TONES: Record<NonNullable<StatItem["tone"]>, string> = {
   teal: "text-brand-700",
 };
 
-export function Stats({ items }: { items: StatItem[] }) {
+const GRID_COLS_MAP: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+  5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
+  6: "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6",
+};
+
+export function Stats({ items, className }: { items: StatItem[]; className?: string }) {
+  const colsClass = GRID_COLS_MAP[items.length] ?? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6";
+
   return (
-    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className={`mb-6 grid items-stretch gap-3 ${colsClass} ${className ?? ""}`}>
       {items.map((item, i) => (
-        <article key={i} className="card p-4 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/5">
-          <span className="block text-xs font-medium text-muted">{item.label}</span>
-          <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${STAT_TONES[item.tone ?? "teal"]}`}>
-            {item.value}
-          </strong>
-          {item.sub && <span className="mt-0.5 block text-xs text-muted">{item.sub}</span>}
+        <article key={i} className="card flex flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/5">
+          <div>
+            <span className="block text-xs font-medium text-muted">{item.label}</span>
+            <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${STAT_TONES[item.tone ?? "teal"]}`}>
+              {item.value}
+            </strong>
+          </div>
+          {item.sub ? <span className="mt-1.5 block text-xs text-muted">{item.sub}</span> : null}
         </article>
       ))}
     </div>
@@ -241,21 +254,43 @@ export function Modal({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
-    if (!open && el.open) el.close();
+    if (open) {
+      if (!el.open) el.showModal();
+      document.body.style.overflow = "hidden";
+    } else {
+      if (el.open) el.close();
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isInDialog =
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom;
+    if (!isInDialog) {
+      onClose();
+    }
+  };
 
   return (
     <dialog
       ref={ref}
       onClose={onClose}
       onCancel={onClose}
-      className="m-auto w-full rounded-2xl bg-white shadow-2xl outline-none backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm"
+      onClick={handleBackdropClick}
+      className="m-auto w-full rounded-2xl bg-white p-0 shadow-2xl outline-none backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm"
       style={{ maxWidth: wide ? "min(94vw, 760px)" : "min(94vw, 520px)" }}
     >
       {/* Chỉ mount nội dung khi mở để tránh form defaultValue bị stale giữa các lần mở */}
       {open && (
-        <div className="max-h-[86vh] overflow-y-auto">
+        <div className="max-h-[86vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white px-6 py-4">
             <div>
               {eyebrow && <p className="eyebrow mb-0.5">{eyebrow}</p>}

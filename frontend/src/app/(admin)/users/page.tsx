@@ -70,6 +70,19 @@ export default function StaffPage() {
 
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
+
+    // Kiểm tra Telegram ID trùng khi thêm/sửa
+    const duplicate = rows.find(
+      (s) => s.telegramId === formTelegramId && (isAdding || s.id !== editingStaff?.id)
+    );
+    if (duplicate) {
+      toast.push(
+        `Telegram ID ${formTelegramId} đã thuộc về ${duplicate.firstName} ${duplicate.lastName}. Vui lòng kiểm tra lại.`,
+        "error"
+      );
+      return;
+    }
+
     if (isAdding) {
       const parts = formName.trim().split(" ");
       const firstName = parts[0] || "Nhân viên";
@@ -149,39 +162,41 @@ export default function StaffPage() {
 
       {/* Tra cứu & Bộ lọc */}
       <Panel className="mb-6">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Tìm kiếm">
-            <input
-              className="input"
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Tên, Telegram ID, SĐT, Username..."
-            />
-          </Field>
-          <Field label="Vai trò">
-            <select className="input" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-              <option value="">Tất cả vai trò</option>
-              <option value="WAITER">Nhân viên Phục vụ (Bot)</option>
-              <option value="BARISTA">Nhân viên Pha chế (Bot)</option>
-              <option value="MANAGER">Quản lý / Chủ quán (Web)</option>
-            </select>
-          </Field>
-          <div className="flex items-end gap-2 pb-0.5">
-            {Boolean(q || roleFilter) && (
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  setQ("");
-                  setRoleFilter("");
-                }}
-              >
-                Xóa lọc
-              </button>
-            )}
+        <form onSubmit={(e) => e.preventDefault()} className="flex flex-wrap items-end gap-3.5">
+          <div className="flex-1 min-w-[280px]">
+            <Field label="Tìm kiếm">
+              <input
+                className="input"
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Tên, Telegram ID, SĐT, Username..."
+              />
+            </Field>
           </div>
-        </div>
+          <div className="w-full sm:w-64">
+            <Field label="Vai trò">
+              <select className="input" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                <option value="">Tất cả vai trò</option>
+                <option value="WAITER">Nhân viên Phục vụ (Bot)</option>
+                <option value="BARISTA">Nhân viên Pha chế (Bot)</option>
+                <option value="MANAGER">Quản lý / Chủ quán (Web)</option>
+              </select>
+            </Field>
+          </div>
+          {Boolean(q || roleFilter) && (
+            <button
+              type="button"
+              className="btn-ghost h-10 px-3.5"
+              onClick={() => {
+                setQ("");
+                setRoleFilter("");
+              }}
+            >
+              Xóa lọc
+            </button>
+          )}
+        </form>
       </Panel>
 
       {/* Bảng danh sách */}

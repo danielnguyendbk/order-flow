@@ -3,6 +3,8 @@
    Toàn bộ dữ liệu demo tĩnh, không phụ thuộc server/database.
    ============================================================ */
 
+import { formatVnd } from "./format";
+
 export type OrderPaymentStatus =
   | "UNPAID"
   | "PENDING"
@@ -388,10 +390,15 @@ export interface Order {
 
 export const orders: Order[] = [
   { id: "ord_1", code: "BT0001", createdAt: "2026-08-04T10:02:00", expiresAt: "2026-08-04T10:32:00", deliveredAt: "2026-08-04T10:11:00", amountVnd: 125000, subtotalVnd: 125000, discountVnd: 0, quantity: 3, paymentStatus: "PAID", fulfillmentStatus: "DELIVERED", paymentMethod: "qr", costVnd: 50000, grossProfitVnd: 75000, productName: "Cà phê Sữa đá, Trà Đào Cam Sả", fulfillmentType: "stock", paidAmount: 125000, paymentCount: 1, customerInput: "Bàn 04", user: { telegramId: "12345678", firstName: "Nguyễn", lastName: "Văn An", username: "nguyenan" } },
-  { id: "ord_2", code: "BT0002", createdAt: "2026-08-04T09:40:00", expiresAt: "2026-08-04T10:10:00", amountVnd: 450000, subtotalVnd: 450000, discountVnd: 0, quantity: 10, paymentStatus: "PAID", fulfillmentStatus: "READY", paymentMethod: "qr", costVnd: 180000, grossProfitVnd: 270000, productName: "10x Trà sữa Trân châu", fulfillmentType: "stock", paidAmount: 450000, paymentCount: 1, customerInput: "Mang đi", user: { telegramId: "87654321", firstName: "Trần", lastName: "Thị Bình", username: "binhtran" } },
+  { id: "ord_2", code: "BT0002", createdAt: "2026-08-04T09:40:00", expiresAt: "2026-08-04T10:10:00", amountVnd: 450000, subtotalVnd: 450000, discountVnd: 0, quantity: 10, paymentStatus: "PAID", fulfillmentStatus: "READY", paymentMethod: "qr", costVnd: 180000, grossProfitVnd: 270000, productName: "Trà sữa Trân châu", fulfillmentType: "stock", paidAmount: 450000, paymentCount: 1, customerInput: "Mang đi", user: { telegramId: "87654321", firstName: "Trần", lastName: "Thị Bình", username: "binhtran" } },
   { id: "ord_3", code: "BT0003", createdAt: "2026-08-04T09:05:00", expiresAt: "2026-08-04T09:35:00", amountVnd: 190000, subtotalVnd: 190000, discountVnd: 0, quantity: 4, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT", paymentMethod: "cash", costVnd: 75000, grossProfitVnd: 115000, productName: "Sinh tố Bơ Cốt dừa, Nước ép Cam", fulfillmentType: "stock", paidAmount: 0, paymentCount: 0, customerInput: "Bàn 12", user: { telegramId: "55551111", firstName: "Lê", lastName: "Minh Cường", username: "leminhcuong" } },
   { id: "ord_4", code: "BT0004", createdAt: "2026-08-04T08:20:00", expiresAt: "2026-08-04T08:50:00", amountVnd: 55000, subtotalVnd: 55000, discountVnd: 0, quantity: 1, paymentStatus: "UNDERPAID", fulfillmentStatus: "QUEUED", paymentMethod: "qr", reviewReason: "Khách chuyển thiếu 5.000₫", costVnd: 22000, grossProfitVnd: 33000, productName: "Bánh Tiramisu Choco", fulfillmentType: "stock", paidAmount: 50000, paymentCount: 1, customerInput: "Bàn 02", user: { telegramId: "99992222", firstName: "Bùi", lastName: "Ngọc Quỳnh", username: "buingocquynh" } },
+  { id: "ord_7", code: "BT0007", createdAt: "2026-08-04T11:20:00", expiresAt: "2026-08-04T11:50:00", amountVnd: 93000, subtotalVnd: 93000, discountVnd: 0, quantity: 2, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT", paymentMethod: "qr", costVnd: 36000, grossProfitVnd: 57000, productName: "Nước ép Cam tươi, Bánh Tiramisu Choco", fulfillmentType: "stock", paidAmount: 0, paymentCount: 0, customerInput: "Bàn 15", user: { telegramId: "55551111", firstName: "Lê", lastName: "Minh Cường", username: "leminhcuong" } },
+  { id: "ord_8", code: "BT0008", createdAt: "2026-08-04T07:45:00", expiresAt: "2026-08-04T08:15:00", deliveredAt: "2026-08-04T07:55:00", amountVnd: 70000, subtotalVnd: 70000, discountVnd: 0, quantity: 2, paymentStatus: "PAID", fulfillmentStatus: "DELIVERED", paymentMethod: "qr", costVnd: 28000, grossProfitVnd: 42000, productName: "Trà Đào Cam Sả, Cà phê Đen", fulfillmentType: "stock", paidAmount: 70000, paymentCount: 1, customerInput: "Bàn 05", user: { telegramId: "88889999", firstName: "Hoàng", lastName: "Gia Bảo", username: "hoanggiabao" } },
+  { id: "ord_9", code: "BT0009", createdAt: "2026-08-03T20:15:00", expiresAt: "2026-08-03T20:45:00", amountVnd: 120000, subtotalVnd: 120000, discountVnd: 0, quantity: 3, paymentStatus: "PAID", fulfillmentStatus: "DELIVERED", paymentMethod: "cash", costVnd: 48000, grossProfitVnd: 72000, productName: "Cà phê Sữa đá", fulfillmentType: "stock", paidAmount: 120000, paymentCount: 1, customerInput: "Bàn 01", user: { telegramId: "77776666", firstName: "Vũ", lastName: "Đức Dũng", username: "vuducdung" } },
+  { id: "ord_10", code: "BT0010", createdAt: "2026-08-03T18:00:00", expiresAt: "2026-08-03T18:30:00", amountVnd: 160000, subtotalVnd: 160000, discountVnd: 0, quantity: 4, paymentStatus: "PAID", fulfillmentStatus: "DELIVERED", paymentMethod: "qr", costVnd: 64000, grossProfitVnd: 96000, productName: "Sinh tố Bơ, Nước ép Cam", fulfillmentType: "stock", paidAmount: 160000, paymentCount: 1, customerInput: "Mang đi", user: { telegramId: "12345678", firstName: "Nguyễn", lastName: "Văn An", username: "nguyenan" } },
   { id: "ord_5", code: "BT0005", createdAt: "2026-08-03T21:30:00", expiresAt: "2026-08-03T22:00:00", deliveredAt: "2026-08-03T21:41:00", amountVnd: 85000, subtotalVnd: 85000, discountVnd: 0, quantity: 2, paymentStatus: "PAID", fulfillmentStatus: "DELIVERED", paymentMethod: "cash", costVnd: 35000, grossProfitVnd: 50000, productName: "Cà phê Sữa đá, Sinh tố Bơ", fulfillmentType: "stock", paidAmount: 85000, paymentCount: 1, customerInput: "Mang đi", user: { telegramId: "44443333", firstName: "Phạm", lastName: "Thu Hà", username: "phamthuha" } },
+  { id: "ord_6", code: "BT0006", createdAt: "2026-08-03T19:10:00", expiresAt: "2026-08-03T19:40:00", amountVnd: 90000, subtotalVnd: 95000, discountVnd: 5000, quantity: 2, paymentStatus: "REFUNDED", fulfillmentStatus: "CANCELLED", paymentMethod: "qr", costVnd: 40000, grossProfitVnd: 50000, productName: "Trà sữa Trân châu Đường đen, Sinh tố Bơ Cốt dừa", fulfillmentType: "stock", paidAmount: 0, paymentCount: 1, customerInput: "Bàn 07", user: { telegramId: "12345678", firstName: "Nguyễn", lastName: "Văn An", username: "nguyenan" } },
 ];
 
 /* ── Giao dịch thanh toán ── */
@@ -578,3 +585,329 @@ export const settings = {
   supportContact: "@support",
   supportZalo: "0900000000",
 };
+
+/* ============================================================
+   Chi tiết đơn (Trang chi tiết đơn) — build từ orders[] sẵn có
+   ============================================================ */
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  productName: string; // snapshot tên tại thời điểm đặt
+  nameEn?: string;
+  unitPriceVnd: number; // snapshot giá
+  quantity: number;
+  lineTotalVnd: number; // unitPriceVnd * quantity
+}
+
+export type OrderTimelineEventStatus =
+  | OrderFulfillmentStatus
+  | "ORDER_CREATED"
+  | "CANCELLED"
+  | "REFUNDED"
+  | "PAID"
+  | "UNDERPAID"
+  | "OVERPAID";
+
+export interface OrderTimelineEvent {
+  id: string;
+  status: OrderTimelineEventStatus;
+  label: string; // hiển thị
+  at: string; // ISO
+  by?: string; // người thực hiện
+  note?: string;
+}
+
+export interface OrderDetail {
+  id: string;
+  code: string;
+  createdAt: string;
+  expiresAt?: string;
+  deliveredAt?: string;
+  items: OrderItem[]; // snapshot món
+  subtotalVnd: number; // tổng items (backend tự tính)
+  discountVnd: number;
+  totalVnd: number; // subtotal - discount
+  paymentStatus: OrderPaymentStatus;
+  fulfillmentStatus: OrderFulfillmentStatus;
+  paymentMethod: "qr" | "cash";
+  paidAmount: number;
+  user: { telegramId: string; firstName: string; lastName: string; username: string };
+  customerInput?: string; // ghi chú/bàn
+  timeline: OrderTimelineEvent[]; // lịch sử trạng thái
+}
+
+/** Chuyển ISO sang ISO sau n phút (dùng cho timeline giả lập). */
+function plusMinutes(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60000).toISOString();
+}
+
+/** Tách danh sách món từ chuỗi productName + giá snapshot khớp subtotal của đơn. */
+function buildOrderItems(order: Order): OrderItem[] {
+  const names = order.productName
+    .split(",")
+    .map((n) => n.trim().replace(/^\d+x\s+/i, ""))
+    .filter(Boolean);
+  const count = names.length || 1;
+  let remaining = order.quantity;
+  const quantities = names.map((_, i) => {
+    if (i === names.length - 1) return Math.max(0, remaining);
+    const q = Math.max(1, Math.floor(order.quantity / count));
+    remaining -= q;
+    return q;
+  });
+
+  const unitPrices = names.map((name) => {
+    const product = products.find((p) => p.name === name || p.name.startsWith(name));
+    return product?.priceVnd ?? Math.round(order.subtotalVnd / order.quantity);
+  });
+
+  // Điều chỉnh giá món cuối để tổng thành tiền khớp đúng subtotal (giá snapshot khi đặt).
+  const currentSum = unitPrices.reduce((s, p, i) => s + p * quantities[i], 0);
+  const diff = order.subtotalVnd - currentSum;
+  const lastIdx = unitPrices.length - 1;
+  if (quantities[lastIdx] > 0) {
+    unitPrices[lastIdx] = Math.max(0, Math.round(unitPrices[lastIdx] + diff / quantities[lastIdx]));
+  }
+
+  return names.map((name, i) => {
+    const product = products.find((p) => p.name === name || p.name.startsWith(name));
+    return {
+      id: `${order.id}_item${i + 1}`,
+      productId: product?.id ?? `prod_x_${i + 1}`,
+      productName: name,
+      nameEn: product?.nameEn,
+      unitPriceVnd: unitPrices[i],
+      quantity: quantities[i],
+      lineTotalVnd: unitPrices[i] * quantities[i],
+    };
+  });
+}
+
+/** Tự sinh timeline trạng thái dựa trên payment/fulfillment status của đơn. */
+function buildOrderTimeline(order: Order): OrderTimelineEvent[] {
+  const actor = `${order.user.firstName} ${order.user.lastName}`;
+  const events: OrderTimelineEvent[] = [];
+  let seq = 0;
+  const ev = (status: OrderTimelineEventStatus, label: string, at: string, by?: string, note?: string): OrderTimelineEvent => ({
+    id: `${order.id}-e${++seq}`,
+    status,
+    label,
+    at,
+    by,
+    note,
+  });
+
+  events.push(ev("ORDER_CREATED", "Khách tạo đơn", order.createdAt, actor, order.customerInput));
+
+  if (order.fulfillmentStatus === "CANCELLED") {
+    events.push(ev("CANCELLED", "Hủy đơn", order.expiresAt, "admin", order.adminNote ?? "Khách không thanh toán đúng hạn"));
+    if (order.paymentStatus === "REFUNDED") {
+      events.push(ev("REFUNDED", `Hoàn tiền ${formatVnd(order.amountVnd)}`, order.expiresAt, "admin", "Hoàn toàn bộ số tiền đã thanh toán"));
+    }
+    return events;
+  }
+
+  const paidNote =
+    order.paymentMethod === "cash"
+      ? `Thu tiền mặt ${formatVnd(order.paidAmount)}`
+      : `Chuyển khoản QR ${formatVnd(order.paidAmount)}`;
+
+  switch (order.paymentStatus) {
+    case "PAID":
+      events.push(ev("PAID", "Thanh toán thành công", plusMinutes(order.createdAt, 7), actor, paidNote));
+      break;
+    case "UNDERPAID":
+      events.push(ev("UNDERPAID", "Thanh toán thiếu", plusMinutes(order.createdAt, 7), actor, `${paidNote} — thiếu ${formatVnd(order.amountVnd - order.paidAmount)}`));
+      break;
+    case "OVERPAID":
+      events.push(ev("OVERPAID", "Thanh toán thừa", plusMinutes(order.createdAt, 7), actor, `${paidNote} — thừa ${formatVnd(order.paidAmount - order.amountVnd)}`));
+      break;
+    case "REFUNDED":
+      events.push(ev("PAID", "Thanh toán thành công", plusMinutes(order.createdAt, 7), actor, paidNote));
+      events.push(ev("REFUNDED", `Hoàn tiền ${formatVnd(order.amountVnd)}`, plusMinutes(order.createdAt, 45), "admin", "Hoàn tiền theo yêu cầu khách"));
+      break;
+    default:
+      events.push(
+        ev(
+          "PENDING_PAYMENT",
+          "Chờ thanh toán",
+          plusMinutes(order.createdAt, 5),
+          "system",
+          order.paymentMethod === "qr" ? "Đang chờ chuyển khoản QR" : "Đang chờ thu tiền mặt"
+        )
+      );
+  }
+
+  switch (order.fulfillmentStatus) {
+    case "QUEUED":
+      events.push(ev("QUEUED", "Vào hàng chờ", plusMinutes(order.createdAt, 8), "bot_barista", "Xếp hàng pha chế"));
+      break;
+    case "PREPARING":
+      events.push(ev("QUEUED", "Vào hàng chờ", plusMinutes(order.createdAt, 8), "bot_barista"));
+      events.push(ev("PREPARING", "Bắt đầu pha chế", plusMinutes(order.createdAt, 10), "bot_barista"));
+      break;
+    case "READY":
+      events.push(ev("QUEUED", "Vào hàng chờ", plusMinutes(order.createdAt, 8), "bot_barista"));
+      events.push(ev("PREPARING", "Pha chế xong", plusMinutes(order.createdAt, 12), "bot_barista"));
+      events.push(ev("READY", "Sẵn sàng giao", plusMinutes(order.createdAt, 14), "bot_barista", order.customerInput === "Mang đi" ? "Chờ khách nhận hoặc giao" : "Gọi khách nhận tại quầy"));
+      break;
+    case "DELIVERED":
+      events.push(ev("QUEUED", "Vào hàng chờ", plusMinutes(order.createdAt, 8), "bot_barista"));
+      events.push(ev("PREPARING", "Pha chế xong", plusMinutes(order.createdAt, 12), "bot_barista"));
+      events.push(ev("READY", "Sẵn sàng giao", plusMinutes(order.createdAt, 14), "bot_barista"));
+      events.push(ev("DELIVERED", "Đã giao", order.deliveredAt ?? plusMinutes(order.createdAt, 16), "bot_waiter", "Khách đã nhận"));
+      break;
+    default:
+      break;
+  }
+
+  return events;
+}
+
+/** Map một Order sang OrderDetail đầy đủ (items + timeline tự sinh). */
+export function buildOrderDetail(order: Order): OrderDetail {
+  const items = buildOrderItems(order);
+  const subtotalVnd = items.reduce((s, i) => s + i.lineTotalVnd, 0);
+  return {
+    id: order.id,
+    code: order.code,
+    createdAt: order.createdAt,
+    expiresAt: order.expiresAt,
+    deliveredAt: order.deliveredAt,
+    items,
+    subtotalVnd,
+    discountVnd: order.discountVnd,
+    totalVnd: subtotalVnd - order.discountVnd,
+    paymentStatus: order.paymentStatus,
+    fulfillmentStatus: order.fulfillmentStatus,
+    paymentMethod: order.paymentMethod,
+    paidAmount: order.paidAmount,
+    user: order.user,
+    customerInput: order.customerInput,
+    timeline: buildOrderTimeline(order),
+  };
+}
+
+export const orderDetails: OrderDetail[] = orders.map(buildOrderDetail);
+
+/* ── Nhãn trạng thái timeline ── */
+export const TIMELINE_STATUS_LABEL: Record<OrderTimelineEventStatus, string> = {
+  ...ORDER_FULFILLMENT_STATUS_LABEL,
+  ORDER_CREATED: "Tạo đơn",
+  CANCELLED: "Đã hủy",
+  REFUNDED: "Hoàn tiền",
+  PAID: "Đã thanh toán",
+  UNDERPAID: "Thiếu tiền",
+  OVERPAID: "Thừa tiền",
+};
+
+/* ============================================================
+   Đối soát SePay (Trang Đối soát)
+   ============================================================ */
+
+export type ReconciliationClassification =
+  | "matched" // đúng tiền
+  | "underpaid" // thiếu tiền
+  | "overpaid" // thừa tiền
+  | "unknown_code" // sai mã
+  | "duplicate"; // trùng lặp webhook
+
+export interface Reconciliation {
+  id: string;
+  code: string; // mã giao dịch SePay
+  orderCode?: string; // đơn liên quan (nếu có)
+  sepayId: string;
+  amountExpected: number;
+  amountReceived: number;
+  classification: ReconciliationClassification;
+  reason: string; // lý do phân loại
+  status: "open" | "resolved"; // đã xử lý chưa
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolveNote?: string; // ghi chú xử lý
+  createdAt: string;
+}
+
+export const RECONCILIATION_CLASSIFICATION_LABEL: Record<ReconciliationClassification, string> = {
+  matched: "Đúng tiền",
+  underpaid: "Thiếu tiền",
+  overpaid: "Thừa tiền",
+  unknown_code: "Sai mã",
+  duplicate: "Trùng lặp",
+};
+
+export const RECONCILIATION_STATUS_LABEL: Record<Reconciliation["status"], string> = {
+  open: "Chưa xử lý",
+  resolved: "Đã xử lý",
+};
+
+export const reconciliations: Reconciliation[] = [
+  { id: "rec_1", code: "SP8821401", orderCode: "BT0001", sepayId: "8821401", amountExpected: 125000, amountReceived: 125000, classification: "matched", reason: "Số tiền khớp đúng với đơn BT0001.", status: "resolved", resolvedBy: "system", resolvedAt: "2026-08-04T10:15:00", createdAt: "2026-08-04T10:11:00" },
+  { id: "rec_2", code: "SP8821502", orderCode: "BT0002", sepayId: "8821502", amountExpected: 450000, amountReceived: 450000, classification: "matched", reason: "Số tiền khớp đúng với đơn BT0002.", status: "resolved", resolvedBy: "system", resolvedAt: "2026-08-04T09:43:00", createdAt: "2026-08-04T09:41:00" },
+  { id: "rec_3", code: "SP8821603", orderCode: "BT0004", sepayId: "8821603", amountExpected: 55000, amountReceived: 50000, classification: "underpaid", reason: "Khách chuyển thiếu 5.000₫ so với đơn BT0004. Đang chờ khách bổ sung.", status: "open", createdAt: "2026-08-04T08:22:00" },
+  { id: "rec_4", code: "SP8819805", orderCode: "BT0008", sepayId: "8819805", amountExpected: 85000, amountReceived: 85000, classification: "duplicate", reason: "SePay gửi webhook 2 lần cho cùng giao dịch, chỉ tính 1 lần.", status: "open", createdAt: "2026-08-02T14:27:00" },
+  { id: "rec_5", code: "SP8801011", orderCode: undefined, sepayId: "8801011", amountExpected: 0, amountReceived: 45000, classification: "unknown_code", reason: "Nội dung chuyển khoản không khớp mã đơn nào đang chờ.", status: "open", createdAt: "2026-07-31T18:02:00" },
+  { id: "rec_6", code: "SP8798013", orderCode: "BT0015", sepayId: "8798013", amountExpected: 70000, amountReceived: 80000, classification: "overpaid", reason: "Khách chuyển thừa 10.000₫, đã cộng dư vào ví khách.", status: "open", createdAt: "2026-07-30T16:44:00" },
+  { id: "rec_7", code: "SP8797014", orderCode: "BT0009", sepayId: "8797014", amountExpected: 190000, amountReceived: 0, classification: "unknown_code", reason: "Giao dịch bị ngân hàng từ chối, không nhận được tiền.", status: "resolved", resolvedBy: "admin", resolvedAt: "2026-07-29T12:05:00", createdAt: "2026-07-29T11:20:00" },
+];
+
+/* ============================================================
+   Báo cáo doanh thu (Trang Báo cáo)
+   ============================================================ */
+
+export type RevenueMethod = "cash" | "qr";
+
+export interface RevenueDayRow {
+  date: string; // "2026-08-01"
+  cashVnd: number; // doanh thu tiền mặt
+  qrVnd: number; // doanh thu chuyển khoản
+  refundedVnd: number; // hoàn tiền (KHÔNG tính vào doanh thu thuần)
+  orderCount: number;
+}
+
+export const revenueDays: RevenueDayRow[] = [
+  { date: "2026-07-20", cashVnd: 3200000, qrVnd: 4100000, refundedVnd: 0, orderCount: 18 },
+  { date: "2026-07-21", cashVnd: 2750000, qrVnd: 5600000, refundedVnd: 120000, orderCount: 21 },
+  { date: "2026-07-22", cashVnd: 4100000, qrVnd: 4850000, refundedVnd: 0, orderCount: 24 },
+  { date: "2026-07-23", cashVnd: 3350000, qrVnd: 3920000, refundedVnd: 0, orderCount: 19 },
+  { date: "2026-07-24", cashVnd: 4680000, qrVnd: 6100000, refundedVnd: 95000, orderCount: 28 },
+  { date: "2026-07-25", cashVnd: 5230000, qrVnd: 7480000, refundedVnd: 0, orderCount: 33 },
+  { date: "2026-07-26", cashVnd: 6100000, qrVnd: 6920000, refundedVnd: 0, orderCount: 31 },
+  { date: "2026-07-27", cashVnd: 2980000, qrVnd: 4550000, refundedVnd: 210000, orderCount: 22 },
+  { date: "2026-07-28", cashVnd: 3870000, qrVnd: 5340000, refundedVnd: 0, orderCount: 25 },
+  { date: "2026-07-29", cashVnd: 3420000, qrVnd: 4910000, refundedVnd: 0, orderCount: 23 },
+  { date: "2026-07-30", cashVnd: 4560000, qrVnd: 6230000, refundedVnd: 78000, orderCount: 29 },
+  { date: "2026-07-31", cashVnd: 5840000, qrVnd: 7210000, refundedVnd: 0, orderCount: 34 },
+  { date: "2026-08-01", cashVnd: 6720000, qrVnd: 8050000, refundedVnd: 150000, orderCount: 39 },
+  { date: "2026-08-02", cashVnd: 5470000, qrVnd: 6630000, refundedVnd: 0, orderCount: 35 },
+  { date: "2026-08-03", cashVnd: 4890000, qrVnd: 7120000, refundedVnd: 0, orderCount: 32 },
+];
+
+/* ============================================================
+   Dashboard — nguồn truy cập + thời gian hoạt động máy chủ
+   ============================================================ */
+
+export interface TrafficSource {
+  label: string;
+  percent: number;
+  color: string; // hex — dùng trực tiếp cho biểu đồ donut
+}
+
+export const trafficSources: TrafficSource[] = [
+  { label: "Trực tiếp", percent: 38, color: "#16a34a" },
+  { label: "Tìm kiếm", percent: 32, color: "#86efac" },
+  { label: "Mạng xã hội", percent: 20, color: "#fbbf24" },
+  { label: "Khác", percent: 10, color: "#e2e8f0" },
+];
+
+export const serverUptime = {
+  percent: 99.9,
+  label: "30 ngày qua",
+  // mốc thời gian để đồng hồ uptime đếm từ đó (giả lập)
+  sinceIso: "2026-08-04T00:00:00",
+  events: [
+    { label: "Không có sự cố nào trong 30 ngày qua", tone: "green" },
+    { label: "Lần gần nhất: 2026-07-31 (bảo trì định kỳ)", tone: "muted" },
+  ],
+} as const;

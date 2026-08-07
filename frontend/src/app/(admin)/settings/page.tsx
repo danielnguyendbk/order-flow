@@ -192,7 +192,7 @@ export default function SettingsPage() {
                     <Badge tone="amber">BARISTA</Badge>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Nhận đơn realtime & nhấn "Hoàn tất món".
+                    Nhận đơn realtime & nhấn “Hoàn tất món”.
                   </p>
                 </div>
               </div>
