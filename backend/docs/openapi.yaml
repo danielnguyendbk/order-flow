@@ -19,6 +19,7 @@ tags:
   - name: Telegram Auth
   - name: Admin Auth
   - name: Service Orders
+  - name: Barista
   - name: Public Menu
   - name: Admin Employees
   - name: Admin Menu Categories
@@ -311,6 +312,75 @@ paths:
       responses:
         "200":
           description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/barista/queue:
+    get:
+      tags: [Barista]
+      operationId: getBaristaQueue
+      summary: List queued paid orders
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: Queue orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+
+  /api/v1/barista/orders:
+    get:
+      tags: [Barista]
+      operationId: getBaristaOrders
+      summary: List a barista's in-progress orders
+      x-implementation-status: implemented
+      parameters:
+        - name: baristaId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Barista orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/orders/{orderId}/claim:
+    post:
+      tags: [Barista]
+      operationId: claimOrder
+      summary: Atomically claim a queued order
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [baristaId]
+              additionalProperties: false
+              properties:
+                baristaId:
+                  type: string
+      responses:
+        "200":
+          description: Claimed order
           content:
             application/json:
               schema:
