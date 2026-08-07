@@ -46,7 +46,7 @@ export class OrderController {
   // GET /api/v1/orders/:orderId
   public getOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const order = await this.orderService.getOrderById(req.params.orderId);
+      const order = await this.orderService.getOrderById(String(req.params.orderId));
       res.status(200).json(order);
     } catch (err) { next(err); }
   };
@@ -59,7 +59,7 @@ export class OrderController {
       if (!v.isValid) { res.status(400).json({ message: "Validation failed", errors: v.errors }); return; }
 
       const order = await this.orderService.addItem(
-        req.params.orderId,
+        String(req.params.orderId),
         req.body,
         req.body.requesterId
       );
@@ -75,8 +75,8 @@ export class OrderController {
       if (!v.isValid) { res.status(400).json({ message: "Validation failed", errors: v.errors }); return; }
 
       const order = await this.orderService.updateItem(
-        req.params.orderId,
-        req.params.itemId,
+        String(req.params.orderId),
+        String(req.params.itemId),
         req.body
       );
       res.status(200).json(order);
@@ -87,8 +87,8 @@ export class OrderController {
   public deleteItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const order = await this.orderService.deleteItem(
-        req.params.orderId,
-        req.params.itemId
+        String(req.params.orderId),
+        String(req.params.itemId)
       );
       res.status(200).json(order);
     } catch (err) { next(err); }
@@ -102,7 +102,7 @@ export class OrderController {
       if (!v.isValid) { res.status(400).json({ message: "Validation failed", errors: v.errors }); return; }
 
       const order = await this.orderService.cancelOrder(
-        req.params.orderId,
+        String(req.params.orderId),
         req.body.reason,
         req.body.requesterId
       );
@@ -117,7 +117,7 @@ export class OrderController {
       if (!req.body?.baristaId) { res.status(400).json({ message: "baristaId is required" }); return; }
 
       const order = await this.orderService.claimOrder(
-        req.params.orderId,
+        String(req.params.orderId),
         req.body.baristaId
       );
       res.status(200).json(order);
@@ -135,7 +135,7 @@ export class OrderController {
       }
 
       const order = await this.orderService.markReady(
-        req.params.orderId,
+        String(req.params.orderId),
         requesterId
       );
       res.status(200).json(order);
@@ -153,7 +153,7 @@ export class OrderController {
       }
 
       const order = await this.orderService.deliverOrder(
-        req.params.orderId,
+        String(req.params.orderId),
         requesterId
       );
       res.status(200).json(order);

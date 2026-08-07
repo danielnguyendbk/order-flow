@@ -33,7 +33,7 @@ export class AdminController {
   // GET /api/v1/admin/orders/:orderId
   public getOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const order = await this.adminService.getOrderById(req.params.orderId);
+      const order = await this.adminService.getOrderById(String(req.params.orderId));
       res.status(200).json(order);
     } catch (err) { next(err); }
   };
@@ -48,7 +48,7 @@ export class AdminController {
       const { domain, status, adminId, reason } = req.body;
 
       const order = await this.adminService.overrideStatus(
-        req.params.orderId,
+        String(req.params.orderId),
         domain as OrderStatusDomain,
         status as FulfillmentStatus | PaymentStatus,
         adminId,

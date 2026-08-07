@@ -16,7 +16,7 @@ export interface StartHandlerContext {
 }
 
 export function isAccessDenied(error: unknown): boolean {
-  return error instanceof BackendApiError && [401, 403, 404].includes(error.status);
+  return error instanceof BackendApiError && [403, 404].includes(error.status);
 }
 
 export async function handleStart(ctx: StartHandlerContext, api: EmployeeAuthenticationApi): Promise<void> {
