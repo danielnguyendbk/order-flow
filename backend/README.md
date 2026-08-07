@@ -1,5 +1,31 @@
 # Order Flow Backend
 
+## Telegram notification worker
+
+KHOA-006 uses a transactional PostgreSQL outbox plus BullMQ. Business transactions create
+`notifications` rows; a dispatcher polls `PENDING`/`RETRYING` rows every five seconds and
+enqueues jobs whose payload contains only `notificationId`. The worker records delivery as
+`SENT`, retries Telegram failures up to five times, and records the final state as `FAILED`.
+
+Local startup:
+
+```powershell
+docker compose up -d postgres redis
+npm.cmd run generate:prisma
+npm.cmd run dev:notification-worker
+```
+
+The worker environment requires only `TELEGRAM_BOT_TOKEN`, `REDIS_URL`, and `DATABASE_URL`.
+To retry a `FAILED` notification after correcting an operational problem:
+
+```powershell
+npm.cmd run notifications:requeue -- <notification-id>
+```
+
+Delivery is at-least-once: a process failure after Telegram accepts a message but before the
+database marks it `SENT` can result in a duplicate message. The unique outbox key prevents
+duplicate business events from creating duplicate notification rows.
+
 Backend workspace skeleton for API, Telegram bot, admin web, shared packages, and Prisma.
 
 ## Telegram bot (Khoa)
@@ -30,19 +56,26 @@ npm run dev:notification-worker
 npm run test:bot
 ```
 
-The development scripts load `apps/telegram-bot/.env` automatically. Keep the
-file local and never commit its token or shared secrets. The bot itself requires
+The development scripts load `apps/telegram-bot/.env` automatically and override
+stale values inherited from the local shell. Keep the file local and never commit
+its token or shared secrets. The bot itself requires
 `TELEGRAM_BOT_TOKEN`, `API_BASE_URL`, and `BOT_INTERNAL_SECRET`; only the
-notification worker additionally requires `REDIS_URL`.
-Process-level environment variables take precedence over values in `.env`, so
-clear or update any stale shell variables after rotating a Telegram token.
+notification worker additionally requires `REDIS_URL` and `DATABASE_URL`.
+This override applies only to the development runner; production start commands
+continue to use environment variables injected by the deployment platform.
 
 Use long polling locally. In production, set an HTTPS origin in
 `TELEGRAM_WEBHOOK_DOMAIN` and a random `TELEGRAM_WEBHOOK_SECRET_TOKEN` to switch
 the bot to authenticated webhook mode. Build with `npm run build:bot`, then run
 `npm run start:bot` with environment variables injected by the deployment
-platform. The API should enqueue `NotificationJob` payloads only after its
-business transaction commits.
+platform. Business transactions write idempotent notification outbox rows in
+PostgreSQL; the dispatcher enqueues `NotificationJob` payloads after commit.
+
+`ORDER_PAID` for CASH and `ORDER_READY` are connected to their current business
+transactions. The SePay webhook/reconciliation tasks (#18 and #24) must call
+`recordOrderNotification` for a reconciled PAID order or
+`recordPaymentReviewNotifications` for a review classification from the same
+Prisma transaction. The outbox unique key makes replayed sources idempotent.
 
 ## Structure
 

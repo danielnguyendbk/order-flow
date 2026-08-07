@@ -10,8 +10,10 @@ export interface BotConfig {
   };
 }
 
-export interface NotificationWorkerConfig extends BotConfig {
+export interface NotificationWorkerConfig {
+  telegramBotToken: string;
   redisUrl: string;
+  databaseUrl: string;
 }
 
 function required(name: string): string {
@@ -73,7 +75,8 @@ export function getBotConfig(): BotConfig {
 
 export function getNotificationWorkerConfig(): NotificationWorkerConfig {
   return {
-    ...getBotConfig(),
+    telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     redisUrl: required("REDIS_URL"),
+    databaseUrl: required("DATABASE_URL"),
   };
 }

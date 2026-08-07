@@ -7,6 +7,7 @@ const relevantVariables = [
   "API_BASE_URL",
   "BOT_INTERNAL_SECRET",
   "REDIS_URL",
+  "DATABASE_URL",
   "TELEGRAM_WEBHOOK_DOMAIN",
   "TELEGRAM_WEBHOOK_PATH",
   "TELEGRAM_WEBHOOK_SECRET_TOKEN",
@@ -39,7 +40,13 @@ describe("Telegram bot environment", () => {
     expect(() => getNotificationWorkerConfig()).toThrow("REDIS_URL is required");
 
     vi.stubEnv("REDIS_URL", "redis://localhost:6379");
-    expect(getNotificationWorkerConfig().redisUrl).toBe("redis://localhost:6379");
+    expect(() => getNotificationWorkerConfig()).toThrow("DATABASE_URL is required");
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost/order_flow");
+    expect(getNotificationWorkerConfig()).toEqual({
+      telegramBotToken: "test-token",
+      redisUrl: "redis://localhost:6379",
+      databaseUrl: "postgresql://localhost/order_flow",
+    });
   });
 
   it("builds an authenticated production webhook configuration", () => {

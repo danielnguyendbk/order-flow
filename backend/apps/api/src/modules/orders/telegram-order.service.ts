@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { generateOrderCode, generatePaymentCode } from "./order-code";
+import { recordOrderNotification } from "../notifications/notification-outbox.service";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -288,6 +289,7 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
         { orderId, statusDomain: "PAYMENT", oldStatus: current.paymentStatus, newStatus: "PAID", changedByUserId: employeeId },
         { orderId, statusDomain: "FULFILLMENT", oldStatus: current.fulfillmentStatus, newStatus: "QUEUED", changedByUserId: employeeId },
       ] });
+      await recordOrderNotification(tx, "ORDER_PAID", orderId);
       return updated;
     });
     return toOrderDto(order);

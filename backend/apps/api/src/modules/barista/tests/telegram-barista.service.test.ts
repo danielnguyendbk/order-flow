@@ -34,6 +34,7 @@ function database() {
       create: vi.fn().mockResolvedValue({}),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    notification: { upsert: vi.fn().mockResolvedValue({}) },
   };
   db.$transaction = vi.fn(async (operation: (tx: any) => unknown) => operation(db));
   return db;
@@ -81,6 +82,12 @@ describe("TelegramBaristaService", () => {
     const db = database();
     db.order.findUnique
       .mockResolvedValueOnce(order({ assignedBaristaId: "barista-1", fulfillmentStatus: "PREPARING" }))
+      .mockResolvedValueOnce({
+        id: "order-1",
+        orderCode: "ORD-001",
+        createdByUserId: "staff-1",
+        creator: { telegramChatId: 123n, telegramUserId: 456n },
+      })
       .mockResolvedValueOnce(order({ assignedBaristaId: "barista-1", fulfillmentStatus: "READY" }));
     const result = await new TelegramBaristaService(db as PrismaClient).markReady("barista-1", "order-1");
     expect(db.order.updateMany).toHaveBeenCalledWith({
@@ -88,6 +95,9 @@ describe("TelegramBaristaService", () => {
       data: { fulfillmentStatus: "READY" },
     });
     expect(db.orderStatusHistory.create).toHaveBeenCalledWith({ data: expect.objectContaining({ oldStatus: "PREPARING", newStatus: "READY" }) });
+    expect(db.notification.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ event: "ORDER_READY", recipientTelegramChatId: 123n }),
+    }));
     expect(result.fulfillmentStatus).toBe("READY");
   });
 });

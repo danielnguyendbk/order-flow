@@ -52,6 +52,7 @@ describe.skipIf(!database)("Telegram barista disposable-database integration", (
   afterAll(async () => {
     if (!database) return;
     if (orderId) {
+      await database.notification.deleteMany({ where: { orderId } });
       await database.orderStatusHistory.deleteMany({ where: { orderId } });
       await database.orderItem.deleteMany({ where: { orderId } });
       await database.order.deleteMany({ where: { id: orderId } });
@@ -76,5 +77,8 @@ describe.skipIf(!database)("Telegram barista disposable-database integration", (
     await expect(service!.markReady(loser, orderId)).rejects.toMatchObject({ code: "ORDER_FORBIDDEN" });
     expect(await service!.markReady(winner, orderId)).toMatchObject({ fulfillmentStatus: "READY", assignedBaristaId: winner });
     expect(await database!.orderStatusHistory.count({ where: { orderId, statusDomain: "FULFILLMENT" } })).toBe(2);
+    expect(await database!.notification.count({
+      where: { event: "ORDER_READY", sourceKey: orderId, recipientUserId: staffId },
+    })).toBe(1);
   });
 });

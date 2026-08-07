@@ -15,3 +15,7 @@ export function createNotificationQueue(redisUrl: string): Queue<NotificationJob
     },
   });
 }
+
+export async function enqueueNotification(queue: Queue<NotificationJob>, notificationId: string): Promise<void> {
+  await queue.add("telegram-notification", { notificationId }, { jobId: notificationId });
+}

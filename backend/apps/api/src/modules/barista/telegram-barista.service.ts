@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { TelegramOrderError } from "../orders/telegram-order.service";
+import { recordOrderNotification } from "../notifications/notification-outbox.service";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -171,6 +172,7 @@ export class TelegramBaristaService implements TelegramBaristaServiceContract {
           changedByUserId: baristaId,
         },
       });
+      await recordOrderNotification(tx, "ORDER_READY", orderId);
       return this.findOrder(tx, orderId);
     });
     return toOrderDto(order);

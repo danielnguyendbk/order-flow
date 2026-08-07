@@ -45,6 +45,7 @@ describe.skipIf(!database)("Telegram order disposable-database integration", () 
       const ownerIds = [employeeId, otherEmployeeId].filter(Boolean);
       const orders = await database.order.findMany({ where: { createdByUserId: { in: ownerIds } }, select: { id: true } });
       const orderIds = orders.map((order) => order.id);
+      await database.notification.deleteMany({ where: { recipientUserId: { in: ownerIds } } });
       await database.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } });
       await database.payment.deleteMany({ where: { orderId: { in: orderIds } } });
       await database.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
@@ -75,6 +76,9 @@ describe.skipIf(!database)("Telegram order disposable-database integration", () 
     expect(paid).toMatchObject({ paymentMethod: "CASH", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" });
     expect(repeated).toMatchObject({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" });
     expect(await database!.orderStatusHistory.count({ where: { orderId: draft.id } })).toBe(3);
+    expect(await database!.notification.count({
+      where: { event: "ORDER_PAID", sourceKey: draft.id, recipientUserId: employeeId },
+    })).toBe(1);
   });
 
   it("creates an idempotent QR payment and exposes it through mine/status", async () => {

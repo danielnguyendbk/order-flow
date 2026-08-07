@@ -76,6 +76,14 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
 - Inline draft keyboards use compact revisioned callback data from `backend/apps/telegram-bot/src/callbacks/`; stale keyboards are cleared and refreshed from backend state, and duplicate mutations are guarded in both the Bot and API.
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
+- Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
+- Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
+
+## Progress log — 2026-08-06
+
+- `feat-tele` implements KHOA-006 notification outbox records, idempotent event keys, BullMQ dispatch, Telegram retry/failure persistence, Redis Docker infrastructure, and an internal failed-notification requeue command.
+- Fixed local Bot startup after token/secret rotation by replacing `tsx --env-file` with an override-aware development runner and regression coverage.
+- KHOA-006 exposes transaction-scoped hooks for SePay ORDER_PAID/PAYMENT_REVIEW; production call sites remain owned by the still-open webhook/reconciliation issues #18 and #24, with disposable-database replay coverage at the outbox boundary.
 
 ## Progress log — 2026-08-05
 
