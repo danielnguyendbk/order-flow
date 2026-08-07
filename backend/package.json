@@ -2,26 +2,35 @@
   "name": "order-flow-backend",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=20.6"
   },
   "scripts": {
+    "dev:api": "npm --prefix apps/api run dev",
+    "check:api": "npm --prefix apps/api run check",
+    "test:api": "npm --prefix apps/api run test",
+    "check:api:auth": "npm --prefix apps/api run check:auth",
+    "test:api:auth": "npm --prefix apps/api run test:auth",
+    "generate:prisma": "prisma generate --schema prisma/schema.prisma",
+    "dev:bot": "tsx apps/telegram-bot/src/dev-runner.ts bot",
+    "dev:notification-worker": "tsx apps/telegram-bot/src/dev-runner.ts notification-worker",
+    "notifications:requeue": "tsx apps/telegram-bot/src/dev-runner.ts notifications-requeue",
+    "start:bot": "node apps/telegram-bot/dist/index.js",
+    "start:notification-worker": "node apps/telegram-bot/dist/worker.js",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:seed": "prisma db seed --schema prisma/schema.prisma",
-    "dev:bot": "tsx apps/telegram-bot/src/index.ts",
-    "dev:notification-worker": "tsx apps/telegram-bot/src/worker.ts",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "6.19.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.58.0",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
-    "prisma": "^5.22.0",
+    "prisma": "6.19.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"

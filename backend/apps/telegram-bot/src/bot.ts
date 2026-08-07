@@ -4,6 +4,8 @@ import { BackendClient } from "./api/backend-client.js";
 import { getBotConfig, type BotConfig } from "./config/env.js";
 import { registerCallbackHandlers } from "./handlers/callback.handler.js";
 import { registerDraftOrderHandlers } from "./handlers/draft-order.handler.js";
+import { registerOrderStatusHandlers } from "./handlers/order-status.handler.js";
+import { registerBaristaOrderHandlers } from "./handlers/barista-order.handler.js";
 import { registerStartHandler } from "./handlers/start.handler.js";
 import type { BotContext, BotSession } from "./types.js";
 
@@ -18,6 +20,8 @@ export function createBot(config: BotConfig = getBotConfig()) {
   bot.use(session<BotSession, BotContext>({ defaultSession: () => ({}) }));
   registerStartHandler(bot, api);
   registerDraftOrderHandlers(bot, api);
+  registerOrderStatusHandlers(bot, api);
+  registerBaristaOrderHandlers(bot, api);
   registerCallbackHandlers(bot, api);
 
   bot.catch((error, ctx) => {

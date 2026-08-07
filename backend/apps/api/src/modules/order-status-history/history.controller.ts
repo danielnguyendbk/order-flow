@@ -13,7 +13,7 @@ export class HistoryController {
    */
   public getHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const logs = await this.historyService.getOrderHistory(req.params.orderId);
+      const logs = await this.historyService.getOrderHistory(String(req.params.orderId));
       res.status(200).json(logs);
     } catch (err) {
       next(err);
