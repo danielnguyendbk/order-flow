@@ -82,11 +82,11 @@ model User {
   telegramUserId     BigInt?              @unique @map("telegram_user_id")
   telegramChatId     BigInt?              @map("telegram_chat_id")
   username           String?              @unique @db.VarChar(100)
-  passwordHash       String?              @map("password_hash")
+  passwordHash       String?              @map("password_hash") @db.VarChar(255)
   role               UserRole
   status             UserStatus           @default(ACTIVE)
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdOrders      Order[]              @relation("OrderCreator")
   assignedOrders     Order[]              @relation("OrderBarista")
   confirmedPayments  Payment[]            @relation("CashConfirmer")

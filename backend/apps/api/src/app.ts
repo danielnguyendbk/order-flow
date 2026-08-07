@@ -1,111 +1,178 @@
-import express, { Application, Request, Response, NextFunction } from "express";
-import { createOrderRouter }  from "./modules/orders/order.routes";
-import { createBaristaRouter } from "./modules/barista/barista.routes";
-import { createAdminRouter }  from "./modules/admin/admin.routes";
+import express, {
+  type Application,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
+import { ZodError } from "zod";
+
+import { createDatabasePool } from "./config/database.js";
+import { getEnv } from "./config/env.js";
+import { AppError } from "./core/errors.js";
+import { AuthRepository } from "./modules/auth/auth.repository.js";
+import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
+import { AuthService, type AuthServicePort } from "./modules/auth/auth.service.js";
+import { AuthTokenService } from "./modules/auth/auth.tokens.js";
 import {
   createTelegramSessionRouter,
   type TelegramSessionRouterOptions,
 } from "./modules/auth/telegram-session.routes";
 import {
-  createTelegramOrderRouter,
-  type TelegramOrderRouterOptions,
-} from "./modules/orders/telegram-order.routes";
-import {
   createTelegramBaristaRouter,
   type TelegramBaristaRouterOptions,
 } from "./modules/barista/telegram-barista.routes";
+import { EmployeeRepository } from "./modules/employees/employee.repository.js";
+import {
+  EmployeeService,
+  type EmployeeServicePort,
+} from "./modules/employees/employee.service.js";
+import {
+  createTelegramOrderRouter,
+  type TelegramOrderRouterOptions,
+} from "./modules/orders/telegram-order.routes";
+import { createApiRouter } from "./routes/index.js";
 
-// ── BigInt JSON serialization fix ─────────────────────────────
-// Prisma returns BigInt for columns declared as bigint.
-// JSON.stringify does not support BigInt natively.
-// For VND amounts (max ~quadrillions), Number is safe up to 2^53.
-(BigInt.prototype as any).toJSON = function () {
-  return Number(this);
-};
-
-/**
- * Creates and configures the Express application.
- *
- * Route map (/api/v1):
- *
- *   POST   /telegram/session
- *   GET    /menu/categories
- *   GET    /menu/items
- *   POST   /orders/:orderId/payments/qr
- *   POST   /orders/:orderId/payments/cash/confirm
- *
- *   POST   /orders
- *   GET    /orders
- *   GET    /orders/:orderId
- *   POST   /orders/:orderId/items
- *   PATCH  /orders/:orderId/items/:itemId
- *   DELETE /orders/:orderId/items/:itemId
- *   POST   /orders/:orderId/cancel
- *   POST   /orders/:orderId/claim
- *   POST   /orders/:orderId/ready
- *   POST   /orders/:orderId/deliver
- *
- *   GET    /barista/queue
- *   GET    /barista/orders
- *   GET    /barista/orders/:orderId
- *   GET    /barista/orders/:orderId/history
- *
- *   GET    /admin/orders
- *   GET    /admin/orders/:orderId
- *   POST   /admin/orders/:orderId/override-status
- */
-export interface AppOptions {
+export interface CreateAppOptions {
+  authService?: AuthServicePort;
+  mountOperationalRoutes?: boolean;
+  employeeService?: EmployeeServicePort;
   telegramSession?: TelegramSessionRouterOptions;
   telegramOrders?: Omit<TelegramOrderRouterOptions, "internalSecret">;
   telegramBarista?: Omit<TelegramBaristaRouterOptions, "internalSecret">;
 }
 
-export function createApp(options: AppOptions = {}): Application {
+export function createApp(options: CreateAppOptions = {}): Application {
   const app = express();
+  let authService = options.authService;
+  let employeeService = options.employeeService;
+  let dispose = async () => undefined;
+  const botOnly =
+    !authService &&
+    Boolean(options.telegramSession || options.telegramOrders || options.telegramBarista);
 
-  // ── Middleware ────────────────────────────────────────────────
-  app.use(express.json());
+  if (!authService && !botOnly) {
+    const env = getEnv();
+    const pool = createDatabasePool(env);
+    const sessions = new MemoryAuthSessionStore(env.AUTH_SESSION_CACHE_MAX);
+    authService = new AuthService(
+      new AuthRepository(pool),
+      sessions,
+      new AuthTokenService(env),
+      env,
+    );
+    employeeService = new EmployeeService(new EmployeeRepository(pool));
+    dispose = async () => {
+      sessions.clear();
+      await pool.end();
+    };
+  }
+
+  app.locals.dispose = dispose;
+  app.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
+  app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // ── Health check ──────────────────────────────────────────────
-  app.get("/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", service: "order-flow-api" });
+  app.get("/health", (_request, response) => {
+    response.json({ status: "ok", service: "order-flow-api" });
   });
 
-  // ── API v1 routes ─────────────────────────────────────────────
   const apiV1 = express.Router();
-  const botInternalSecret = options.telegramSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
+  const botInternalSecret =
+    options.telegramSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
 
-  apiV1.use(createTelegramOrderRouter({ internalSecret: botInternalSecret, ...options.telegramOrders }));
-  apiV1.use(createTelegramBaristaRouter({ internalSecret: botInternalSecret, ...options.telegramBarista }));
-  apiV1.use("/orders",  createOrderRouter());
-  apiV1.use("/barista", createBaristaRouter());
-  apiV1.use("/admin",   createAdminRouter());
-  apiV1.use(
-    "/telegram",
-    createTelegramSessionRouter(
-      options.telegramSession ?? { internalSecret: botInternalSecret },
-    ),
-  );
+  if (botInternalSecret) {
+    const telegramBotRouter = express.Router();
+    telegramBotRouter.use(
+      createTelegramOrderRouter({
+        internalSecret: botInternalSecret,
+        ...options.telegramOrders,
+      }),
+    );
+    telegramBotRouter.use(
+      createTelegramBaristaRouter({
+        internalSecret: botInternalSecret,
+        ...options.telegramBarista,
+      }),
+    );
+    telegramBotRouter.use(
+      "/telegram",
+      createTelegramSessionRouter(
+        options.telegramSession ?? { internalSecret: botInternalSecret },
+      ),
+    );
 
+    // Bot and browser APIs share several paths. Only internal Bot requests
+    // enter the Bot-owned routers; all others continue to the public API.
+    apiV1.use((request, response, next) => {
+      if (!request.header("x-bot-internal-secret")) {
+        next();
+        return;
+      }
+      telegramBotRouter(request, response, next);
+    });
+  }
+
+  if (authService) {
+    apiV1.use(
+      createApiRouter(
+        authService,
+        options.mountOperationalRoutes ?? options.authService === undefined,
+        employeeService,
+      ),
+    );
+  }
   app.use("/api/v1", apiV1);
 
-  // ── 404 handler ───────────────────────────────────────────────
-  app.use((_req: Request, res: Response) => {
-    res.status(404).json({ message: "Route not found" });
-  });
-
-  // ── Global error handler ──────────────────────────────────────
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status  = err.statusCode ?? err.status ?? 500;
-    const message = err.message ?? "Internal Server Error";
-    res.status(status).json({
-      message,
-      ...(process.env.NODE_ENV !== "production" && err.stack
-        ? { stack: err.stack }
-        : {}),
+  app.use((_request: Request, response: Response) => {
+    response.status(404).json({
+      error: { code: "NOT_FOUND", message: "Route not found" },
     });
   });
+
+  app.use(
+    (error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+      if (error instanceof ZodError) {
+        response.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Request validation failed",
+            details: error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+        });
+        return;
+      }
+      if (error instanceof AppError) {
+        response.status(error.statusCode).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number"
+      ) {
+        const httpError = error as { statusCode: number; message?: string };
+        response.status(httpError.statusCode).json({
+          error: {
+            code: httpError.statusCode === 404 ? "NOT_FOUND" : "ORDER_ERROR",
+            message: httpError.message ?? "Request failed",
+          },
+        });
+        return;
+      }
+      console.error(error);
+      response.status(500).json({
+        error: { code: "INTERNAL_SERVER_ERROR", message: "Internal server error" },
+      });
+    },
+  );
 
   return app;
 }

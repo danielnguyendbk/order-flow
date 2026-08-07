@@ -16,12 +16,15 @@
     "notifications:requeue": "tsx apps/telegram-bot/src/dev-runner.ts notifications-requeue",
     "start:bot": "node apps/telegram-bot/dist/index.js",
     "start:notification-worker": "node apps/telegram-bot/dist/worker.js",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:seed": "prisma db seed --schema prisma/schema.prisma",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.58.0",
     "telegraf": "^4.16.3"
   },
@@ -31,5 +34,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

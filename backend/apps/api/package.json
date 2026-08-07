@@ -10,18 +10,28 @@
     "start": "node dist/index.js",
     "test:auth": "vitest run --config vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
-    "test:auth:integration": "vitest run --config vitest.integration.config.ts"
+    "test:auth:integration": "vitest run --config vitest.integration.config.ts",
+    "test:node": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
     "express": "5.2.1",
-    "http-errors": "^2.0.0"
+    "http-errors": "^2.0.0",
+    "jose": "^6.2.8",
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
     "@types/http-errors": "^2.0.4",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.12.12",
+    "@types/node": "^26.1.2",
+    "@types/pg": "^8.20.3",
+    "@types/supertest": "^6.0.3",
     "jest": "^30.4.2",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "4.19.2",

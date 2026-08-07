@@ -17,6 +17,21 @@ const prisma = new PrismaClient();
 
 /** Include clause used consistently across all order queries. */
 const ORDER_INCLUDE = { items: true } as const;
+const ORDER_DETAIL_INCLUDE = { items: true, history: { orderBy: { createdAt: "asc" } } } as const;
+const ORDER_CODE_MAX_ATTEMPTS = 5;
+
+function toOrderWithTimeline(order: unknown): Order {
+  const data = order as any;
+  if (data.history !== undefined) {
+    data.timeline = data.history;
+    delete data.history;
+  }
+  return data as Order;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (error as { code?: string }).code === "P2002";
+}
 
 /**
  * Repository for all `orders` and `order_items` database operations.
@@ -33,30 +48,41 @@ export class OrderRepository {
     customerNote:    string | undefined,
     items:           Array<{ menuItemId: string; itemName: string; unitPrice: bigint; quantity: number; note?: string }>
   ): Promise<Order> {
-    const orderCode  = generateOrderCode();
     const totalAmount = calculateTotal(items);
 
-    const order = await prisma.order.create({
-      data: {
-        orderCode,
-        createdByUserId,
-        paymentMethod,
-        customerNote,
-        totalAmount,
-        items: {
-          create: items.map((item) => ({
-            menuItemId: item.menuItemId,
-            itemName:   item.itemName,
-            unitPrice:  item.unitPrice,
-            quantity:   item.quantity,
-            note:       item.note,
-          })),
-        },
-      },
-      include: ORDER_INCLUDE,
-    });
+    for (let attempt = 1; attempt <= ORDER_CODE_MAX_ATTEMPTS; attempt += 1) {
+      const orderCode = generateOrderCode();
 
-    return order as unknown as Order;
+      try {
+        const order = await prisma.order.create({
+          data: {
+            orderCode,
+            createdByUserId,
+            paymentMethod,
+            customerNote,
+            totalAmount,
+            items: {
+              create: items.map((item) => ({
+                menuItemId: item.menuItemId,
+                itemName:   item.itemName,
+                unitPrice:  item.unitPrice,
+                quantity:   item.quantity,
+                note:       item.note,
+              })),
+            },
+          },
+          include: ORDER_INCLUDE,
+        });
+
+        return order as unknown as Order;
+      } catch (error) {
+        if (!isUniqueConstraintError(error) || attempt === ORDER_CODE_MAX_ATTEMPTS) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Unable to generate a unique order code");
   }
 
   /**
@@ -65,9 +91,9 @@ export class OrderRepository {
   public async findById(id: string): Promise<Order | null> {
     const order = await prisma.order.findUnique({
       where: { id },
-      include: ORDER_INCLUDE,
+      include: ORDER_DETAIL_INCLUDE,
     });
-    return order as unknown as Order | null;
+    return order ? toOrderWithTimeline(order) : null;
   }
 
   /**
@@ -175,11 +201,20 @@ export class OrderRepository {
       const allItems = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal = calculateTotal(allItems);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }
@@ -193,6 +228,11 @@ export class OrderRepository {
     input:   UpdateItemInput
   ): Promise<Order> {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const existing = await tx.orderItem.findFirst({ where: { id: itemId, orderId } });
+      if (!existing) {
+        throw new Error(`Item ${itemId} not found in order ${orderId}`);
+      }
+
       const patch: any = {};
       if (input.quantity !== undefined) patch.quantity = input.quantity;
       if (input.note     !== undefined) patch.note     = input.note;
@@ -202,11 +242,20 @@ export class OrderRepository {
       const allItems = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal = calculateTotal(allItems);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }
@@ -216,16 +265,30 @@ export class OrderRepository {
    */
   public async deleteItem(orderId: string, itemId: string): Promise<Order> {
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const existing = await tx.orderItem.findFirst({ where: { id: itemId, orderId } });
+      if (!existing) {
+        throw new Error(`Item ${itemId} not found in order ${orderId}`);
+      }
+
       await tx.orderItem.delete({ where: { id: itemId } });
 
       const remaining = await tx.orderItem.findMany({ where: { orderId } });
       const newTotal  = calculateTotal(remaining);
 
-      const updated = await tx.order.update({
-        where:   { id: orderId },
+      const updatedCount = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.UNPAID as any,
+          fulfillmentStatus: FulfillmentStatus.PENDING_PAYMENT as any,
+        },
         data:    { totalAmount: newTotal },
-        include: ORDER_INCLUDE,
       });
+      if (updatedCount.count !== 1) {
+        const error = new Error("Order is no longer editable") as Error & { code?: string };
+        error.code = "P2025";
+        throw error;
+      }
+      const updated = await tx.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
       return updated as unknown as Order;
     });
   }

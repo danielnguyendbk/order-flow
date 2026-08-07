@@ -19,16 +19,17 @@ order-flow/
     ├── README.md                     # Short workspace overview
     ├── docker-compose.yml            # Local PostgreSQL 16 service
     ├── docs/
-    │   └── api-contract.md           # Planned HTTP route inventory
+    │   ├── api-contract.md           # Planned HTTP route inventory
+    │   └── openapi.yaml              # Importable Postman/OpenAPI contract for all routes
     ├── apps/
     │   ├── api/                      # HTTP API service
     │   │   └── src/
-    │   │       ├── app.ts            # API factory placeholder (`createApp`)
+    │   │       ├── app.ts            # Fastify application factory (`createApp`)
     │   │       ├── config/           # Runtime/application configuration
     │   │       ├── jobs/             # Background/scheduled jobs
     │   │       ├── middleware/       # HTTP middleware
     │   │       ├── routes/           # Route registration
-    │   │       └── modules/          # Domain modules (listed below)
+    │   │       └── modules/          # Domain modules (listed below); auth is implemented
     │   ├── telegram-bot/             # Telegram bot service
     │   │   └── src/
     │   │       ├── bot.ts            # Bot factory placeholder (`createBot`)
@@ -45,7 +46,7 @@ order-flow/
     │   └── eslint-config/             # Shared ESLint configuration
     └── prisma/
         ├── schema.prisma              # PostgreSQL Prisma schema
-        └── seed.ts                    # Database seed entry point
+        └── seed.ts                    # Idempotent initial OWNER seed entry point
 ```
 
 ## API domain modules
@@ -97,6 +98,14 @@ All module directories are under `backend/apps/api/src/modules/`:
 - `feat-tele` implements `POST /api/v1/telegram/session` against `public.users`, including internal-secret authentication, active-state enforcement, role mapping and Bot response validation.
 - Verified locally for KHOA-002: API auth checks and 11 tests pass; Bot type-check/build and 32 tests pass.
 
+- `apps/api` is a runnable Express service; the auth module implements admin JWT sessions and verified Telegram Web App sessions. Session state is held by a bounded process-local memory cache in `auth-session.store.ts`.
+- Employee and menu modules are developed on dedicated feature branches; shared packages remain placeholders kept by `.gitkeep` files.
+- `schema.prisma` configures Prisma Client and PostgreSQL through pooled `DATABASE_URL` plus migration `DIRECT_URL`; it currently defines the initial `User`, `Order`, and `OrderItem` models and related enums.
+- `seed.ts` creates or refreshes the initial active `OWNER` from `SEED_OWNER_*`
+  environment variables and refuses implicit role promotion.
+- `docker-compose.yml` runs PostgreSQL 16 Alpine on port `5432`, with database/user/password `order_flow` and persistent volume `postgres_data`.
+- API dependencies, TypeScript config, auth tests, and a root environment example exist; there is still no root workspace manifest or CI configuration.
+
 ## Progress log — 2026-08-04
 
 - `feat-tele` was pushed at `ad2991d` (`feat(telegram): add service staff draft order flow`).
@@ -116,8 +125,21 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
 - Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
+- Postman/API generation: import `backend/docs/openapi.yaml`; keep it synchronized with route behavior and `api-contract.md`.
+- Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
+
+## Installed GitHub skills
+
+The GitHub plugin is installed. Use its skills for repository work as follows:
+
+- `github:github`: general repository orientation and triage; read or summarize Issues, PRs, patches, comments, labels, and repository state.
+- `github:gh-address-comments`: inspect unresolved PR review threads, requested changes, and inline comments, then implement the selected fixes.
+- `github:gh-fix-ci`: inspect and diagnose failing GitHub Actions checks and logs, then implement an approved fix.
+- `github:yeet`: intentionally stage and commit local changes, push the branch, and open a draft PR.
+
+Prefer the connected GitHub app for structured repository, Issue, and PR data. Use local `git` or `gh` only where needed for branch discovery, commits, pushes, or GitHub Actions logs. Before any write action, confirm the exact repository, branch, PR, Issue, or change scope; never include unrelated working-tree changes in a commit.
 
 ## Maintenance rule
 

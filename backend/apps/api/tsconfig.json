@@ -3,12 +3,31 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "rootDir": ".",
+    "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "rootDir": "src",
-    "outDir": "dist",
-    "types": ["node", "jest"]
+    "types": ["node"]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/app.ts",
+    "src/server.ts",
+    "src/config/**/*.ts",
+    "src/core/**/*.ts",
+    "src/middleware/**/*.ts",
+    "src/modules/admin/**/*.ts",
+    "src/modules/auth/**/*.ts",
+    "src/modules/barista/**/*.ts",
+    "src/modules/employees/**/*.ts",
+    "src/modules/menu/**/*.ts",
+    "src/modules/notifications/**/*.ts",
+    "src/modules/orders/**/*.ts",
+    "src/modules/order-status-history/**/*.ts",
+    "src/modules/payments/**/*.ts",
+    "src/routes/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exclude": ["src/**/tests/**/*.ts"]
 }
