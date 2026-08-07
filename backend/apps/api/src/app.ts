@@ -1,13 +1,9 @@
 import express, {
   type Application,
-  type NextFunction,
-  type Request,
-  type Response,
 } from "express";
 
 import { createDatabasePool } from "./config/database.js";
 import { getEnv } from "./config/env.js";
-import { AppError } from "./core/errors.js";
 import { errorHandler, notFound, requestId } from "./middleware/index.js";
 import { AuthRepository } from "./modules/auth/auth.repository.js";
 import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
@@ -23,6 +19,8 @@ import {
   CategoryService,
   type CategoryServicePort,
 } from "./modules/menu/category.service.js";
+import { ItemRepository } from "./modules/menu/item.repository.js";
+import { ItemService, type ItemServicePort } from "./modules/menu/item.service.js";
 import { createApiRouter } from "./routes/index.js";
 
 export interface CreateAppOptions {
@@ -30,6 +28,7 @@ export interface CreateAppOptions {
   mountOperationalRoutes?: boolean;
   employeeService?: EmployeeServicePort;
   categoryService?: CategoryServicePort;
+  itemService?: ItemServicePort;
 }
 
 export function createApp(options: CreateAppOptions = {}): Application {
@@ -37,6 +36,7 @@ export function createApp(options: CreateAppOptions = {}): Application {
   let authService = options.authService;
   let employeeService = options.employeeService;
   let categoryService = options.categoryService;
+  let itemService = options.itemService;
   let dispose = async () => undefined;
 
   if (!authService) {
@@ -51,6 +51,7 @@ export function createApp(options: CreateAppOptions = {}): Application {
     );
     employeeService = new EmployeeService(new EmployeeRepository(pool));
     categoryService = new CategoryService(new CategoryRepository(pool));
+    itemService = new ItemService(new ItemRepository(pool));
     dispose = async () => {
       sessions.clear();
       await pool.end();
@@ -76,6 +77,7 @@ export function createApp(options: CreateAppOptions = {}): Application {
       options.mountOperationalRoutes ?? options.authService === undefined,
       employeeService,
       categoryService,
+      itemService,
     ),
   );
 
