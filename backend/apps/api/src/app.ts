@@ -13,16 +13,23 @@ import { AuthRepository } from "./modules/auth/auth.repository.js";
 import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
 import { AuthService, type AuthServicePort } from "./modules/auth/auth.service.js";
 import { AuthTokenService } from "./modules/auth/auth.tokens.js";
+import { EmployeeRepository } from "./modules/employees/employee.repository.js";
+import {
+  EmployeeService,
+  type EmployeeServicePort,
+} from "./modules/employees/employee.service.js";
 import { createApiRouter } from "./routes/index.js";
 
 export interface CreateAppOptions {
   authService?: AuthServicePort;
   mountOperationalRoutes?: boolean;
+  employeeService?: EmployeeServicePort;
 }
 
 export function createApp(options: CreateAppOptions = {}): Application {
   const app = express();
   let authService = options.authService;
+  let employeeService = options.employeeService;
   let dispose = async () => undefined;
 
   if (!authService) {
@@ -35,6 +42,7 @@ export function createApp(options: CreateAppOptions = {}): Application {
       new AuthTokenService(env),
       env,
     );
+    employeeService = new EmployeeService(new EmployeeRepository(pool));
     dispose = async () => {
       sessions.clear();
       await pool.end();
@@ -53,6 +61,7 @@ export function createApp(options: CreateAppOptions = {}): Application {
     createApiRouter(
       authService,
       options.mountOperationalRoutes ?? options.authService === undefined,
+      employeeService,
     ),
   );
 
