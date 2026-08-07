@@ -7,3 +7,264 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
+enum UserRole {
+  OWNER
+  SERVICE_STAFF
+  BARISTA
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("user_status")
+}
+
+enum PaymentMethod {
+  QR
+  CASH
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  UNDERPAID
+  OVERPAID
+  REVIEW
+
+  @@map("payment_status")
+}
+
+enum FulfillmentStatus {
+  PENDING_PAYMENT
+  QUEUED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+
+  @@map("fulfillment_status")
+}
+
+enum OrderStatusDomain {
+  PAYMENT
+  FULFILLMENT
+
+  @@map("order_status_domain")
+}
+
+enum TransactionMatchStatus {
+  UNMATCHED
+  MATCHED
+  WRONG_CODE
+  REVIEWED
+
+  @@map("transaction_match_status")
+}
+
+enum ResolutionAction {
+  NONE
+  LINK_MANUALLY
+  ACCEPT
+  REJECT
+  REFUND_REQUIRED
+
+  @@map("resolution_action")
+}
+
+enum AuditEntityType {
+  USER
+  MENU_CATEGORY
+  MENU_ITEM
+  ORDER
+  PAYMENT
+  SEPAY_TRANSACTION
+
+  @@map("audit_entity_type")
+}
+
+model User {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName       String    @map("full_name") @db.VarChar(150)
+  telegramUserId BigInt?   @unique @map("telegram_user_id")
+  telegramChatId BigInt?   @map("telegram_chat_id")
+  username       String?   @unique @db.VarChar(100)
+  passwordHash   String?   @map("password_hash") @db.VarChar(255)
+  role           UserRole
+  status         UserStatus @default(ACTIVE)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  createdOrders        Order[]              @relation("CreatedOrders")
+  assignedOrders       Order[]              @relation("AssignedBarista")
+  cashConfirmedPayments Payment[]           @relation("CashConfirmedPayments")
+  histories            OrderStatusHistory[]
+  resolvedTransactions SepayTransaction[]   @relation("ResolvedTransactions")
+  auditLogs            AuditLog[]
+
+  @@map("users")
+}
+
+model MenuCategory {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @unique @db.VarChar(100)
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  items MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  name         String   @db.VarChar(150)
+  description  String?
+  price        BigInt
+  isAvailable Boolean  @default(true) @map("is_available")
+  imageUrl     String?  @map("image_url")
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  category MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orderItems OrderItem[]
+
+  @@index([categoryId, displayOrder], map: "menu_items_category_display_idx")
+  @@map("menu_items")
+}
+
+model Order {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderCode          String            @unique @map("order_code") @db.VarChar(32)
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  assignedBaristaId  String?           @map("assigned_barista_id") @db.Uuid
+  paymentMethod      PaymentMethod?    @map("payment_method")
+  paymentStatus      PaymentStatus     @default(UNPAID) @map("payment_status")
+  fulfillmentStatus  FulfillmentStatus @default(PENDING_PAYMENT) @map("fulfillment_status")
+  totalAmount        BigInt            @default(0) @map("total_amount")
+  customerNote       String?           @map("customer_note")
+  cancellationReason String?           @map("cancellation_reason")
+  paidAt             DateTime?         @map("paid_at") @db.Timestamptz(6)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime          @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  createdBy       User                 @relation("CreatedOrders", fields: [createdByUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  assignedBarista User?                @relation("AssignedBarista", fields: [assignedBaristaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items           OrderItem[]
+  payment         Payment?
+  history         OrderStatusHistory[]
+
+  @@index([createdByUserId, createdAt(sort: Desc)], map: "orders_creator_created_at_idx")
+  @@index([assignedBaristaId, fulfillmentStatus, createdAt(sort: Desc)], map: "orders_barista_status_created_at_idx")
+  @@index([fulfillmentStatus, createdAt(sort: Desc)], map: "orders_fulfillment_created_at_idx")
+  @@index([paymentStatus, createdAt(sort: Desc)], map: "orders_payment_created_at_idx")
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId    String  @map("order_id") @db.Uuid
+  menuItemId String  @map("menu_item_id") @db.Uuid
+  itemName   String  @map("item_name") @db.VarChar(150)
+  unitPrice  BigInt  @map("unit_price")
+  quantity   Int     @default(1)
+  note       String?
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId, menuItemId], map: "order_items_order_menu_idx")
+  @@index([menuItemId], map: "order_items_menu_item_idx")
+  @@map("order_items")
+}
+
+model Payment {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId               String   @unique @map("order_id") @db.Uuid
+  paymentCode           String?  @unique @map("payment_code") @db.VarChar(40)
+  expectedAmount        BigInt   @map("expected_amount")
+  receivedAmount        BigInt   @default(0) @map("received_amount")
+  cashConfirmedByUserId String?  @map("cash_confirmed_by_user_id") @db.Uuid
+  confirmedAt           DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cashConfirmedBy User? @relation("CashConfirmedPayments", fields: [cashConfirmedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sepayTransactions SepayTransaction[]
+
+  @@index([cashConfirmedByUserId], map: "payments_cash_confirmer_idx")
+  @@map("payments")
+}
+
+model SepayTransaction {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sepayTransactionId BigInt                 @unique @map("sepay_transaction_id")
+  paymentId          String?                @map("payment_id") @db.Uuid
+  transactionDate    DateTime               @map("transaction_date") @db.Timestamptz(6)
+  code               String?                @db.VarChar(100)
+  content            String?
+  amountIn           BigInt                 @default(0) @map("amount_in")
+  referenceCode      String?                @map("reference_code") @db.VarChar(150)
+  matchStatus        TransactionMatchStatus @default(UNMATCHED) @map("match_status")
+  differenceAmount   BigInt?                @map("difference_amount")
+  resolutionAction   ResolutionAction       @default(NONE) @map("resolution_action")
+  resolutionNote     String?                @map("resolution_note")
+  resolvedByUserId   String?                @map("resolved_by_user_id") @db.Uuid
+  resolvedAt         DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  rawPayload         Json                   @default("{}") @map("raw_payload")
+  receivedAt         DateTime               @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  payment    Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  resolvedBy User?    @relation("ResolvedTransactions", fields: [resolvedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([paymentId, transactionDate(sort: Desc)], map: "sepay_transactions_payment_date_idx")
+  @@index([receivedAt(sort: Desc)], map: "sepay_transactions_unmatched_received_idx")
+  @@index([code], map: "sepay_transactions_code_idx")
+  @@index([referenceCode], map: "sepay_transactions_reference_code_idx")
+  @@map("sepay_transactions")
+}
+
+model OrderStatusHistory {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String            @map("order_id") @db.Uuid
+  statusDomain    OrderStatusDomain @map("status_domain")
+  oldStatus       String?           @map("old_status") @db.VarChar(30)
+  newStatus       String            @map("new_status") @db.VarChar(30)
+  changedByUserId String?           @map("changed_by_user_id") @db.Uuid
+  reason          String?
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  changedBy User? @relation(fields: [changedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([orderId, createdAt(sort: Desc)], map: "order_status_history_order_created_idx")
+  @@index([changedByUserId], map: "order_status_history_changed_by_idx")
+  @@map("order_status_history")
+}
+
+model AuditLog {
+  id          BigInt          @id @default(autoincrement())
+  actorUserId String?         @map("actor_user_id") @db.Uuid
+  action      String          @db.VarChar(100)
+  entityType  AuditEntityType @map("entity_type")
+  entityId    String?         @map("entity_id") @db.Uuid
+  details     Json            @default("{}")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([entityType, entityId, createdAt(sort: Desc)], map: "audit_logs_entity_created_idx")
+  @@index([actorUserId, createdAt(sort: Desc)], map: "audit_logs_actor_created_idx")
+  @@map("audit_logs")
+}

@@ -1,4 +1,4 @@
-# 🚀 OrderFlow
+# 🚀 ACIS Flow
 
 > **Smart F&B Operations Platform for Small & Medium Businesses**
 
@@ -20,23 +20,6 @@ Order → Payment → Kitchen → Delivery → Reporting.
 -   🧾 Audit Log
 -   🔔 Notification
 -   📈 Revenue Analytics
-
-------------------------------------------------------------------------
-
-## 🏗 System Architecture
-
-``` mermaid
-graph LR
-A[Service Staff] --> B[Telegram Bot]
-C[Barista] --> B
-D[Manager] --> E[Admin Web]
-
-B --> F[Express.js API]
-E --> F
-
-F --> G[(PostgreSQL)]
-I[SePay] -->|Webhook| F
-```
 
 ------------------------------------------------------------------------
 
@@ -77,6 +60,9 @@ READY --> DELIVERED
 ------------------------------------------------------------------------
 
 # ⚙️ Tech Stack
+
+  Layer           Technology
+  --------------- -----------------------------------
   Backend         Node.js + Express.js + TypeScript
   ORM             Prisma
   Database        PostgreSQL
@@ -94,21 +80,18 @@ READY --> DELIVERED
 # 📁 Project Structure
 
 ``` text
-order-flow/
-├── backend/
-│   ├── apps/
-│   │   ├── api/
-│   │   └── telegram-bot/
-│   ├── packages/
-│   │   ├── shared-types/
-│   │   └── shared-utils/
-│   ├── prisma/
-│   ├── docker/
-│   ├── docs/
-│   └── docker-compose.yml
-├── frontend/
-│   ├── src/
-│   └── public/
+acis-flow/
+├── apps/
+│   ├── api/
+│   ├── telegram-bot/
+│   └── admin-web/
+├── packages/
+│   ├── shared-types/
+│   └── shared-utils/
+├── prisma/
+├── docker/
+├── docs/
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -227,8 +210,6 @@ Các trường hợp cần kiểm thử:
 -   Revenue
 -   Telegram Notification
 -   Atomic Claim
-
-------------------------------------------------------------------------
 
 
 

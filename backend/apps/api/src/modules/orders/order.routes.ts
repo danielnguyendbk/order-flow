@@ -4,6 +4,7 @@ import { OrderRepository } from "./order.repository";
 import { OrderService } from "./order.service";
 import { HistoryRepository } from "../order-status-history/history.repository";
 import { PaymentRepository } from "../payments/payment.repository";
+import { createPaymentRouter } from "../payments/payment.routes";
 
 /**
  * Creates and wires the Orders router.
@@ -33,6 +34,7 @@ export function createOrderRouter(): Router {
   // Customer routes
   router.post("/",                                controller.createOrder);
   router.get("/",                                 controller.listOrders);
+  router.use("/:orderId/payments",                createPaymentRouter());
   router.get("/:orderId",                         controller.getOrder);
   router.post("/:orderId/items",                  controller.addItem);
   router.patch("/:orderId/items/:itemId",         controller.updateItem);

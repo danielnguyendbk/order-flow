@@ -9,14 +9,25 @@
     "dev:notification-worker": "tsx apps/telegram-bot/src/worker.ts",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
-    "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts"
+    "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
+    "test:api": "vitest run --config apps/api/vitest.config.ts",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "seed:thai": "tsx prisma/seed.ts thai",
+    "seed:thai001": "tsx prisma/seed.ts thai001",
+    "seed:thai002": "tsx prisma/seed.ts thai002",
+    "seed:thai003": "tsx prisma/seed.ts thai003",
+    "seed:thai004": "tsx prisma/seed.ts thai004",
+    "seed:thai005": "tsx prisma/seed.ts thai005",
+    "seed:thai006": "tsx prisma/seed.ts thai006"
   },
   "dependencies": {
+    "@prisma/client": "^5.14.0",
     "bullmq": "^5.58.0",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "prisma": "^5.14.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"

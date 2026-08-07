@@ -1,7 +1,9 @@
+import "./config/load-env";
 import express, { Application, Request, Response, NextFunction } from "express";
 import { createOrderRouter }  from "./modules/orders/order.routes";
 import { createBaristaRouter } from "./modules/barista/barista.routes";
 import { createAdminRouter }  from "./modules/admin/admin.routes";
+import { createSepayRouter } from "./modules/sepay/sepay.routes";
 
 // ── BigInt JSON serialization fix ─────────────────────────────
 // Prisma returns BigInt for columns declared as bigint.
@@ -52,6 +54,7 @@ export function createApp(): Application {
   apiV1.use("/orders",  createOrderRouter());
   apiV1.use("/barista", createBaristaRouter());
   apiV1.use("/admin",   createAdminRouter());
+  apiV1.use("/webhooks/sepay", createSepayRouter());
 
   app.use("/api/v1", apiV1);
 

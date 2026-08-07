@@ -49,6 +49,20 @@ export class PaymentRepository {
   }
 
   /**
+   * Returns every payment record linked to an order.
+   *
+   * The current schema allows one payment per order, but this returns an array
+   * so the HTTP contract can stay stable if QR/refund records expand later.
+   */
+  public async findManyByOrderId(orderId: string): Promise<Payment[]> {
+    const payments = await prisma.payment.findMany({
+      where: { orderId },
+      orderBy: { createdAt: "asc" },
+    });
+    return payments as unknown as Payment[];
+  }
+
+  /**
    * Marks a payment as confirmed via cash by a staff member.
    *
    * @param paymentId           - The payment ID.
