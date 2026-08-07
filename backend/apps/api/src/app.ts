@@ -50,6 +50,9 @@ export function createApp(options: CreateAppOptions = {}): Application {
   }
 
   app.locals.dispose = dispose;
+  app.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -89,6 +92,21 @@ export function createApp(options: CreateAppOptions = {}): Application {
       if (error instanceof AppError) {
         response.status(error.statusCode).json({
           error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      if (
+        error &&
+        typeof error === "object" &&
+        "statusCode" in error &&
+        typeof error.statusCode === "number"
+      ) {
+        const httpError = error as { statusCode: number; message?: string };
+        response.status(httpError.statusCode).json({
+          error: {
+            code: httpError.statusCode === 404 ? "NOT_FOUND" : "ORDER_ERROR",
+            message: httpError.message ?? "Request failed",
+          },
         });
         return;
       }

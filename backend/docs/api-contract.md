@@ -44,6 +44,39 @@ Status: **implemented**
 - Refresh tokens rotate on every use. Reuse of an old refresh token revokes its in-memory session.
 - Sessions are process-local: restarting the API logs everyone out, and separate API instances do not share sessions.
 
+## Service orders
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/orders` | Create a service order |
+| `GET` | `/api/v1/orders` | List service orders |
+| `GET` | `/api/v1/orders/:orderId` | Get order detail |
+| `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid order |
+
+- Create body: `{ "createdByUserId": "...", "paymentMethod": "QR|CASH", "customerNote": "...", "items": [{ "menuItemId": "...", "quantity": 1, "note": "..." }] }`.
+- New orders start with `paymentStatus: "UNPAID"` and `fulfillmentStatus: "PENDING_PAYMENT"` from database defaults.
+- `orderCode` is unique in the database; create retries generated code collisions before surfacing a database error.
+- `GET /orders` supports `createdByUserId`, `fulfillmentStatus`, `paymentStatus`, `assignedBaristaId`, `page`, and `limit`; service staff can pass their own `createdByUserId` to list their own service orders.
+- `GET /orders/:orderId` returns `items` and `timeline`, where `timeline` is status history ordered oldest-first.
+- Cancel body: `{ "reason": "...", "requesterId": "..." }`. Unpaid pending-payment orders can be cancelled and the cancellation is recorded in `timeline`.
+
+## Order items
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/orders/:orderId/items` | Add an item to an editable order |
+| `PATCH` | `/api/v1/orders/:orderId/items/:itemId` | Update item quantity or note |
+| `DELETE` | `/api/v1/orders/:orderId/items/:itemId` | Remove an item |
+
+- Item changes are allowed only while the order is `UNPAID` and `PENDING_PAYMENT`; an order with QR payment `PENDING` is not editable.
+- Add item resolves and snapshots the current menu item name and price from the backend. Client-supplied name, price, or total are ignored.
+- Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
+- Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
+
 ## Public menu
 
 | Method | Path | Purpose |

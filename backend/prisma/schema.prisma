@@ -33,6 +33,11 @@ enum PaymentMethod {
   CASH
 }
 
+enum OrderStatusDomain {
+  PAYMENT
+  FULFILLMENT
+}
+
 enum UserRole {
   OWNER
   SERVICE_STAFF
@@ -78,10 +83,25 @@ model Order {
   cancellationReason String?
   paidAt             DateTime?
   items              OrderItem[]
+  history            OrderStatusHistory[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
   @@map("orders")
+}
+
+model OrderStatusHistory {
+  id              String            @id @default(uuid())
+  orderId         String
+  statusDomain    OrderStatusDomain
+  oldStatus       String?
+  newStatus       String
+  changedByUserId String?
+  reason          String?
+  createdAt       DateTime          @default(now())
+  order           Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_history")
 }
 
 model OrderItem {

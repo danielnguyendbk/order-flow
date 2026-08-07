@@ -18,6 +18,7 @@ servers:
 tags:
   - name: Telegram Auth
   - name: Admin Auth
+  - name: Service Orders
   - name: Public Menu
   - name: Admin Employees
   - name: Admin Menu Categories
@@ -143,6 +144,183 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/orders:
+    post:
+      tags: [Service Orders]
+      operationId: createOrder
+      summary: Create a service order
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [Service Orders]
+      operationId: listOrders
+      summary: List service orders
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/PageQuery"
+        - $ref: "#/components/parameters/LimitQuery"
+        - name: createdByUserId
+          in: query
+          schema:
+            type: string
+        - name: fulfillmentStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/FulfillmentStatus"
+        - name: paymentStatus
+          in: query
+          schema:
+            $ref: "#/components/schemas/PaymentStatus"
+        - name: assignedBaristaId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+
+  /api/v1/orders/{orderId}:
+    get:
+      tags: [Service Orders]
+      operationId: getOrder
+      summary: Get order detail with timeline
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      responses:
+        "200":
+          description: Order detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/orders/{orderId}/items:
+    post:
+      tags: [Service Orders]
+      operationId: addOrderItem
+      summary: Add an item using the current backend price snapshot
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddOrderItemRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/orders/{orderId}/items/{itemId}:
+    patch:
+      tags: [Service Orders]
+      operationId: updateOrderItem
+      summary: Update an order item
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+        - $ref: "#/components/parameters/ItemIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderItemRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Service Orders]
+      operationId: deleteOrderItem
+      summary: Delete an order item
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+        - $ref: "#/components/parameters/ItemIdPath"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/orders/{orderId}/cancel:
+    post:
+      tags: [Service Orders]
+      operationId: cancelOrder
+      summary: Cancel an unpaid order
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelOrderRequest"
+      responses:
+        "200":
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v1/menu/categories:
     get:
@@ -599,6 +777,12 @@ components:
       schema:
         type: string
         format: uuid
+    OrderIdPath:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
     CategoryIdQuery:
       name: categoryId
       in: query
@@ -723,6 +907,178 @@ components:
     UserStatus:
       type: string
       enum: [ACTIVE, INACTIVE]
+
+    PaymentStatus:
+      type: string
+      enum: [UNPAID, PENDING, PAID, UNDERPAID, OVERPAID, REVIEW]
+    FulfillmentStatus:
+      type: string
+      enum: [PENDING_PAYMENT, QUEUED, PREPARING, READY, DELIVERED, CANCELLED]
+    PaymentMethod:
+      type: string
+      enum: [QR, CASH]
+    OrderStatusDomain:
+      type: string
+      enum: [PAYMENT, FULFILLMENT]
+
+    CreateOrderItemRequest:
+      type: object
+      additionalProperties: false
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [createdByUserId, items]
+      properties:
+        createdByUserId:
+          type: string
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        customerNote:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateOrderItemRequest"
+    CancelOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        requesterId:
+          type: string
+    AddOrderItemRequest:
+      type: object
+      additionalProperties: false
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+    UpdateOrderItemRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: [string, "null"]
+    OrderItem:
+      type: object
+      required: [id, orderId, menuItemId, itemName, unitPrice, quantity]
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        menuItemId:
+          type: string
+        itemName:
+          type: string
+        unitPrice:
+          type: string
+          description: BigInt amount serialized by the runtime JSON layer.
+        quantity:
+          type: integer
+        note:
+          type: [string, "null"]
+    OrderTimelineEntry:
+      type: object
+      required: [id, orderId, statusDomain, newStatus, createdAt]
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        statusDomain:
+          $ref: "#/components/schemas/OrderStatusDomain"
+        oldStatus:
+          type: [string, "null"]
+        newStatus:
+          type: string
+        changedByUserId:
+          type: [string, "null"]
+        reason:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+    Order:
+      type: object
+      required: [id, orderCode, createdByUserId, paymentStatus, fulfillmentStatus, totalAmount, items, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        orderCode:
+          type: string
+        createdByUserId:
+          type: string
+        assignedBaristaId:
+          type: [string, "null"]
+        paymentMethod:
+          anyOf:
+            - $ref: "#/components/schemas/PaymentMethod"
+            - type: "null"
+        paymentStatus:
+          $ref: "#/components/schemas/PaymentStatus"
+        fulfillmentStatus:
+          $ref: "#/components/schemas/FulfillmentStatus"
+        totalAmount:
+          type: string
+          description: BigInt amount serialized by the runtime JSON layer.
+        customerNote:
+          type: [string, "null"]
+        cancellationReason:
+          type: [string, "null"]
+        paidAt:
+          type: [string, "null"]
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItem"
+        timeline:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderTimelineEntry"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    OrderListResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
 
     AuthUser:
       type: object

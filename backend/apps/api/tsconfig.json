@@ -17,10 +17,16 @@
     "src/config/**/*.ts",
     "src/core/**/*.ts",
     "src/middleware/**/*.ts",
+    "src/modules/admin/**/*.ts",
     "src/modules/auth/**/*.ts",
+    "src/modules/barista/**/*.ts",
     "src/modules/employees/**/*.ts",
     "src/modules/menu/**/*.ts",
+    "src/modules/orders/**/*.ts",
+    "src/modules/order-status-history/**/*.ts",
+    "src/modules/payments/**/*.ts",
     "src/routes/**/*.ts",
     "test/**/*.ts"
-  ]
+  ],
+  "exclude": ["src/**/tests/**/*.ts"]
 }
