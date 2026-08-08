@@ -83,6 +83,19 @@ Status: **implemented**
 - Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
 - Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
 
+## Barista queue
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/barista/queue` | List queued paid orders for barista processing |
+| `GET` | `/api/v1/barista/orders?baristaId=...` | List preparing or ready orders assigned to a barista |
+| `POST` | `/api/v1/orders/:orderId/claim` | Atomically claim a queued order |
+
+- Queue only shows orders with `fulfillmentStatus = QUEUED` and `paymentStatus = PAID`.
+- Claim is atomic at the database layer: only one barista can win a concurrent claim.
+- `GET /barista/orders` requires `baristaId`.
 ## Telegram service-staff menu
 
 ## Public menu
