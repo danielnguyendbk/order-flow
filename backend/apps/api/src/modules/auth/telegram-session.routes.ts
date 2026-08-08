@@ -60,6 +60,6 @@ export function createTelegramSessionRouter(options: TelegramSessionRouterOption
 
 export function createTelegramSessionApp(options: TelegramSessionRouterOptions): Application {
   const app = express();
-  app.use("/api/v1/telegram", createTelegramSessionRouter(options));
+  app.use("/api/v1/telegram/bot", createTelegramSessionRouter(options));
   return app;
 }

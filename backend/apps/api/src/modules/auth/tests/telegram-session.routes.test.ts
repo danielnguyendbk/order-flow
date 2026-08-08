@@ -1,9 +1,9 @@
 import { createServer, type Server } from "node:http";
 
-import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createTelegramSessionRouter } from "../telegram-session.routes";
+import { createApp } from "../../../app";
+import type { AuthServicePort } from "../auth.service";
 import type { TelegramEmployeeRecord, TelegramEmployeeRepository } from "../telegram-session.types";
 
 const secret = "test-internal-secret";
@@ -13,14 +13,16 @@ async function startApi(record: TelegramEmployeeRecord | null): Promise<string> 
   const repository: TelegramEmployeeRepository = {
     findByTelegramUserId: async () => record,
   };
-  const app = express();
-  app.use(express.json());
-  app.use("/api/v1/telegram", createTelegramSessionRouter({ internalSecret: secret, employeeRepository: repository }));
+  const app = createApp({
+    authService: {} as AuthServicePort,
+    mountOperationalRoutes: false,
+    telegramBotSession: { internalSecret: secret, employeeRepository: repository },
+  });
   server = createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Test server did not expose a port");
-  return `http://127.0.0.1:${address.port}/api/v1/telegram/session`;
+  return `http://127.0.0.1:${address.port}/api/v1/telegram/bot/session`;
 }
 
 async function request(url: string, telegramUserId: unknown, botSecret = secret): Promise<Response> {
@@ -37,7 +39,7 @@ afterEach(async () => {
   server = undefined;
 });
 
-describe("POST /api/v1/telegram/session", () => {
+describe("POST /api/v1/telegram/bot/session", () => {
   it("returns an active service employee", async () => {
     const url = await startApi({ id: "employee-1", fullName: "Khoa", telegramUserId: 101n, role: "SERVICE_STAFF", status: "ACTIVE" });
     const response = await request(url, 101);
