@@ -39,6 +39,8 @@ export interface AccessIdentity {
   role: UserRole;
 }
 
+export type AccessRole = UserRole;
+
 export interface TelegramIdentity {
   id: string;
   username?: string;
@@ -56,4 +58,3 @@ export function toPublicAuthUser(user: AuthUser): PublicAuthUser {
     role: user.role,
   };
 }
-
