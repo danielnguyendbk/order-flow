@@ -55,7 +55,7 @@ export class BackendClient implements BackendApi {
   ) {}
 
   async createTelegramSession(telegramUserId: number): Promise<EmployeeSession> {
-    const session = await this.request<unknown>("/telegram/session", {
+    const session = await this.request<unknown>("/telegram/bot/session", {
       method: "POST",
       body: { telegramUserId },
     });

@@ -24,7 +24,7 @@ describe("BackendClient", () => {
     const client = new BackendClient("http://localhost:3000/api/v1", "internal-secret");
     await client.createTelegramSession(123);
 
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3000/api/v1/telegram/session", {
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:3000/api/v1/telegram/bot/session", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -63,7 +63,7 @@ describe("BackendClient", () => {
 
       expect(received).toEqual([
         {
-          url: "/api/v1/telegram/session",
+          url: "/api/v1/telegram/bot/session",
           method: "POST",
           secret: "integration-secret",
         },

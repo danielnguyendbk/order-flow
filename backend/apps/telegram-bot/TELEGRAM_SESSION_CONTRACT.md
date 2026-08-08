@@ -2,8 +2,11 @@
 
 The Telegram Bot is the only caller of this endpoint. The API remains the
 source of truth for employee registration, `active` state, and role.
+This internal endpoint does not issue JWTs. Telegram Web App JWT sessions remain
+available separately at `POST /api/v1/telegram/session` and accept signed
+`initData` instead of a Bot secret.
 
-## `POST /api/v1/telegram/session`
+## `POST /api/v1/telegram/bot/session`
 
 Headers:
 
