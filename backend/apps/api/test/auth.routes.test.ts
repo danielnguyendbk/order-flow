@@ -57,9 +57,10 @@ class FakeAuthService implements AuthServicePort {
 
   async authenticate(
     accessToken: string,
-    requiredRole?: "OWNER",
+    requiredRole?: "OWNER" | "SERVICE_STAFF" | "BARISTA" | Array<"OWNER" | "SERVICE_STAFF" | "BARISTA">,
   ): Promise<AccessIdentity> {
-    if (accessToken !== "access-token" || requiredRole !== "OWNER") {
+    const requiredRoles = Array.isArray(requiredRole) ? requiredRole : requiredRole ? [requiredRole] : [];
+    if (accessToken !== "access-token" || (requiredRoles.length > 0 && !requiredRoles.includes("OWNER"))) {
       throw new AppError("UNAUTHORIZED", "Invalid access token");
     }
     return { userId: user.id, sessionId: "session-id", role: "OWNER" };

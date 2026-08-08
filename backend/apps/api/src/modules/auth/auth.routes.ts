@@ -1,14 +1,14 @@
 import { Router } from "express";
 
 import { AuthController } from "./auth.controller.js";
-import { requireAdminAuth } from "./auth.middleware.js";
+import { requireAdminAccess } from "./auth.middleware.js";
 import type { AuthServicePort } from "./auth.service.js";
 import type { MemoryAuthSessionStore } from "./auth-session.store.js";
 
 export function createAuthRouter(authService: AuthServicePort): Router {
   const router = Router();
   const controller = new AuthController(authService);
-  const adminAuth = requireAdminAuth(authService);
+  const adminAuth = requireAdminAccess(authService);
 
   router.post("/telegram/session", controller.telegramSession);
   router.post("/admin/auth/login", controller.adminLogin);
