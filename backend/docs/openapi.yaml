@@ -53,6 +53,62 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/telegram/bot/session:
+    post:
+      tags: [Telegram Auth]
+      operationId: createTelegramBotSession
+      summary: Resolve an active employee for the internal Telegram Bot
+      x-implementation-status: implemented
+      security: []
+      parameters:
+        - name: x-bot-internal-secret
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [telegramUserId]
+              properties:
+                telegramUserId:
+                  type: integer
+                  minimum: 1
+                  maximum: 9007199254740991
+            example:
+              telegramUserId: 123456789
+      responses:
+        "200":
+          description: Active Telegram employee identity
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [employeeId, telegramUserId, displayName, role]
+                properties:
+                  employeeId:
+                    type: string
+                    format: uuid
+                  telegramUserId:
+                    type: integer
+                  displayName:
+                    type: string
+                  role:
+                    type: string
+                    enum: [MANAGER, SERVICE_STAFF, BARISTA]
+        "400":
+          description: Invalid Telegram user ID
+        "401":
+          description: Invalid internal Bot secret
+        "403":
+          description: Employee is inactive
+        "404":
+          description: Employee is not registered
+
   /api/v1/admin/auth/login:
     post:
       tags: [Admin Auth]

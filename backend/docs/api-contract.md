@@ -9,15 +9,18 @@ Routes explicitly marked **implemented** have handlers, validation, authorizatio
 
 Status: **implemented**
 
-Runtime note: Telegram authentication is optional. When `TELEGRAM_BOT_TOKEN`
-is empty, this endpoint returns HTTP `503` and the rest of the API remains
-available.
+Runtime note: Telegram Web App authentication is optional. When
+`TELEGRAM_BOT_TOKEN` is empty, `/telegram/session` returns HTTP `503` and the
+rest of the API remains available. The internal Bot endpoint uses the separate
+`BOT_INTERNAL_SECRET` shared by the API and Bot, and is mounted only when that
+secret is configured.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/telegram/session` | Create or establish a Telegram user session |
+| `POST` | `/api/v1/telegram/session` | Create a JWT session from signed Telegram Web App data |
+| `POST` | `/api/v1/telegram/bot/session` | Resolve an active employee for the internal Telegram Bot |
 
-Bot requests provide `x-bot-internal-secret` and a numeric `telegramUserId`; the API resolves the employee from `public.users` and rejects unknown or inactive employees.
+Bot requests use `/telegram/bot/session`, provide `x-bot-internal-secret` and a numeric `telegramUserId`; the API resolves the employee from `public.users` and rejects unknown or inactive employees.
 
 Telegram Web App requests omit the internal header and provide:
 
