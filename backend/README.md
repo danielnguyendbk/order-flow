@@ -28,6 +28,30 @@ duplicate business events from creating duplicate notification rows.
 
 Backend workspace skeleton for API, Telegram bot, admin web, shared packages, and Prisma.
 
+## Telegram authentication endpoints
+
+Telegram Web App and the server-side Telegram Bot use separate authentication
+contracts:
+
+| Caller | Endpoint | Authentication | Result |
+| --- | --- | --- | --- |
+| Telegram Web App | `POST /api/v1/telegram/session` | Signed `initData` verified with `TELEGRAM_BOT_TOKEN` | JWT access/refresh session |
+| Telegram Bot | `POST /api/v1/telegram/bot/session` | `x-bot-internal-secret` plus `telegramUserId` | Active employee identity; no JWT |
+
+For local development, the API reads the repository `.env.local`, while the Bot
+reads `apps/telegram-bot/.env`. Set the same non-empty `BOT_INTERNAL_SECRET` in
+both files. Keep `API_BASE_URL=http://localhost:3001/api/v1` in the Bot env.
+Restart both processes after changing code or environment values:
+
+```sh
+npm run dev:api
+npm run dev:bot
+```
+
+The internal Bot endpoint is mounted only when the API has
+`BOT_INTERNAL_SECRET`. Its request and response details are maintained in
+`apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
+
 ## Telegram bot (Khoa)
 
 The Telegram Bot scaffold lives in `apps/telegram-bot`. It authenticates each

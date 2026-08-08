@@ -9,6 +9,7 @@ The repository currently contains two main workspaces: `backend/` and `frontend/
 ```text
 order-flow/
 ├── AGENTS.md                         # This persistent project map
+├── SWIFT_MOBILE_APP_SPEC.md          # OWNER-only, read-only Swift manager dashboard contract
 ├── frontend/                         # Next.js Admin Web Application
 │   ├── src/
 │   │   ├── app/                      # App Router (pages: dashboard, orders, payments, etc.)
@@ -68,8 +69,8 @@ All module directories are under `backend/apps/api/src/modules/`:
 ## Current implementation state
 
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
-- `backend/apps/telegram-bot` is a TypeScript/Telegraf workspace with its own `package.json`, lockfile, environment template, Vitest configuration and notification-worker skeleton.
-- The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/session`, stores only an ephemeral Bot session, and renders role-specific menus.
+- `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
+- The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
 - Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.
 - Baristas can complete the Telegram preparation flow: queue → detail → atomic claim → PREPARING → READY → history. Queue eligibility, active role, assignment ownership and state transitions are enforced by the API.
 - Telegram session, menu, draft-order, CASH/QR and order-status routes are implemented end-to-end according to `backend/apps/telegram-bot/TELEGRAM_SESSION_CONTRACT.md`.
@@ -79,6 +80,13 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
+
+## Progress log — 2026-08-07
+
+- Split the two Telegram authentication contracts: Telegram Web App JWT creation remains `POST /api/v1/telegram/session`, while internal Bot employee resolution now uses `POST /api/v1/telegram/bot/session`.
+- The Bot client now calls `/telegram/bot/session`. The API mounts this route only when `BOT_INTERNAL_SECRET` is configured, and Bot operational requests continue through the internal-secret-gated Telegram order/barista routers.
+- Local API configuration comes from the repository `.env.local`; local Bot configuration comes from `backend/apps/telegram-bot/.env`. Both files must contain the same non-empty `BOT_INTERNAL_SECRET`. The Bot API base URL is `http://localhost:3001/api/v1` by default.
+- Verified after the split: API type-check and 35 API tests pass; Bot type-check and 79 Bot tests, including HTTP E2E flows, pass.
 
 ## Progress log — 2026-08-06
 
@@ -95,7 +103,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - `feat-tele` completes KHOA-003 with authenticated menu/draft APIs, transactional CASH/QR payment selection, mine/status endpoints and Telegram tracking/refresh handlers.
 - Full HTTP E2E tests cover category → item → quantity → note → review → CASH/QR → status; database integration tests remain opt-in through a disposable `TEST_DATABASE_URL`.
 - Verified for KHOA-003: Prisma generate/validate, full API check/build, 20 API tests, Bot check/build and 41 Bot tests all pass.
-- `feat-tele` implements `POST /api/v1/telegram/session` against `public.users`, including internal-secret authentication, active-state enforcement, role mapping and Bot response validation.
+- `feat-tele` implements the internal Bot session against `public.users`, now exposed separately at `POST /api/v1/telegram/bot/session`, including internal-secret authentication, active-state enforcement, role mapping and Bot response validation.
 - Verified locally for KHOA-002: API auth checks and 11 tests pass; Bot type-check/build and 32 tests pass.
 
 - `apps/api` is a runnable Express service; the auth module implements admin JWT sessions and verified Telegram Web App sessions. Session state is held by a bounded process-local memory cache in `auth-session.store.ts`.
@@ -126,7 +134,9 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Local database infrastructure: use `backend/docker-compose.yml`.
 - Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
 - Postman/API generation: import `backend/docs/openapi.yaml`; keep it synchronized with route behavior and `api-contract.md`.
+- Swift mobile work: start at `SWIFT_MOBILE_APP_SPEC.md`; the MVP is an OWNER-only, read-only manager dashboard and explicitly excludes service-staff/Barista actions.
 - Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
+- Telegram authentication: Web App JWT flow is registered in `backend/apps/api/src/modules/auth/auth.routes.ts`; internal Bot employee resolution is implemented in `telegram-session.routes.ts` and mounted at `/api/v1/telegram/bot/session` from `apps/api/src/app.ts`.
 - Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 
