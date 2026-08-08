@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AppError } from "../../core/errors.js";
+import { AppError } from "../../../core/errors.js";
 import type { AuthServicePort } from "../../auth/auth.service.js";
 import { createAdminRouter } from "../admin.routes";
 import { FulfillmentStatus, OrderStatusDomain, PaymentStatus } from "../../orders/order.types";
@@ -110,6 +110,9 @@ function fakeOrderService(overrides: Partial<Record<string, unknown>> = {}) {
 
 async function startApi() {
   const app = express();
+  app.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
   app.use(express.json());
   app.use(
     "/api/v1/admin",
