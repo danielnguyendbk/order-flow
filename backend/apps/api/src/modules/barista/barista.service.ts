@@ -16,6 +16,7 @@ export class BaristaService {
     const orders = await prisma.order.findMany({
       where: {
         fulfillmentStatus: FulfillmentStatus.QUEUED as any,
+        paymentStatus: "PAID",
       },
       include:  { items: true },
       orderBy:  { createdAt: "asc" },

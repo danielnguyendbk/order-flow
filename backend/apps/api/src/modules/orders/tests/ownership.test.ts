@@ -83,6 +83,15 @@ describe("Order Ownership and Authorization", () => {
         "Only the assigned barista or a manager can mark this order as READY"
       );
     });
+
+    it("should block the order creator from marking READY when not assigned", async () => {
+      orderRepositoryMock.findById.mockResolvedValue(mockOrder as any);
+      prismaInstance.user.findUnique.mockResolvedValue({ id: "customer-creator", role: "BARISTA" });
+
+      await expect(orderService.markReady("order-1", "customer-creator")).rejects.toThrow(
+        "Only the assigned barista or a manager can mark this order as READY"
+      );
+    });
   });
 
   describe("deliverOrder", () => {
@@ -119,6 +128,16 @@ describe("Order Ownership and Authorization", () => {
       await expect(orderService.deliverOrder("order-1", "other-user")).rejects.toThrow(
         "Only the creator of the order or a manager can mark it as DELIVERED"
       );
+    });
+
+    it("should allow the creator to mark DELIVERED even when role is not manager", async () => {
+      orderRepositoryMock.findById.mockResolvedValue(mockOrder as any);
+      prismaInstance.user.findUnique.mockResolvedValue({ id: "customer-creator", role: "BARISTA" });
+      orderRepositoryMock.updateFulfillmentStatus.mockResolvedValue({} as any);
+
+      await orderService.deliverOrder("order-1", "customer-creator");
+
+      expect(orderRepositoryMock.updateFulfillmentStatus).toHaveBeenCalledWith("order-1", FulfillmentStatus.DELIVERED);
     });
   });
 });

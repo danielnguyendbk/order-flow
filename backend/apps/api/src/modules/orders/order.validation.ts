@@ -140,8 +140,8 @@ export function validateOverrideStatus(data: any): ValidationResult {
     errors.push(`status for domain ${data.domain} must be one of: ${validStatuses.join(", ")}`);
   }
 
-  if (!data.adminId || typeof data.adminId !== "string") {
-    errors.push("adminId is required");
+  if (!data.reason || typeof data.reason !== "string" || data.reason.trim() === "") {
+    errors.push("reason is required");
   }
 
   return { isValid: errors.length === 0, errors };

@@ -23,6 +23,10 @@ import {
 
 const prisma = new PrismaClient();
 
+function isRecordNotFoundError(error: unknown): boolean {
+  return (error as { code?: string }).code === "P2025";
+}
+
 /**
  * Orchestrates all business logic for the Order entity.
  * Coordinates OrderRepository, PaymentRepository, and HistoryRepository.
@@ -183,7 +187,14 @@ export class OrderService {
       note:       item.note
     };
 
-    return this.orderRepository.addItem(orderId, enriched);
+    try {
+      return await this.orderRepository.addItem(orderId, enriched);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        throw createHttpError(409, "Order is no longer editable");
+      }
+      throw error;
+    }
   }
 
   /**
@@ -216,7 +227,14 @@ export class OrderService {
       throw createHttpError(400, "Quantity must be greater than 0");
     }
 
-    return this.orderRepository.updateItem(orderId, itemId, input);
+    try {
+      return await this.orderRepository.updateItem(orderId, itemId, input);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        throw createHttpError(409, "Order is no longer editable");
+      }
+      throw error;
+    }
   }
 
   /**
@@ -250,7 +268,14 @@ export class OrderService {
       throw createHttpError(400, "Cannot remove the last item from an order");
     }
 
-    return this.orderRepository.deleteItem(orderId, itemId);
+    try {
+      return await this.orderRepository.deleteItem(orderId, itemId);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        throw createHttpError(409, "Order is no longer editable");
+      }
+      throw error;
+    }
   }
 
   /**
