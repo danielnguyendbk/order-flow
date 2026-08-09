@@ -1,89 +1,162 @@
+<<<<<<< HEAD
 import "./config/load-env";
 import express, { Application, Request, Response, NextFunction } from "express";
 import { createOrderRouter }  from "./modules/orders/order.routes";
 import { createBaristaRouter } from "./modules/barista/barista.routes";
 import { createAdminRouter }  from "./modules/admin/admin.routes";
 import { createSepayRouter } from "./modules/sepay/sepay.routes";
+=======
+import express, {
+  type Application,
+} from "express";
+>>>>>>> origin/dev
 
-// ── BigInt JSON serialization fix ─────────────────────────────
-// Prisma returns BigInt for columns declared as bigint.
-// JSON.stringify does not support BigInt natively.
-// For VND amounts (max ~quadrillions), Number is safe up to 2^53.
-(BigInt.prototype as any).toJSON = function () {
-  return Number(this);
-};
+import { createDatabasePool } from "./config/database.js";
+import { getEnv } from "./config/env.js";
+import { errorHandler, notFound, requestId } from "./middleware/index.js";
+import { AuthRepository } from "./modules/auth/auth.repository.js";
+import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
+import { AuthService, type AuthServicePort } from "./modules/auth/auth.service.js";
+import { AuthTokenService } from "./modules/auth/auth.tokens.js";
+import {
+  createTelegramSessionRouter,
+  type TelegramSessionRouterOptions,
+} from "./modules/auth/telegram-session.routes.js";
+import {
+  createTelegramBaristaRouter,
+  type TelegramBaristaRouterOptions,
+} from "./modules/barista/telegram-barista.routes.js";
+import { EmployeeRepository } from "./modules/employees/employee.repository.js";
+import {
+  EmployeeService,
+  type EmployeeServicePort,
+} from "./modules/employees/employee.service.js";
+import { CategoryRepository } from "./modules/menu/category.repository.js";
+import {
+  CategoryService,
+  type CategoryServicePort,
+} from "./modules/menu/category.service.js";
+import { ItemRepository } from "./modules/menu/item.repository.js";
+import { ItemService, type ItemServicePort } from "./modules/menu/item.service.js";
+import {
+  createTelegramOrderRouter,
+  type TelegramOrderRouterOptions,
+} from "./modules/orders/telegram-order.routes.js";
+import { createApiRouter } from "./routes/index.js";
 
-/**
- * Creates and configures the Express application.
- *
- * Route map (/api/v1):
- *
- *   POST   /orders
- *   GET    /orders
- *   GET    /orders/:orderId
- *   POST   /orders/:orderId/items
- *   PATCH  /orders/:orderId/items/:itemId
- *   DELETE /orders/:orderId/items/:itemId
- *   POST   /orders/:orderId/cancel
- *   POST   /orders/:orderId/claim
- *   POST   /orders/:orderId/ready
- *   POST   /orders/:orderId/deliver
- *
- *   GET    /barista/queue
- *   GET    /barista/orders
- *
- *   GET    /admin/orders
- *   GET    /admin/orders/:orderId
- *   POST   /admin/orders/:orderId/override-status
- */
-export function createApp(): Application {
+export interface CreateAppOptions {
+  authService?: AuthServicePort;
+  mountOperationalRoutes?: boolean;
+  employeeService?: EmployeeServicePort;
+  categoryService?: CategoryServicePort;
+  itemService?: ItemServicePort;
+  telegramBotSession?: TelegramSessionRouterOptions;
+  /** @deprecated Use telegramBotSession. */
+  telegramSession?: TelegramSessionRouterOptions;
+  telegramOrders?: Omit<TelegramOrderRouterOptions, "internalSecret">;
+  telegramBarista?: Omit<TelegramBaristaRouterOptions, "internalSecret">;
+}
+
+export function createApp(options: CreateAppOptions = {}): Application {
   const app = express();
+  let authService = options.authService;
+  let employeeService = options.employeeService;
+  let categoryService = options.categoryService;
+  let itemService = options.itemService;
+  let telegramBotSession = options.telegramBotSession ?? options.telegramSession;
+  let dispose = async () => undefined;
+  const botOnly =
+    !authService &&
+    Boolean(telegramBotSession || options.telegramOrders || options.telegramBarista);
 
-  // ── Middleware ────────────────────────────────────────────────
-  app.use(express.json());
+  if (!authService && !botOnly) {
+    const env = getEnv();
+    const pool = createDatabasePool(env);
+    const sessions = new MemoryAuthSessionStore(env.AUTH_SESSION_CACHE_MAX);
+    authService = new AuthService(
+      new AuthRepository(pool),
+      sessions,
+      new AuthTokenService(env),
+      env,
+    );
+    employeeService = new EmployeeService(new EmployeeRepository(pool));
+    categoryService = new CategoryService(new CategoryRepository(pool));
+    itemService = new ItemService(new ItemRepository(pool));
+    if (!telegramBotSession && env.BOT_INTERNAL_SECRET) {
+      telegramBotSession = { internalSecret: env.BOT_INTERNAL_SECRET };
+    }
+    dispose = async () => {
+      sessions.clear();
+      await pool.end();
+    };
+  }
+
+  app.locals.dispose = dispose;
+  app.use(requestId);
+  app.set("json replacer", (_key: string, value: unknown) =>
+    typeof value === "bigint" ? value.toString() : value,
+  );
+  app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // ── Health check ──────────────────────────────────────────────
-  app.get("/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", service: "order-flow-api" });
+  app.get("/health", (_request, response) => {
+    response.json({ status: "ok", service: "order-flow-api" });
   });
 
-  // ── API v1 routes ─────────────────────────────────────────────
   const apiV1 = express.Router();
+  const botInternalSecret =
+    telegramBotSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
 
+<<<<<<< HEAD
   apiV1.use("/orders",  createOrderRouter());
   apiV1.use("/barista", createBaristaRouter());
   apiV1.use("/admin",   createAdminRouter());
   apiV1.use("/webhooks/sepay", createSepayRouter());
+=======
+  if (botInternalSecret) {
+    apiV1.use(
+      "/telegram/bot",
+      createTelegramSessionRouter(
+        telegramBotSession ?? { internalSecret: botInternalSecret },
+      ),
+    );
+>>>>>>> origin/dev
 
+    const telegramOperationalRouter = express.Router();
+    telegramOperationalRouter.use(
+      createTelegramOrderRouter({
+        internalSecret: botInternalSecret,
+        ...options.telegramOrders,
+      }),
+    );
+    telegramOperationalRouter.use(
+      createTelegramBaristaRouter({
+        internalSecret: botInternalSecret,
+        ...options.telegramBarista,
+      }),
+    );
+    apiV1.use((request, response, next) => {
+      if (!request.header("x-bot-internal-secret")) {
+        next();
+        return;
+      }
+      telegramOperationalRouter(request, response, next);
+    });
+  }
+
+  if (authService) {
+    apiV1.use(createApiRouter(
+      authService,
+      options.mountOperationalRoutes ?? options.authService === undefined,
+      employeeService,
+      categoryService,
+      itemService,
+    ));
+  }
   app.use("/api/v1", apiV1);
 
-  // ── 404 handler ───────────────────────────────────────────────
-  app.use((_req: Request, res: Response) => {
-    res.status(404).json({ message: "Route not found" });
-  });
-
-  // ── Global error handler ──────────────────────────────────────
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status  = err.statusCode ?? err.status ?? 500;
-    const message = err.message ?? "Internal Server Error";
-    res.status(status).json({
-      message,
-      ...(process.env.NODE_ENV !== "production" && err.stack
-        ? { stack: err.stack }
-        : {}),
-    });
-  });
+  app.use(notFound);
+  app.use(errorHandler);
 
   return app;
 }
-
-// ── Entry point ───────────────────────────────────────────────
-const PORT = process.env.PORT ?? 3000;
-const app  = createApp();
-
-app.listen(PORT, () => {
-  console.log(`[order-flow-api] listening on http://localhost:${PORT}`);
-});
-
-export default app;

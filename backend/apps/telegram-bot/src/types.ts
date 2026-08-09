@@ -13,6 +13,8 @@ export interface BotSession {
   employee?: EmployeeSession;
   /** Callback IDs currently being processed. Prevents accidental double taps. */
   pendingCallbacks?: string[];
+  /** Recently completed mutation keys. Prevents rapid sequential callback replay. */
+  completedCallbacks?: Record<string, number>;
   draftOrder?: DraftOrderSession;
 }
 
@@ -20,6 +22,7 @@ export type DraftOrderStep = "CATEGORY" | "ITEM" | "QUANTITY" | "NOTE" | "EDIT_Q
 
 export interface DraftOrderSession {
   orderId: string;
+  callbackRevision: string;
   step: DraftOrderStep;
   categoryId?: string;
   selectedMenuItemId?: string;

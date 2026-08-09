@@ -33,25 +33,27 @@ export class AdminController {
   // GET /api/v1/admin/orders/:orderId
   public getOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const order = await this.adminService.getOrderById(req.params.orderId);
+      const order = await this.adminService.getOrderById(String(req.params.orderId));
       res.status(200).json(order);
     } catch (err) { next(err); }
   };
 
   // POST /api/v1/admin/orders/:orderId/override-status
-  // Body: { domain: "FULFILLMENT"|"PAYMENT", status, adminId, reason? }
+  // Body: { domain: "FULFILLMENT"|"PAYMENT", status, reason }
   public overrideStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const v = validateOverrideStatus(req.body);
       if (!v.isValid) { res.status(400).json({ message: "Validation failed", errors: v.errors }); return; }
 
-      const { domain, status, adminId, reason } = req.body;
+      if (!req.auth) { res.status(401).json({ message: "Authentication required" }); return; }
+
+      const { domain, status, reason } = req.body;
 
       const order = await this.adminService.overrideStatus(
-        req.params.orderId,
+        String(req.params.orderId),
         domain as OrderStatusDomain,
         status as FulfillmentStatus | PaymentStatus,
-        adminId,
+        req.auth.userId,
         reason
       );
       res.status(200).json(order);

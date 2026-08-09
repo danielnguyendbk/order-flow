@@ -52,6 +52,17 @@ export interface OrderItem {
   note?:     string | null;
 }
 
+export interface OrderTimelineEntry {
+  id:               string;
+  orderId:          string;
+  statusDomain:     OrderStatusDomain;
+  oldStatus?:       string | null;
+  newStatus:        string;
+  changedByUserId?: string | null;
+  reason?:          string | null;
+  createdAt:        Date;
+}
+
 /**
  * Full Order entity matching the `orders` table.
  */
@@ -68,6 +79,7 @@ export interface Order {
   cancellationReason?: string | null;
   paidAt?:            Date | null;
   items:              OrderItem[];
+  timeline?:          OrderTimelineEntry[];
   createdAt:          Date;
   updatedAt:          Date;
 }

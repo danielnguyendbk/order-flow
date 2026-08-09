@@ -3,6 +3,15 @@ import { Order, OrderFilters, PaginatedResult } from "../orders/order.types";
 
 const prisma = new PrismaClient();
 
+function toOrderWithTimeline(order: unknown): Order {
+  const data = order as any;
+  if (data.history !== undefined) {
+    data.timeline = data.history;
+    delete data.history;
+  }
+  return data as Order;
+}
+
 /**
  * Repository for admin-level unrestricted order access.
  * Includes full history in detailed views.
@@ -40,7 +49,7 @@ export class AdminOrderRepository {
       prisma.order.count({ where }),
     ]);
 
-    return { data: data as unknown as Order[], total, page, limit };
+    return { data: data.map(toOrderWithTimeline), total, page, limit };
   }
 
   /**
@@ -51,6 +60,6 @@ export class AdminOrderRepository {
       where:   { id },
       include: { items: true, history: { orderBy: { createdAt: "asc" } } },
     });
-    return order as unknown as Order | null;
+    return order ? toOrderWithTimeline(order) : null;
   }
 }
