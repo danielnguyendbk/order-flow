@@ -2,11 +2,13 @@ import { NextFunction, Request, Response } from "express";
 import { PaymentService } from "./payment.service";
 import { validateConfirmCash, validateInitQrPayment } from "./payment.validation";
 
+type OrderParams = { orderId: string };
+
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
   public listOrderPayments = async (
-    req: Request,
+    req: Request<OrderParams>,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
@@ -19,7 +21,7 @@ export class PaymentController {
   };
 
   public confirmCash = async (
-    req: Request,
+    req: Request<OrderParams>,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
@@ -38,7 +40,7 @@ export class PaymentController {
   };
 
   public initQrPayment = async (
-    req: Request,
+    req: Request<OrderParams>,
     res: Response,
     next: NextFunction
   ): Promise<void> => {

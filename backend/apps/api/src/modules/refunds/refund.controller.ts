@@ -2,10 +2,16 @@ import { NextFunction, Request, Response } from "express";
 import { RefundService } from "./refund.service";
 import { validateRefundOrder } from "./refund.validation";
 
+type RefundParams = { orderId: string };
+
 export class RefundController {
   constructor(private readonly refundService: RefundService) {}
 
-  public refundOrder = async (req: Request, res: Response, next: NextFunction) => {
+  public refundOrder = async (
+    req: Request<RefundParams>,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       const v = validateRefundOrder(req.body);
       if (!v.isValid) {
@@ -21,4 +27,3 @@ export class RefundController {
     }
   };
 }
-

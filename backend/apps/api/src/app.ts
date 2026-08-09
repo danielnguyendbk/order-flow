@@ -1,15 +1,7 @@
-<<<<<<< HEAD
 import "./config/load-env";
-import express, { Application, Request, Response, NextFunction } from "express";
-import { createOrderRouter }  from "./modules/orders/order.routes";
-import { createBaristaRouter } from "./modules/barista/barista.routes";
-import { createAdminRouter }  from "./modules/admin/admin.routes";
+
+import express, { type Application } from "express";
 import { createSepayRouter } from "./modules/sepay/sepay.routes";
-=======
-import express, {
-  type Application,
-} from "express";
->>>>>>> origin/dev
 
 import { createDatabasePool } from "./config/database.js";
 import { getEnv } from "./config/env.js";
@@ -107,12 +99,6 @@ export function createApp(options: CreateAppOptions = {}): Application {
   const botInternalSecret =
     telegramBotSession?.internalSecret ?? process.env.BOT_INTERNAL_SECRET ?? "";
 
-<<<<<<< HEAD
-  apiV1.use("/orders",  createOrderRouter());
-  apiV1.use("/barista", createBaristaRouter());
-  apiV1.use("/admin",   createAdminRouter());
-  apiV1.use("/webhooks/sepay", createSepayRouter());
-=======
   if (botInternalSecret) {
     apiV1.use(
       "/telegram/bot",
@@ -120,7 +106,6 @@ export function createApp(options: CreateAppOptions = {}): Application {
         telegramBotSession ?? { internalSecret: botInternalSecret },
       ),
     );
->>>>>>> origin/dev
 
     const telegramOperationalRouter = express.Router();
     telegramOperationalRouter.use(
@@ -143,6 +128,8 @@ export function createApp(options: CreateAppOptions = {}): Application {
       telegramOperationalRouter(request, response, next);
     });
   }
+
+  apiV1.use("/webhooks/sepay", createSepayRouter());
 
   if (authService) {
     apiV1.use(createApiRouter(

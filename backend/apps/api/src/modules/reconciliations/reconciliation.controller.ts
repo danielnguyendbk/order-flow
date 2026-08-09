@@ -2,6 +2,9 @@ import { NextFunction, Request, Response } from "express";
 import { ReconciliationService } from "./reconciliation.service";
 import { validateResolveReconciliation } from "./reconciliation.validation";
 
+type TransactionParams = { transactionId: string };
+type ReconciliationParams = { reconciliationId: string };
+
 export class ReconciliationController {
   constructor(private readonly service: ReconciliationService) {}
 
@@ -13,7 +16,11 @@ export class ReconciliationController {
     }
   };
 
-  public getTransaction = async (req: Request, res: Response, next: NextFunction) => {
+  public getTransaction = async (
+    req: Request<TransactionParams>,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       res.status(200).json(await this.service.getTransaction(req.params.transactionId));
     } catch (err) {
@@ -29,7 +36,11 @@ export class ReconciliationController {
     }
   };
 
-  public getReconciliation = async (req: Request, res: Response, next: NextFunction) => {
+  public getReconciliation = async (
+    req: Request<ReconciliationParams>,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       res.status(200).json(await this.service.getReconciliation(req.params.reconciliationId));
     } catch (err) {
@@ -37,7 +48,11 @@ export class ReconciliationController {
     }
   };
 
-  public resolveReconciliation = async (req: Request, res: Response, next: NextFunction) => {
+  public resolveReconciliation = async (
+    req: Request<ReconciliationParams>,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       const v = validateResolveReconciliation(req.body);
       if (!v.isValid) {
@@ -53,4 +68,3 @@ export class ReconciliationController {
     }
   };
 }
-

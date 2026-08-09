@@ -21,7 +21,6 @@
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
-    "test:api": "vitest run --config apps/api/vitest.config.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "seed:thai": "tsx prisma/seed.ts thai",
     "seed:thai001": "tsx prisma/seed.ts thai001",
@@ -32,22 +31,14 @@
     "seed:thai006": "tsx prisma/seed.ts thai006"
   },
   "dependencies": {
-<<<<<<< HEAD
-    "@prisma/client": "^5.14.0",
-=======
     "@prisma/client": "6.19.0",
     "bcryptjs": "^3.0.3",
->>>>>>> origin/dev
     "bullmq": "^5.58.0",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
-<<<<<<< HEAD
-    "prisma": "^5.14.0",
-=======
     "prisma": "6.19.0",
->>>>>>> origin/dev
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
