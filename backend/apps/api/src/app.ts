@@ -1,6 +1,7 @@
-import express, {
-  type Application,
-} from "express";
+import "./config/load-env";
+
+import express, { type Application } from "express";
+import { createSepayRouter } from "./modules/sepay/sepay.routes";
 
 import { createDatabasePool } from "./config/database.js";
 import { getEnv } from "./config/env.js";
@@ -127,6 +128,8 @@ export function createApp(options: CreateAppOptions = {}): Application {
       telegramOperationalRouter(request, response, next);
     });
   }
+
+  apiV1.use("/webhooks/sepay", createSepayRouter());
 
   if (authService) {
     apiV1.use(createApiRouter(
