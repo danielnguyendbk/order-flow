@@ -11,7 +11,7 @@
     "test:auth": "vitest run --config vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:auth:integration": "vitest run --config vitest.integration.config.ts",
-    "test:node": "tsx --test test/**/*.test.ts"
+    "test:node": "node --import tsx --test test/auth-session.store.test.ts test/auth.routes.test.ts test/auth.service.test.ts test/database.test.ts test/employees.routes.test.ts test/menu-categories.routes.test.ts test/menu-items.routes.test.ts test/shared-middleware.test.ts test/telegram-init-data.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

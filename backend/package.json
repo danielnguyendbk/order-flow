@@ -20,7 +20,15 @@
     "db:seed": "prisma db seed --schema prisma/schema.prisma",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
-    "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts"
+    "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "seed:thai": "tsx prisma/seed.ts thai",
+    "seed:thai001": "tsx prisma/seed.ts thai001",
+    "seed:thai002": "tsx prisma/seed.ts thai002",
+    "seed:thai003": "tsx prisma/seed.ts thai003",
+    "seed:thai004": "tsx prisma/seed.ts thai004",
+    "seed:thai005": "tsx prisma/seed.ts thai005",
+    "seed:thai006": "tsx prisma/seed.ts thai006"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
