@@ -62,6 +62,7 @@ Status: **implemented**
 | `POST` | `/api/v1/admin/auth/refresh` | Refresh an administrator session/token |
 | `POST` | `/api/v1/admin/auth/logout` | End an administrator session |
 | `GET` | `/api/v1/admin/auth/me` | Return the current administrator profile |
+| `GET` | `/api/v1/admin/auth/debug/sessions` | Development-only session cache inspection |
 
 - Login body: `{ "username": "...", "password": "..." }`
 - Refresh body: `{ "refreshToken": "..." }`
@@ -71,6 +72,7 @@ Status: **implemented**
 - Logout returns HTTP `204`.
 - Refresh tokens rotate on every use. Reuse of an old refresh token revokes its in-memory session.
 - Sessions are process-local: restarting the API logs everyone out, and separate API instances do not share sessions.
+- Debug sessions route is mounted only outside `production` and is not part of the production contract.
 
 ## Service orders
 
@@ -82,6 +84,8 @@ Status: **implemented**
 | `GET` | `/api/v1/orders` | List service orders |
 | `GET` | `/api/v1/orders/:orderId` | Get order detail |
 | `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid order |
+| `POST` | `/api/v1/orders/:orderId/ready` | Mark a preparing order ready |
+| `POST` | `/api/v1/orders/:orderId/deliver` | Mark a ready order delivered |
 
 - Create body: `{ "createdByUserId": "...", "paymentMethod": "QR|CASH", "customerNote": "...", "items": [{ "menuItemId": "...", "quantity": 1, "note": "..." }] }`.
 - New orders start with `paymentStatus: "UNPAID"` and `fulfillmentStatus: "PENDING_PAYMENT"` from database defaults.
@@ -89,6 +93,8 @@ Status: **implemented**
 - `GET /orders` supports `createdByUserId`, `fulfillmentStatus`, `paymentStatus`, `assignedBaristaId`, `page`, and `limit`; service staff can pass their own `createdByUserId` to list their own service orders.
 - `GET /orders/:orderId` returns `items` and `timeline`, where `timeline` is status history ordered oldest-first.
 - Cancel body: `{ "reason": "...", "requesterId": "..." }`. Unpaid pending-payment orders can be cancelled and the cancellation is recorded in `timeline`.
+- READY body: `{ "requesterId": "..." }`, or `baristaId`/`userId`. Only the assigned barista or a manager can mark READY.
+- DELIVER body: `{ "requesterId": "..." }`, or `baristaId`/`userId`. Only the creator or a manager can mark DELIVERED.
 
 ## Order items
 
@@ -105,6 +111,21 @@ Status: **implemented**
 - Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
 - Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
 
+## Payments
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/orders/:orderId/payments` | List payment records for an order |
+| `POST` | `/api/v1/orders/:orderId/payments/qr` | Initialize or reuse a QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Confirm a CASH payment and queue the order |
+
+- `GET /orders/:orderId/payments` returns the linked payment history for the order.
+- QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
+- CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
+- CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
+
 ## Barista queue
 
 Status: **implemented**
@@ -118,19 +139,17 @@ Status: **implemented**
 - Queue only shows orders with `fulfillmentStatus = QUEUED` and `paymentStatus = PAID`.
 - Claim is atomic at the database layer: only one barista can win a concurrent claim.
 - `GET /barista/orders` requires `baristaId`.
-## Telegram service-staff menu
 
 ## Public menu
+
+Status: **implemented**
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/menu/categories` | List public menu categories |
 | `GET` | `/api/v1/menu/items` | List public menu items |
 
-Implementation status: **implemented**. Public requests return only active
-categories and available items. Bot operational requests with
-`x-bot-internal-secret` and `x-telegram-user-id` also re-check the employee
-identity and active state.
+Implementation status: **implemented for authenticated Telegram service staff**. Both routes re-check the employee identity and active state.
 
 ## Telegram service-staff orders
 
@@ -167,6 +186,8 @@ write history within the same serializable transaction.
 
 ## Admin employees
 
+Status: **implemented**
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/admin/employees` | List employees |
@@ -178,6 +199,8 @@ write history within the same serializable transaction.
 
 ## Admin menu categories
 
+Status: **implemented**
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/admin/menu-categories` | List menu categories for administration |
@@ -187,6 +210,8 @@ write history within the same serializable transaction.
 
 ## Admin menu items
 
+Status: **implemented**
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/admin/menu-items` | List menu items for administration |
@@ -195,12 +220,29 @@ write history within the same serializable transaction.
 | `PATCH` | `/api/v1/admin/menu-items/:itemId` | Partially update a menu item |
 | `DELETE` | `/api/v1/admin/menu-items/:itemId` | Delete a menu item |
 
+## Admin orders
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/orders` | List all orders with filters |
+| `GET` | `/api/v1/admin/orders/:orderId` | Get an order with items and timeline |
+| `POST` | `/api/v1/admin/orders/:orderId/override-status` | Override fulfillment or payment status |
+
+- All routes require an authenticated admin session.
+- Override body includes `domain`, `status`, `adminId`, and optional `reason`; terminal fulfillment statuses cannot be overridden.
+
 ## Implementation ownership
 
 | Route group | API module |
 | --- | --- |
 | Telegram session | `apps/api/src/modules/auth/` with Telegram integration as needed |
 | Admin authentication | `apps/api/src/modules/auth/` |
+| Service orders, items and public ownership actions | `apps/api/src/modules/orders/` |
+| Payments and payment transitions | `apps/api/src/modules/payments/` plus order status updates in `apps/api/src/modules/orders/` |
+| Barista queue and public claim view | `apps/api/src/modules/barista/` plus claim handling in `apps/api/src/modules/orders/` |
+| Admin orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
 | Telegram service-staff orders and payments | `apps/api/src/modules/orders/` |
 | Telegram Barista queue and processing | `apps/api/src/modules/barista/` |
