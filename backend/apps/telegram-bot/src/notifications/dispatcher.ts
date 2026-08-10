@@ -7,9 +7,13 @@ import type { NotificationJob } from "./types.js";
 export async function dispatchPendingNotifications(
   database: PrismaClient,
   queue: Queue<NotificationJob>,
+  notBefore?: Date,
 ): Promise<number> {
   const notifications = await database.notification.findMany({
-    where: { status: { in: ["PENDING", "RETRYING"] } },
+    where: {
+      status: { in: ["PENDING", "RETRYING"] },
+      ...(notBefore ? { createdAt: { gte: notBefore } } : {}),
+    },
     select: { id: true },
     orderBy: { createdAt: "asc" },
     take: 100,
@@ -21,13 +25,14 @@ export async function dispatchPendingNotifications(
 export function startNotificationDispatcher(
   database: PrismaClient,
   queue: Queue<NotificationJob>,
-  intervalMs = 5_000,
+  notBefore?: Date,
+  intervalMs = 1_000,
 ): NodeJS.Timeout {
   let dispatching = false;
   return setInterval(() => {
     if (dispatching) return;
     dispatching = true;
-    void dispatchPendingNotifications(database, queue)
+    void dispatchPendingNotifications(database, queue, notBefore)
       .catch((error) => console.error("Notification dispatch failed", error))
       .finally(() => { dispatching = false; });
   }, intervalMs);

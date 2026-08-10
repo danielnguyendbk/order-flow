@@ -4,7 +4,9 @@ import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { BaristaOrder, BaristaOrderHistory } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
-import { baristaHistoryKeyboard, baristaOrderKeyboard, baristaOrdersKeyboard } from "../keyboards/barista-order.js";
+import { paymentStatusLabel, statusDomainLabel, statusTransitionLabel } from "../formatters/order-status.js";
+import { baristaHistoryKeyboard, baristaOrderKeyboard, baristaOrdersKeyboard, baristaStatusLabel } from "../keyboards/barista-order.js";
+import { baristaQuickKeyboard } from "../keyboards/role-menu.js";
 import type { BotContext, BotSession, EmployeeSession } from "../types.js";
 import { isAccessDenied } from "./start.handler.js";
 
@@ -26,28 +28,58 @@ function formatMoney(amount: number): string {
 
 export function formatBaristaOrder(order: BaristaOrder): string {
   const items = order.items.map((item, index) =>
-    `${index + 1}. ${item.name} × ${item.quantity}${item.note ? `\n   Ghi chú: ${item.note}` : ""}`,
+    `${index + 1}. ${item.quantity} × ${item.name}${item.note ? `\n   LƯU Ý: ${item.note}` : ""}`,
   );
+  const count = order.items.reduce((total, item) => total + item.quantity, 0);
   return [
-    `Đơn ${order.code}`,
-    `Thanh toán: ${order.paymentStatus}`,
-    `Pha chế: ${order.fulfillmentStatus}`,
-    `Tổng tiền: ${formatMoney(order.totalAmount)}`,
+    `☕ ĐƠN ${order.code}`,
+    `Trạng thái: ${baristaStatusLabel(order.fulfillmentStatus)}`,
+    `Số món: ${count}`,
     "",
     ...(items.length ? items : ["Không có món."]),
+    "",
+    `Tổng: ${formatMoney(order.totalAmount)} · Thanh toán: ${paymentStatusLabel(order.paymentStatus)}`,
+  ].join("\n");
+}
+
+function elapsedLabel(createdAt: string): string {
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60_000));
+  if (elapsedMinutes < 60) return `${elapsedMinutes} phút`;
+  const hours = Math.floor(elapsedMinutes / 60);
+  return `${hours} giờ ${elapsedMinutes % 60} phút`;
+}
+
+export function formatBaristaOrderList(title: string, orders: BaristaOrder[]): string {
+  const visible = orders.slice(0, 10);
+  const lines = visible.flatMap((order, index) => {
+    const count = order.items.reduce((total, item) => total + item.quantity, 0);
+    const itemSummary = order.items.map((item) => `${item.quantity}× ${item.name}`).join(", ");
+    return [
+      `${index + 1}. ${order.code} · ${count} món · ${elapsedLabel(order.createdAt)}`,
+      `   ${itemSummary || "Không có món"}`,
+    ];
+  });
+  return [
+    `${title} · ${orders.length} đơn`,
+    "",
+    ...lines,
+    ...(orders.length > visible.length ? ["", `Đang hiển thị ${visible.length}/${orders.length} đơn.`] : []),
   ].join("\n");
 }
 
 function formatHistory(history: BaristaOrderHistory[]): string {
   if (!history.length) return "Đơn chưa có lịch sử trạng thái.";
   return history.map((entry) => {
-    const transition = entry.oldStatus ? `${entry.oldStatus} → ${entry.newStatus}` : entry.newStatus;
-    return `${new Date(entry.createdAt).toLocaleString("vi-VN")} · ${entry.statusDomain}: ${transition}`;
+    const newStatus = statusTransitionLabel(entry.statusDomain, entry.newStatus);
+    const transition = entry.oldStatus
+      ? `${statusTransitionLabel(entry.statusDomain, entry.oldStatus)} → ${newStatus}`
+      : newStatus;
+    return `${new Date(entry.createdAt).toLocaleString("vi-VN")} · ${statusDomainLabel(entry.statusDomain)}: ${transition}`;
   }).join("\n");
 }
 
-async function requireBarista(ctx: BaristaOrderContext, api: BackendApi): Promise<EmployeeSession | undefined> {
-  const employee = await authenticateEmployee(ctx, api);
+async function requireBarista(ctx: BaristaOrderContext, api: BackendApi, authenticatedEmployee?: EmployeeSession): Promise<EmployeeSession | undefined> {
+  const employee = authenticatedEmployee ?? await authenticateEmployee(ctx, api);
   if (employee.role !== "BARISTA") {
     await ctx.reply("Bạn không có quyền thao tác hàng đợi pha chế.");
     return undefined;
@@ -55,33 +87,49 @@ async function requireBarista(ctx: BaristaOrderContext, api: BackendApi): Promis
   return employee;
 }
 
-export async function showBaristaQueue(ctx: BaristaOrderContext, api: BackendApi): Promise<void> {
+export async function showBaristaQueue(ctx: BaristaOrderContext, api: BackendApi, authenticatedEmployee?: EmployeeSession): Promise<void> {
   try {
-    const employee = await requireBarista(ctx, api);
+    const employee = await requireBarista(ctx, api, authenticatedEmployee);
     if (!employee) return;
     const orders = await api.listBaristaQueue(employee.telegramUserId);
     if (!orders.length) {
-      await ctx.reply("Hiện không có đơn nào đang chờ pha chế.");
+      await ctx.reply("Hàng đợi đang trống.", baristaQuickKeyboard());
       return;
     }
-    await ctx.reply("Chọn đơn đang chờ pha chế:", baristaOrdersKeyboard(orders));
+    await ctx.reply(formatBaristaOrderList("HÀNG ĐỢI", orders), baristaOrdersKeyboard(orders));
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải hàng đợi pha chế. Hãy thử lại.");
   }
 }
 
-export async function showBaristaOrders(ctx: BaristaOrderContext, api: BackendApi): Promise<void> {
+export async function showBaristaOrders(ctx: BaristaOrderContext, api: BackendApi, authenticatedEmployee?: EmployeeSession): Promise<void> {
   try {
-    const employee = await requireBarista(ctx, api);
+    const employee = await requireBarista(ctx, api, authenticatedEmployee);
     if (!employee) return;
     const orders = await api.listBaristaOrders(employee.telegramUserId);
     if (!orders.length) {
       await ctx.reply("Bạn chưa xử lý đơn pha chế nào.");
       return;
     }
-    await ctx.reply("Các đơn pha chế của bạn:", baristaOrdersKeyboard(orders));
+    await ctx.reply(formatBaristaOrderList("ĐƠN CỦA TÔI", orders), baristaOrdersKeyboard(orders));
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải lịch sử pha chế. Hãy thử lại.");
+  }
+}
+
+export async function showActiveBaristaOrders(ctx: BaristaOrderContext, api: BackendApi, authenticatedEmployee?: EmployeeSession): Promise<void> {
+  try {
+    const employee = await requireBarista(ctx, api, authenticatedEmployee);
+    if (!employee) return;
+    const orders = (await api.listBaristaOrders(employee.telegramUserId))
+      .filter((order) => order.fulfillmentStatus === "PREPARING");
+    if (!orders.length) {
+      await ctx.reply("Bạn không có đơn nào đang pha.", baristaQuickKeyboard());
+      return;
+    }
+    await ctx.reply(formatBaristaOrderList("ĐANG PHA", orders), baristaOrdersKeyboard(orders));
+  } catch (error) {
+    await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải đơn đang pha. Hãy thử lại.");
   }
 }
 
@@ -113,8 +161,8 @@ async function refreshBaristaState(
   }
   const queue = await api.listBaristaQueue(employee.telegramUserId);
   await ctx.reply(
-    queue.length ? "Hàng đợi mới nhất:" : "Hiện không có đơn nào đang chờ pha chế.",
-    queue.length ? baristaOrdersKeyboard(queue) : undefined,
+    queue.length ? formatBaristaOrderList("HÀNG ĐỢI MỚI NHẤT", queue) : "Hàng đợi đang trống.",
+    queue.length ? baristaOrdersKeyboard(queue) : baristaQuickKeyboard(),
   );
 }
 
@@ -148,12 +196,18 @@ export async function handleBaristaCallback(ctx: BaristaCallbackContext, api: Ba
 
     if (key === "barista:queue") {
       const orders = await api.listBaristaQueue(employee.telegramUserId);
-      await ctx.reply(orders.length ? "Chọn đơn đang chờ pha chế:" : "Hiện không có đơn nào đang chờ pha chế.", orders.length ? baristaOrdersKeyboard(orders) : undefined);
+      await ctx.reply(orders.length ? formatBaristaOrderList("HÀNG ĐỢI", orders) : "Hàng đợi đang trống.", orders.length ? baristaOrdersKeyboard(orders) : baristaQuickKeyboard());
+      return;
+    }
+    if (key === "barista:active") {
+      const orders = (await api.listBaristaOrders(employee.telegramUserId))
+        .filter((order) => order.fulfillmentStatus === "PREPARING");
+      await ctx.reply(orders.length ? formatBaristaOrderList("ĐANG PHA", orders) : "Bạn không có đơn nào đang pha.", orders.length ? baristaOrdersKeyboard(orders) : baristaQuickKeyboard());
       return;
     }
     if (key === "barista:orders:mine") {
       const orders = await api.listBaristaOrders(employee.telegramUserId);
-      await ctx.reply(orders.length ? "Các đơn pha chế của bạn:" : "Bạn chưa xử lý đơn pha chế nào.", orders.length ? baristaOrdersKeyboard(orders) : undefined);
+      await ctx.reply(orders.length ? formatBaristaOrderList("ĐƠN CỦA TÔI", orders) : "Bạn chưa xử lý đơn pha chế nào.", orders.length ? baristaOrdersKeyboard(orders) : baristaQuickKeyboard());
       return;
     }
 
@@ -171,13 +225,13 @@ export async function handleBaristaCallback(ctx: BaristaCallbackContext, api: Ba
     }
     if (action === "claim") {
       const order = await api.claimBaristaOrder(employee.telegramUserId, orderId);
-      await ctx.reply(`Đã nhận đơn.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
+      await ctx.reply(`Đã nhận đơn và bắt đầu pha.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
       completed = true;
       return;
     }
     if (action === "ready") {
       const order = await api.markBaristaOrderReady(employee.telegramUserId, orderId);
-      await ctx.reply(`Đã đánh dấu pha chế xong.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
+      await ctx.reply(`Đã pha xong, đơn đang chờ giao.\n\n${formatBaristaOrder(order)}`, baristaOrderKeyboard(order));
       completed = true;
       return;
     }

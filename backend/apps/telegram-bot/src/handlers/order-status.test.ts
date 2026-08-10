@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import type { EmployeeSession } from "../types.js";
-import { deliverServiceOrder, handleOrderStatusCallback, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
+import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -39,6 +39,7 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     listMyOrders: vi.fn().mockResolvedValue([order()]),
     confirmCashPayment: vi.fn().mockResolvedValue(order()),
     createQrPayment: vi.fn().mockResolvedValue({ order: order(), paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }),
+    reconcileQrPayment: vi.fn().mockResolvedValue({ order: order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }), matched: true }),
     deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
     listBaristaQueue: vi.fn().mockResolvedValue([]),
     listBaristaOrders: vi.fn().mockResolvedValue([]),
@@ -86,8 +87,26 @@ describe("Telegram order tracking", () => {
     const ctx = context();
     await showOrderStatus(ctx, backend, "order-1");
     expect(backend.getDraftOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(ctx.replies[0]).toContain("PAID");
-    expect(ctx.replies[0]).toContain("QUEUED");
+    expect(ctx.replies[0]).toContain("Đã thanh toán");
+    expect(ctx.replies[0]).toContain("Chờ pha");
+    expect(ctx.replies[0]).not.toContain("PAID");
+  });
+
+  it("actively reconciles a QR payment through SePay", async () => {
+    const backend = api();
+    const ctx = context();
+    await reconcileQrPayment(ctx, backend, "order-1");
+    expect(backend.reconcileQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.replies[0]).toContain("Đã xác nhận giao dịch SePay");
+    expect(ctx.replies[0]).toContain("Đã thanh toán");
+  });
+
+  it("explains when SePay has no exact matching transaction", async () => {
+    const backend = api({ reconcileQrPayment: vi.fn().mockResolvedValue({ order: order(), matched: false }) });
+    const ctx = context();
+    await reconcileQrPayment(ctx, backend, "order-1");
+    expect(ctx.replies[0]).toContain("Chưa tìm thấy giao dịch SePay");
+    expect(ctx.replies[0]).toContain("Chờ xác nhận thanh toán");
   });
 
   it("blocks tracking on the next interaction after deactivation", async () => {
@@ -106,7 +125,7 @@ describe("Telegram order tracking", () => {
     const ctx = context();
     await deliverServiceOrder(ctx, backend, "order-1");
     expect(backend.deliverOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(ctx.replies[0]).toContain("DELIVERED");
+    expect(ctx.replies[0]).toContain("Đã giao");
   });
 
   it("clears removed order callbacks and refreshes the current order list", async () => {
@@ -129,6 +148,6 @@ describe("Telegram order tracking", () => {
     await handleOrderStatusCallback(ctx, backend);
 
     expect(ctx.clears).toEqual(["cleared"]);
-    expect(ctx.replies.at(-1)).toContain("PREPARING");
+    expect(ctx.replies.at(-1)).toContain("Đang pha chế");
   });
 });

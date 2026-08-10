@@ -5,7 +5,8 @@ import type { DraftOrder, DraftOrderItem } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
 import { createCallbackRevision, parseDraftCallbackData } from "../callbacks/callback-data.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
-import { categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
+import { fulfillmentStatusLabel, paymentStatusLabel } from "../formatters/order-status.js";
+import { categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, paymentConfirmationKeyboard, quantityKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
 import { orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import { roleMenu } from "../keyboards/role-menu.js";
 import { formatOrderStatus } from "./order-status.handler.js";
@@ -58,10 +59,18 @@ function formatMoney(amount: number): string {
 
 function formatReview(order: DraftOrder): string {
   const lines = order.items.map(
-    (item, index) => `${index + 1}. ${item.name} × ${item.quantity} — ${formatMoney(item.unitPrice * item.quantity)}${item.note ? `\n   Ghi chú: ${item.note}` : ""}`,
+    (item, index) => `${index + 1}. ${item.quantity} × ${item.name} · ${formatMoney(item.unitPrice * item.quantity)}${item.note ? `\n   📝 ${item.note}` : ""}`,
   );
 
-  return [`Đơn ${order.code}`, "", ...(lines.length ? lines : ["Chưa có món nào."]), "", `Tổng tiền: ${formatMoney(order.totalAmount)}`].join("\n");
+  const itemCount = order.items.reduce((total, item) => total + item.quantity, 0);
+  return [
+    `🧾 ĐƠN ${order.code}`,
+    `Số món: ${itemCount}`,
+    "",
+    ...(lines.length ? lines : ["Giỏ hàng đang trống."]),
+    "",
+    `💰 TỔNG: ${formatMoney(order.totalAmount)}`,
+  ].join("\n");
 }
 
 async function requireServiceStaff(ctx: DraftOrderContext, api: BackendApi, employee?: EmployeeSession): Promise<EmployeeSession | undefined> {
@@ -98,7 +107,33 @@ async function showReview(ctx: DraftOrderContext, api: BackendApi, employee: Emp
   draft.selectedMenuItemName = undefined;
   draft.quantity = undefined;
   draft.editingOrderItemId = undefined;
+  draft.pendingPaymentMethod = undefined;
   await ctx.reply(formatReview(order), reviewKeyboard(order, rotateDraftRevision(draft)));
+}
+
+async function showPaymentConfirmation(
+  ctx: DraftOrderContext,
+  api: BackendApi,
+  employee: EmployeeSession,
+  paymentMethod: "CASH" | "QR",
+): Promise<void> {
+  const draft = activeDraft(ctx);
+  if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
+
+  const order = await api.getDraftOrder(employee.telegramUserId, draft.orderId);
+  if (!isOpenDraft(order) || !order.items.length) throw new Error("Đơn không còn ở trạng thái có thể chỉnh sửa.");
+
+  draft.step = "PAYMENT_CONFIRMATION";
+  draft.pendingPaymentMethod = paymentMethod;
+  const methodLabel = paymentMethod === "CASH" ? "Tiền mặt" : "QR";
+  await ctx.reply([
+    "⚠️ XÁC NHẬN THANH TOÁN",
+    `Đơn: ${order.code}`,
+    `Tổng tiền: ${formatMoney(order.totalAmount)}`,
+    `Phương thức: ${methodLabel}`,
+    "",
+    "Vui lòng kiểm tra đúng giao dịch trước khi xác nhận.",
+  ].join("\n"), paymentConfirmationKeyboard(rotateDraftRevision(draft)));
 }
 
 async function showItemEditor(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession, itemId: string): Promise<void> {
@@ -161,7 +196,10 @@ async function refreshDraftState(
     const current = await api.getDraftOrder(employee.telegramUserId, draft.orderId);
     if (!isOpenDraft(current)) {
       clearDraft(ctx);
-      await ctx.reply(`Đơn ${current.code} hiện ở trạng thái ${current.paymentStatus}/${current.fulfillmentStatus}.`, roleMenu(employee.role));
+      await ctx.reply(
+        `Đơn ${current.code}: ${paymentStatusLabel(current.paymentStatus)} · ${fulfillmentStatusLabel(current.fulfillmentStatus)}.`,
+        roleMenu(employee.role),
+      );
       return;
     }
     if (current.items.length) await showReview(ctx, api, employee);
@@ -228,20 +266,39 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
     }
 
     if (callback.action === "payCash") {
-      const paidOrder = await api.confirmCashPayment(employee.telegramUserId, draft.orderId);
-      clearDraft(ctx);
-      await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder));
+      await showPaymentConfirmation(ctx, api, employee, "CASH");
       completed = true;
       return;
     }
 
     if (callback.action === "payQr") {
-      const payment = await api.createQrPayment(employee.telegramUserId, draft.orderId);
-      clearDraft(ctx);
-      const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
-      const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
-      if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
-      else await ctx.reply(message, keyboard);
+      await showPaymentConfirmation(ctx, api, employee, "QR");
+      completed = true;
+      return;
+    }
+
+    if (callback.action === "cancelPayment") {
+      if (draft.step !== "PAYMENT_CONFIRMATION" || !draft.pendingPaymentMethod) throw new Error(DRAFT_EXPIRED_MESSAGE);
+      await showReview(ctx, api, employee);
+      completed = true;
+      return;
+    }
+
+    if (callback.action === "confirmPayment") {
+      if (draft.step !== "PAYMENT_CONFIRMATION" || !draft.pendingPaymentMethod) throw new Error(DRAFT_EXPIRED_MESSAGE);
+
+      if (draft.pendingPaymentMethod === "CASH") {
+        const paidOrder = await api.confirmCashPayment(employee.telegramUserId, draft.orderId);
+        clearDraft(ctx);
+        await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder));
+      } else {
+        const payment = await api.createQrPayment(employee.telegramUserId, draft.orderId);
+        clearDraft(ctx);
+        const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
+        const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
+        if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
+        else await ctx.reply(message, keyboard);
+      }
       completed = true;
       return;
     }
@@ -267,8 +324,24 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       draft.selectedMenuItemId = item.id;
       draft.selectedMenuItemName = item.name;
       draft.step = "QUANTITY";
-      rotateDraftRevision(draft);
-      await ctx.reply(`Nhập số lượng cho ${item.name} (1–99):`);
+      await ctx.reply(
+        `Chọn số lượng ${item.name}. Nút 1–5 sẽ thêm ngay; nhập số 1–99 nếu món cần ghi chú:`,
+        quantityKeyboard(rotateDraftRevision(draft)),
+      );
+      completed = true;
+      return;
+    }
+
+    if (callback.action === "quickQuantity") {
+      const quantity = Number(callback.entityId);
+      if (draft.step !== "QUANTITY" || !draft.selectedMenuItemId || !Number.isInteger(quantity) || quantity < 1 || quantity > 5) {
+        throw new Error(DRAFT_EXPIRED_MESSAGE);
+      }
+      await api.addDraftOrderItem(employee.telegramUserId, draft.orderId, {
+        menuItemId: draft.selectedMenuItemId,
+        quantity,
+      });
+      await showReview(ctx, api, employee);
       completed = true;
       return;
     }
@@ -296,6 +369,20 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       draft.step = "EDIT_QUANTITY";
       rotateDraftRevision(draft);
       await ctx.reply("Nhập số lượng mới (1–99):");
+      completed = true;
+      return;
+    }
+
+    if (callback.action === "decreaseQuantity" || callback.action === "increaseQuantity") {
+      const itemId = callback.entityId!;
+      const order = await api.getDraftOrder(employee.telegramUserId, draft.orderId);
+      const item = order.items.find((candidate) => candidate.id === itemId);
+      if (!item || !isOpenDraft(order)) throw new Error("Món hoặc đơn không còn hợp lệ.");
+      const change = callback.action === "increaseQuantity" ? 1 : -1;
+      const quantity = item.quantity + change;
+      if (quantity < 1 || quantity > 99) throw new Error("Số lượng phải từ 1 đến 99.");
+      await api.updateDraftOrderItem(employee.telegramUserId, draft.orderId, itemId, { quantity });
+      await showReview(ctx, api, employee);
       completed = true;
       return;
     }
@@ -415,8 +502,8 @@ export function registerDraftOrderHandlers(bot: Telegraf<BotContext>, api: Backe
     );
   });
 
-  bot.on("text", async (ctx) => {
-    await handleDraftText(
+  bot.on("text", async (ctx, next) => {
+    const handled = await handleDraftText(
       {
         from: ctx.from,
         session: ctx.session,
@@ -425,5 +512,6 @@ export function registerDraftOrderHandlers(bot: Telegraf<BotContext>, api: Backe
       },
       api,
     );
+    if (!handled) return next();
   });
 }

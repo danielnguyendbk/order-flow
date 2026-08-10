@@ -9,6 +9,7 @@ import { seedThai003SepayWebhook } from "./seeds/thai003-sepay-webhook.seed";
 import { seedThai004Reconciliation } from "./seeds/thai004-reconciliation.seed";
 import { seedThai005Refund } from "./seeds/thai005-refund.seed";
 import { seedThai006Revenue } from "./seeds/thai006-revenue.seed";
+import { seedSmallShopMenu } from "./seeds/small-shop-menu.seed";
 
 const prisma = new PrismaClient();
 
@@ -92,6 +93,11 @@ async function main(): Promise<void> {
 
   if (target === "be004") {
     await seedBe004IntegrationFixtures(prisma);
+    return;
+  }
+
+  if (target === "menu") {
+    await seedSmallShopMenu(prisma);
     return;
   }
 

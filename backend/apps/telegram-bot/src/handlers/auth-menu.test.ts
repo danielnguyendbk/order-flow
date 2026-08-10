@@ -50,7 +50,11 @@ function callbackContext(data: string, telegramUserId: number): CallbackHandlerC
 }
 
 function buttonLabels(extra: unknown): string[] {
-  const keyboard = (extra as { reply_markup: { inline_keyboard: Array<Array<{ text: string }>> } }).reply_markup.inline_keyboard;
+  const markup = (extra as { reply_markup: {
+    inline_keyboard?: Array<Array<{ text: string }>>;
+    keyboard?: Array<Array<{ text: string }>>;
+  } }).reply_markup;
+  const keyboard = markup.inline_keyboard ?? markup.keyboard ?? [];
   return keyboard.flat().map((button) => button.text);
 }
 
@@ -60,7 +64,10 @@ describe("Telegram authentication and role menu", () => {
     await handleStart(ctx, apiReturning(serviceStaff));
 
     expect(ctx.session.employee).toEqual(serviceStaff);
-    expect(buttonLabels(ctx.replies[0][1])).toEqual(["Tạo đơn", "Đơn của tôi"]);
+    expect(buttonLabels(ctx.replies[0][1])).toEqual(["🛒 Tạo đơn", "🧾 Đơn đang tạo", "📋 Đơn gần đây", "🏠 Menu"]);
+    expect(ctx.replies[0][1]).toMatchObject({
+      reply_markup: { resize_keyboard: true, is_persistent: true, input_field_placeholder: "Chọn thao tác nhanh" },
+    });
   });
 
   it("stores the barista session and displays its menu", async () => {
@@ -68,7 +75,10 @@ describe("Telegram authentication and role menu", () => {
     await handleStart(ctx, apiReturning(barista));
 
     expect(ctx.session.employee).toEqual(barista);
-    expect(buttonLabels(ctx.replies[0][1])).toEqual(["Đơn chờ pha chế", "Lịch sử pha chế"]);
+    expect(buttonLabels(ctx.replies[0][1])).toEqual(["☕ Hàng đợi", "🔥 Đang pha", "📋 Đơn của tôi", "🏠 Menu"]);
+    expect(ctx.replies[0][1]).toMatchObject({
+      reply_markup: { resize_keyboard: true, is_persistent: true, input_field_placeholder: "Chọn thao tác pha chế" },
+    });
   });
 
   it.each([403, 404])("blocks an unregistered or inactive employee (%i)", async (status) => {

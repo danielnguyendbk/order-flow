@@ -4,8 +4,9 @@ import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
+import { fulfillmentStatusLabel, paymentStatusLabel } from "../formatters/order-status.js";
 import { myOrdersKeyboard, orderStatusKeyboard } from "../keyboards/order-status.js";
-import type { BotContext, BotSession } from "../types.js";
+import type { BotContext, BotSession, EmployeeSession } from "../types.js";
 import { isAccessDenied } from "./start.handler.js";
 
 export interface OrderStatusContext {
@@ -30,14 +31,14 @@ export function formatOrderStatus(order: DraftOrder): string {
   return [
     `Đơn ${order.code}`,
     `Tổng tiền: ${formatMoney(order.totalAmount)}`,
-    `Thanh toán: ${paymentMethod} · ${order.paymentStatus}`,
-    `Pha chế: ${order.fulfillmentStatus}`,
+    `Thanh toán: ${paymentMethod} · ${paymentStatusLabel(order.paymentStatus)}`,
+    `Pha chế: ${fulfillmentStatusLabel(order.fulfillmentStatus)}`,
   ].join("\n");
 }
 
-export async function showMyOrders(ctx: OrderStatusContext, api: BackendApi): Promise<void> {
+export async function showMyOrders(ctx: OrderStatusContext, api: BackendApi, authenticatedEmployee?: EmployeeSession): Promise<void> {
   try {
-    const employee = await authenticateEmployee(ctx, api);
+    const employee = authenticatedEmployee ?? await authenticateEmployee(ctx, api);
     if (employee.role !== "SERVICE_STAFF") {
       await ctx.reply("Bạn không có quyền xem danh sách đơn này.");
       return;
@@ -64,6 +65,34 @@ export async function showOrderStatus(ctx: OrderStatusContext, api: BackendApi, 
     await ctx.reply(formatOrderStatus(order), orderStatusKeyboard(order));
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải trạng thái đơn. Hãy thử lại.");
+  }
+}
+
+export async function reconcileQrPayment(ctx: OrderStatusContext, api: BackendApi, orderId: string): Promise<void> {
+  try {
+    const employee = await authenticateEmployee(ctx, api);
+    if (employee.role !== "SERVICE_STAFF") {
+      await ctx.reply("Bạn không có quyền kiểm tra thanh toán đơn này.");
+      return;
+    }
+    const result = await api.reconcileQrPayment(employee.telegramUserId, orderId);
+    const heading = result.matched
+      ? "Đã xác nhận giao dịch SePay."
+      : "Chưa tìm thấy giao dịch SePay khớp đúng tài khoản, số tiền và mã thanh toán.";
+    await ctx.reply(`${heading}\n\n${formatOrderStatus(result.order)}`, orderStatusKeyboard(result.order));
+  } catch (error) {
+    if (error instanceof BackendApiError) {
+      const messages: Record<string, string> = {
+        SEPAY_API_NOT_CONFIGURED: "Chưa cấu hình SePay API Token để kiểm tra giao dịch chủ động.",
+        SEPAY_API_TOKEN_INVALID: "SePay API Token không hợp lệ hoặc đã hết hiệu lực.",
+        SEPAY_API_UNAVAILABLE: "Không thể kết nối SePay lúc này. Hãy thử lại sau.",
+      };
+      if (error.code && messages[error.code]) {
+        await ctx.reply(messages[error.code]);
+        return;
+      }
+    }
+    await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể đối soát thanh toán. Hãy thử lại.");
   }
 }
 
@@ -106,7 +135,7 @@ export async function handleOrderStatusCallback(ctx: OrderStatusCallbackContext,
 
   let completed = false;
   try {
-    const match = /^order:(status|deliver):(.+)$/.exec(key);
+    const match = /^order:(status|reconcile|deliver):(.+)$/.exec(key);
     if (!match) {
       await ctx.clearCallbackMessage?.().catch(() => undefined);
       await ctx.answerCallback("Nút này đã hết hạn.");
@@ -115,6 +144,7 @@ export async function handleOrderStatusCallback(ctx: OrderStatusCallbackContext,
     }
     await ctx.answerCallback();
     if (match[1] === "status") await showOrderStatus(ctx, api, match[2]);
+    else if (match[1] === "reconcile") await reconcileQrPayment(ctx, api, match[2]);
     else {
       await deliverServiceOrder(ctx, api, match[2]);
       completed = true;

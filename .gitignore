@@ -13,4 +13,8 @@ coverage/
 # Local tooling.
 .DS_Store
 *.log
+/.runlogs/
+
+# Local database exports can contain production data and password hashes.
+/backend/backup.sql
 

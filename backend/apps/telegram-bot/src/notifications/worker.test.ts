@@ -47,6 +47,29 @@ describe("notification worker processor", () => {
     });
   });
 
+  it("adds immediate claim and queue buttons for a barista ORDER_PAID notification", async () => {
+    const db = database(notification({
+      event: "ORDER_PAID",
+      orderId: "order-1",
+      recipient: { role: "BARISTA" },
+      message: "New queued order",
+    }));
+    const telegram = { sendMessage: vi.fn().mockResolvedValue({}) };
+
+    await processNotification(db as PrismaClient, telegram, {
+      data: { notificationId: "notification-1" }, attemptsMade: 0, opts: { attempts: 5 },
+    } as any);
+
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      "123456789012345678",
+      "New queued order",
+      { reply_markup: { inline_keyboard: [
+        [{ text: "☕ NHẬN & PHA ĐƠN", callback_data: "barista:claim:order-1" }],
+        [{ text: "📋 Xem hàng đợi", callback_data: "barista:queue" }],
+      ] } },
+    );
+  });
+
   it("records RETRYING before the final attempt and rethrows Telegram errors", async () => {
     const db = database();
     const telegram = { sendMessage: vi.fn().mockRejectedValue(new Error("Telegram unavailable")) };

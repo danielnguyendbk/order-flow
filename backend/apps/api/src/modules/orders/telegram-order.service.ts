@@ -2,6 +2,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 
 import { generateOrderCode, generatePaymentCode } from "./order-code";
 import { recordOrderNotification } from "../notifications/notification-outbox.service";
+import { SepayApiClient, SepayApiClientError, type SepayTransactionLookup } from "../sepay/sepay-api.client";
+import { SepayService } from "../sepay/sepay.service";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -44,6 +46,11 @@ export interface TelegramQrPaymentDto {
   qrImageUrl: string;
 }
 
+export interface TelegramQrReconciliationDto {
+  order: TelegramOrderDto;
+  matched: boolean;
+}
+
 export interface TelegramOrderServiceContract {
   listCategories(): Promise<TelegramMenuCategoryDto[]>;
   listItems(categoryId: string): Promise<TelegramMenuItemDto[]>;
@@ -56,6 +63,7 @@ export interface TelegramOrderServiceContract {
   cancelDraft(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   confirmCash(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   createQr(employeeId: string, orderId: string): Promise<TelegramQrPaymentDto>;
+  reconcileQr(employeeId: string, orderId: string): Promise<TelegramQrReconciliationDto>;
   deliver(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
 }
 
@@ -117,6 +125,8 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
       accountHolder: process.env.SEPAY_ACCOUNT_HOLDER,
       imageBaseUrl: process.env.SEPAY_QR_IMAGE_BASE_URL,
     },
+    private readonly sepayLookup: SepayTransactionLookup = new SepayApiClient(),
+    private readonly sepayService: SepayService = new SepayService(database),
   ) {}
 
   public async listCategories(): Promise<TelegramMenuCategoryDto[]> {
@@ -339,6 +349,49 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
       amount: Number(result.order.totalAmount),
       qrImageUrl: qrUrl.toString(),
     };
+  }
+
+  public async reconcileQr(employeeId: string, orderId: string): Promise<TelegramQrReconciliationDto> {
+    const current = await this.ownedOrder(this.database, employeeId, orderId);
+    if (current.paymentStatus === "PAID") {
+      return { order: toOrderDto(current), matched: true };
+    }
+    if (
+      current.paymentMethod !== "QR"
+      || current.paymentStatus !== "PENDING"
+      || current.fulfillmentStatus !== "PENDING_PAYMENT"
+    ) {
+      throw new TelegramOrderError(409, "PAYMENT_STATE_INVALID", "Order is not waiting for a QR payment");
+    }
+
+    const payment = await this.database.payment.findUnique({ where: { orderId } });
+    if (!payment?.paymentCode) {
+      throw new TelegramOrderError(409, "PAYMENT_STATE_INVALID", "QR payment record is incomplete");
+    }
+    if (!this.qrConfig.accountNumber) {
+      throw new TelegramOrderError(503, "SEPAY_BANK_NOT_CONFIGURED", "SePay bank account is not configured");
+    }
+
+    try {
+      const transaction = await this.sepayLookup.findIncomingTransaction({
+        accountNumber: this.qrConfig.accountNumber,
+        amount: payment.expectedAmount,
+        paymentCode: payment.paymentCode,
+        createdAt: payment.createdAt,
+      });
+      if (!transaction) return { order: toOrderDto(current), matched: false };
+
+      const result = await this.sepayService.handleTrustedTransaction(transaction);
+      return {
+        order: await this.getOrder(employeeId, orderId),
+        matched: result.matched,
+      };
+    } catch (error) {
+      if (error instanceof SepayApiClientError) {
+        throw new TelegramOrderError(error.statusCode, error.code, error.message);
+      }
+      throw error;
+    }
   }
 
   public async deliver(employeeId: string, orderId: string): Promise<TelegramOrderDto> {
