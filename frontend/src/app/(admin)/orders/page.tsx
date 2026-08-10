@@ -1,21 +1,21 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, Field, Modal } from "@/components/ui";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import { useToast } from "@/components/Toast";
 import { formatVnd, formatDate, formatTime } from "@/lib/format";
-import {
+import { inPeriod, type Period } from "@/lib/period";
+import { 
+  orders as allOrders, 
   ORDER_PAYMENT_STATUS_LABEL, 
   ORDER_FULFILLMENT_STATUS_LABEL, 
   type Order, 
   type OrderPaymentStatus, 
   type OrderFulfillmentStatus 
 } from "@/lib/data";
-import { apiRequest, getOrders } from "@/lib/api";
-import { useApiData } from "@/lib/use-api-data";
-import { toOrder } from "@/lib/view-models";
 
 const PAYMENT_STATUS_OPTIONS = Object.keys(ORDER_PAYMENT_STATUS_LABEL) as OrderPaymentStatus[];
 const FULFILLMENT_STATUS_OPTIONS = Object.keys(ORDER_FULFILLMENT_STATUS_LABEL) as OrderFulfillmentStatus[];
@@ -27,9 +27,9 @@ function OrdersPageInner() {
   const [q, setQ] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [fulfillmentStatus, setFulfillmentStatus] = useState("");
+  const [period, setPeriod] = useState<Period | "">("");
   const [needsAction, setNeedsAction] = useState(searchParams.get("needsAction") === "1");
-  const loadOrders = useCallback(async () => (await getOrders()).data.map(toOrder), []);
-  const { data: rows, loading, error, reload } = useApiData(loadOrders, [] as Order[]);
+  const [rows, setRows] = useState<Order[]>(allOrders);
   const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
   const [reviewReason, setReviewReason] = useState("");
   const [completeOrder, setCompleteOrder] = useState<Order | null>(null);
@@ -41,13 +41,14 @@ function OrdersPageInner() {
       if (paymentStatus && o.paymentStatus !== paymentStatus) return false;
       if (fulfillmentStatus && o.fulfillmentStatus !== fulfillmentStatus) return false;
       if (needsAction && o.paymentStatus !== "PAYMENT_REVIEW" && o.fulfillmentStatus !== "QUEUED") return false;
+      if (period && !inPeriod(o.createdAt, period)) return false;
       if (term) {
         const hay = `${o.code} ${o.user.username} ${o.user.telegramId} ${o.productName} ${o.user.firstName} ${o.user.lastName}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
     });
-  }, [rows, q, paymentStatus, fulfillmentStatus, needsAction]);
+  }, [rows, q, paymentStatus, fulfillmentStatus, needsAction, period]);
 
   const stats = useMemo(() => {
     const revenue = filtered.filter((o) => o.fulfillmentStatus !== "CANCELLED").reduce((s, o) => s + o.amountVnd, 0);
@@ -63,50 +64,29 @@ function OrdersPageInner() {
     };
   }, [filtered]);
 
-  const hasFilters = Boolean(q || paymentStatus || fulfillmentStatus || needsAction);
+  const hasFilters = Boolean(q || paymentStatus || fulfillmentStatus || needsAction || period);
 
-  const overrideStatus = async (o: Order, domain: "PAYMENT" | "FULFILLMENT", status: string, reason: string) => {
-    try {
-      await apiRequest(`admin/orders/${o.id}/override-status`, { method: "POST", body: { domain, status, reason } });
-      await reload();
-      toast.push(`Đã cập nhật đơn ${o.code}.`, "success");
-    } catch (actionError) {
-      toast.push(actionError instanceof Error ? actionError.message : "Không thể cập nhật đơn.", "error");
-    }
-  };
-
-  const cancelOrder = (o: Order) => {
-    void overrideStatus(o, "FULFILLMENT", "CANCELLED", "Admin hủy đơn từ web");
-  };
-
-  const resolveReview = (o: Order) => {
-    void overrideStatus(o, "PAYMENT", "PAID", "Admin xác nhận thanh toán từ web");
-  };
-
-  const saveReview = async (e: FormEvent) => {
+  const saveReview = (e: FormEvent) => {
     e.preventDefault();
     if (!reviewOrder) return;
-    await overrideStatus(reviewOrder, "PAYMENT", "REVIEW", reviewReason);
+    setRows((prev) => prev.map((r) => (r.id === reviewOrder.id ? { ...r, reviewReason, paymentStatus: "PAYMENT_REVIEW" } : r)));
+    toast.push(`Đã gắn cờ kiểm tra cho đơn ${reviewOrder.code}.`, "success");
     setReviewOrder(null);
     setReviewReason("");
   };
 
-  const completeService = async (e: FormEvent) => {
+  const completeService = (e: FormEvent) => {
     e.preventDefault();
     if (!completeOrder) return;
-    await overrideStatus(completeOrder, "FULFILLMENT", "DELIVERED", completeNote || "Admin xác nhận hoàn tất từ web");
+    setRows((prev) => prev.map((r) => (r.id === completeOrder.id ? { ...r, fulfillmentStatus: "DELIVERED", adminNote: completeNote } : r)));
+    toast.push(`Đã hoàn tất xử lý/giao hàng đơn ${completeOrder.code}.`, "success");
     setCompleteOrder(null);
     setCompleteNote("");
   };
 
   return (
     <div>
-      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt.">
-        <Link href="/orders/new" className="btn">+ Tạo đơn</Link>
-      </PageHeader>
-
-      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải đơn hàng thật từ backend...</div>}
+      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt." />
 
       {/* Tóm tắt */}
       <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -131,63 +111,71 @@ function OrdersPageInner() {
           </div>
         </Panel>
         <Panel>
-          <dl className="grid grid-cols-3 gap-3">
-            <div>
-              <dt className="text-xs font-medium text-muted">Doanh thu</dt>
+          <div className="flex items-baseline justify-between">
+            <strong className="font-bold text-ink">Tài chính đơn hàng</strong>
+            <span className="text-xs text-muted">Tính trên đơn hiển thị</span>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <dt className="text-xs font-medium text-slate-600">Doanh thu</dt>
               <dd className="mt-1 text-lg font-extrabold tabular-nums text-ink">{formatVnd(stats.revenue)}</dd>
             </div>
-            <div>
-              <dt className="text-xs font-medium text-muted">Giá vốn</dt>
-              <dd className="mt-1 text-lg font-extrabold tabular-nums text-ink">{formatVnd(stats.costOfGoods)}</dd>
+            <div className="rounded-xl bg-slate-50 p-3">
+              <dt className="text-xs font-medium text-slate-600">Giá vốn</dt>
+              <dd className="mt-1 text-lg font-extrabold tabular-nums text-slate-700">{formatVnd(stats.costOfGoods)}</dd>
             </div>
-            <div>
-              <dt className="text-xs font-medium text-muted">Lợi nhuận gộp</dt>
-              <dd className={`mt-1 text-lg font-extrabold tabular-nums ${stats.grossProfit < 0 ? "text-red-600" : "text-emerald-600"}`}>
+            <div className="rounded-xl bg-emerald-50/70 p-3">
+              <dt className="text-xs font-medium text-emerald-800">Lợi nhuận gộp</dt>
+              <dd className={`mt-1 text-lg font-extrabold tabular-nums ${stats.grossProfit < 0 ? "text-red-600" : "text-emerald-700"}`}>
                 {formatVnd(stats.grossProfit)}
               </dd>
             </div>
-          </dl>
+          </div>
         </Panel>
       </div>
 
       {/* Bộ lọc */}
-      <Panel
-        title="Tra cứu đơn hàng"
-        subtitle="Tìm nhanh theo mã đơn, khách hàng hoặc trạng thái kép."
-        className="mb-6"
-        right={hasFilters ? <Badge tone="teal">Đang áp dụng bộ lọc</Badge> : undefined}
-      >
-        <form onSubmit={(e) => e.preventDefault()} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Tìm kiếm">
-            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm..." />
-          </Field>
-          <Field label="TT Thanh toán">
-            <select className="input" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option value="">Tất cả</option>
-              {PAYMENT_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{ORDER_PAYMENT_STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="TT Thực hiện">
-            <select className="input" value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)}>
-              <option value="">Tất cả</option>
-              {FULFILLMENT_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{ORDER_FULFILLMENT_STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          </Field>
-          <div className="flex flex-col gap-2 justify-end pb-2">
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} className="h-4 w-4 rounded border-line accent-brand-600" />
-              Chỉ đơn cần xử lý
-            </label>
-            <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => { setQ(""); setPaymentStatus(""); setFulfillmentStatus(""); setNeedsAction(false); }}>
-                Xóa lọc
-              </button>
-            </div>
+      <Panel className="mb-6">
+        <form onSubmit={(e) => e.preventDefault()} className="flex flex-wrap items-end gap-3.5">
+          <div className="flex-1 min-w-[240px]">
+            <Field label="Tìm kiếm">
+              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm, khách hàng..." />
+            </Field>
           </div>
+          <div className="w-full sm:w-48">
+            <Field label="TT Thanh toán">
+              <select className="input" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
+                <option value="">Tất cả thanh toán</option>
+                {PAYMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{ORDER_PAYMENT_STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="w-full sm:w-48">
+            <Field label="TT Thực hiện">
+              <select className="input" value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)}>
+                <option value="">Tất cả thực hiện</option>
+                {FULFILLMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{ORDER_FULFILLMENT_STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="w-full sm:w-72">
+            <Field label="Thời gian">
+              <PeriodFilter value={period} onChange={setPeriod} />
+            </Field>
+          </div>
+          <div className="flex items-center gap-2 h-10 px-3.5 rounded-xl border border-line bg-slate-50/80">
+            <input type="checkbox" id="needsActionOrders" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} className="h-4 w-4 rounded border-line accent-forest-800 cursor-pointer" />
+            <label htmlFor="needsActionOrders" className="text-xs font-semibold text-slate-700 cursor-pointer whitespace-nowrap">Chỉ đơn cần xử lý</label>
+          </div>
+          {hasFilters && (
+            <button type="button" className="btn-ghost h-10 px-3.5" onClick={() => { setQ(""); setPaymentStatus(""); setFulfillmentStatus(""); setNeedsAction(false); setPeriod(""); }}>
+              Xóa lọc
+            </button>
+          )}
         </form>
       </Panel>
 
@@ -219,8 +207,14 @@ function OrdersPageInner() {
                 const attention = order.paymentStatus === "PAYMENT_REVIEW" || order.fulfillmentStatus === "QUEUED";
                 return (
                   <tr key={order.id} className={attention ? "bg-red-50/50" : "hover:bg-surface-soft transition-colors"}>
-                    <td className="td font-bold text-ink whitespace-nowrap">
-                      {order.code}
+                    <td className="td whitespace-nowrap">
+                      <Link
+                        href={`/orders/${order.code}`}
+                        className="font-bold text-ink transition hover:text-brand-700 hover:underline"
+                        title="Xem chi tiết đơn"
+                      >
+                        {order.code}
+                      </Link>
                     </td>
                     <td className="td whitespace-nowrap">
                       <span className="inline-flex whitespace-nowrap rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200/60">
@@ -248,23 +242,10 @@ function OrdersPageInner() {
                       <span className="block font-medium text-slate-700">{formatDate(order.createdAt)}</span>
                       <span className="block text-[11px] text-slate-400">{formatTime(order.createdAt)}</span>
                     </td>
-                    <td className="td">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {order.paymentStatus === "PAYMENT_REVIEW" && (
-                          <button type="button" className="btn-ghost text-xs px-2.5 py-1" onClick={() => resolveReview(order)}>Bỏ kiểm tra</button>
-                        )}
-                        {order.fulfillmentStatus === "QUEUED" && (
-                          <button type="button" className="btn text-xs px-2.5 py-1" onClick={() => { setCompleteOrder(order); setCompleteNote(order.adminNote ?? ""); }}>
-                            Xử lý xong
-                          </button>
-                        )}
-                        {(order.paymentStatus === "PENDING" || order.paymentStatus === "UNPAID") && (
-                          <button type="button" className="btn-danger text-xs px-2.5 py-1" onClick={() => cancelOrder(order)}>Hủy đơn</button>
-                        )}
-                        {order.paymentStatus !== "PAYMENT_REVIEW" && order.fulfillmentStatus !== "QUEUED" && order.paymentStatus !== "PENDING" && order.paymentStatus !== "UNPAID" && (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </div>
+                    <td className="td whitespace-nowrap">
+                      <Link href={`/orders/${order.code}`} className="btn-ghost text-xs w-20 justify-center px-3 py-1.5 rounded-full whitespace-nowrap">
+                        Chi tiết
+                      </Link>
                     </td>
                   </tr>
                 );

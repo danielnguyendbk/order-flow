@@ -45,6 +45,7 @@ export function toPayment(order: ApiOrder): Payment | null {
   return {
     id: order.payment.id,
     code: order.payment.paymentCode ?? `PAY-${order.orderCode}`,
+    type: "order",
     sepayId: transaction?.sepayTransactionId ?? null,
     orderCode: order.orderCode,
     amountReceived: Number(order.payment.receivedAmount),

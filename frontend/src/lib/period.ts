@@ -2,6 +2,14 @@
 
 export type Period = "day" | "week" | "month" | "year";
 
+export const PERIOD_OPTIONS: { value: Period | ""; label: string }[] = [
+  { value: "", label: "Tất cả" },
+  { value: "day", label: "Ngày" },
+  { value: "week", label: "Tuần" },
+  { value: "month", label: "Tháng" },
+  { value: "year", label: "Năm" },
+];
+
 /** Day bắt đầu từ 00:00:00 hôm nay */
 function startOfDay(d: Date): Date {
   const x = new Date(d);
