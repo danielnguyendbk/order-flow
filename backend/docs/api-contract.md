@@ -89,6 +89,21 @@ Status: **implemented**
 - Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
 - Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
 
+## Payments
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/orders/:orderId/payments` | List payment records for an order |
+| `POST` | `/api/v1/orders/:orderId/payments/qr` | Initialize or reuse a QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Confirm a CASH payment and queue the order |
+
+- `GET /orders/:orderId/payments` returns the linked payment history for the order.
+- QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
+- CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
+- CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
+
 ## Barista queue
 
 Status: **implemented**
@@ -210,6 +225,7 @@ Status: **implemented**
 | Telegram session | `apps/api/src/modules/auth/` with Telegram integration as needed |
 | Admin authentication | `apps/api/src/modules/auth/` |
 | Service orders, items and public ownership actions | `apps/api/src/modules/orders/` |
+| Payments and payment transitions | `apps/api/src/modules/payments/` plus order status updates in `apps/api/src/modules/orders/` |
 | Barista queue and public claim view | `apps/api/src/modules/barista/` plus claim handling in `apps/api/src/modules/orders/` |
 | Admin orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
