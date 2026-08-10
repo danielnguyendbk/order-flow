@@ -1,19 +1,20 @@
 "use client";
 
-import { Suspense, useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { Suspense, useCallback, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, orderFulfillmentTone, Field, Modal } from "@/components/ui";
+import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, Field, Modal } from "@/components/ui";
 import { useToast } from "@/components/Toast";
-import { formatVnd, formatDateTime, formatDate, formatTime } from "@/lib/format";
-import { 
-  orders as allOrders, 
+import { formatVnd, formatDate, formatTime } from "@/lib/format";
+import {
   ORDER_PAYMENT_STATUS_LABEL, 
   ORDER_FULFILLMENT_STATUS_LABEL, 
   type Order, 
   type OrderPaymentStatus, 
   type OrderFulfillmentStatus 
 } from "@/lib/data";
+import { apiRequest, getOrders } from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import { toOrder } from "@/lib/view-models";
 
 const PAYMENT_STATUS_OPTIONS = Object.keys(ORDER_PAYMENT_STATUS_LABEL) as OrderPaymentStatus[];
 const FULFILLMENT_STATUS_OPTIONS = Object.keys(ORDER_FULFILLMENT_STATUS_LABEL) as OrderFulfillmentStatus[];
@@ -26,7 +27,8 @@ function OrdersPageInner() {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [fulfillmentStatus, setFulfillmentStatus] = useState("");
   const [needsAction, setNeedsAction] = useState(searchParams.get("needsAction") === "1");
-  const [rows, setRows] = useState<Order[]>(allOrders);
+  const loadOrders = useCallback(async () => (await getOrders()).data.map(toOrder), []);
+  const { data: rows, loading, error, reload } = useApiData(loadOrders, [] as Order[]);
   const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
   const [reviewReason, setReviewReason] = useState("");
   const [completeOrder, setCompleteOrder] = useState<Order | null>(null);
@@ -62,30 +64,36 @@ function OrdersPageInner() {
 
   const hasFilters = Boolean(q || paymentStatus || fulfillmentStatus || needsAction);
 
+  const overrideStatus = async (o: Order, domain: "PAYMENT" | "FULFILLMENT", status: string, reason: string) => {
+    try {
+      await apiRequest(`admin/orders/${o.id}/override-status`, { method: "POST", body: { domain, status, reason } });
+      await reload();
+      toast.push(`Đã cập nhật đơn ${o.code}.`, "success");
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể cập nhật đơn.", "error");
+    }
+  };
+
   const cancelOrder = (o: Order) => {
-    setRows((prev) => prev.map((r) => (r.id === o.id ? { ...r, fulfillmentStatus: "CANCELLED", paymentStatus: "REFUNDED" } : r)));
-    toast.push(`Đã hủy đơn ${o.code}.`, "success");
+    void overrideStatus(o, "FULFILLMENT", "CANCELLED", "Admin hủy đơn từ web");
   };
 
   const resolveReview = (o: Order) => {
-    setRows((prev) => prev.map((r) => (r.id === o.id ? { ...r, reviewReason: undefined, paymentStatus: "PAID" } : r)));
-    toast.push(`Đã bỏ kiểm tra đơn ${o.code}.`, "success");
+    void overrideStatus(o, "PAYMENT", "PAID", "Admin xác nhận thanh toán từ web");
   };
 
-  const saveReview = (e: FormEvent) => {
+  const saveReview = async (e: FormEvent) => {
     e.preventDefault();
     if (!reviewOrder) return;
-    setRows((prev) => prev.map((r) => (r.id === reviewOrder.id ? { ...r, reviewReason, paymentStatus: "PAYMENT_REVIEW" } : r)));
-    toast.push(`Đã gắn cờ kiểm tra cho đơn ${reviewOrder.code}.`, "success");
+    await overrideStatus(reviewOrder, "PAYMENT", "REVIEW", reviewReason);
     setReviewOrder(null);
     setReviewReason("");
   };
 
-  const completeService = (e: FormEvent) => {
+  const completeService = async (e: FormEvent) => {
     e.preventDefault();
     if (!completeOrder) return;
-    setRows((prev) => prev.map((r) => (r.id === completeOrder.id ? { ...r, fulfillmentStatus: "DELIVERED", adminNote: completeNote } : r)));
-    toast.push(`Đã hoàn tất xử lý/giao hàng đơn ${completeOrder.code}.`, "success");
+    await overrideStatus(completeOrder, "FULFILLMENT", "DELIVERED", completeNote || "Admin xác nhận hoàn tất từ web");
     setCompleteOrder(null);
     setCompleteNote("");
   };
@@ -93,6 +101,9 @@ function OrdersPageInner() {
   return (
     <div>
       <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt." />
+
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải đơn hàng thật từ Supabase...</div>}
 
       {/* Tóm tắt */}
       <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">

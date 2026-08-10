@@ -43,7 +43,13 @@ export class AdminOrderRepository {
         where,
         skip,
         take:    limit,
-        include: { items: true, history: { orderBy: { createdAt: "asc" } } },
+        include: {
+          creator: true,
+          assignedBarista: true,
+          items: true,
+          payment: { include: { sepayTransactions: true } },
+          history: { orderBy: { createdAt: "asc" } },
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.order.count({ where }),
@@ -58,7 +64,13 @@ export class AdminOrderRepository {
   public async findById(id: string): Promise<Order | null> {
     const order = await prisma.order.findUnique({
       where:   { id },
-      include: { items: true, history: { orderBy: { createdAt: "asc" } } },
+      include: {
+        creator: true,
+        assignedBarista: true,
+        items: true,
+        payment: { include: { sepayTransactions: true } },
+        history: { orderBy: { createdAt: "asc" } },
+      },
     });
     return order ? toOrderWithTimeline(order) : null;
   }

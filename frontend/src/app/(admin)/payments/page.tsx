@@ -1,18 +1,20 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { PageHeader, Panel, Badge, EmptyState, paymentTone, Field, Modal, Stats } from "@/components/ui";
 import { useToast } from "@/components/Toast";
-import { formatVnd, formatDateTime, formatDate, formatTime } from "@/lib/format";
+import { formatVnd, formatDate, formatTime } from "@/lib/format";
 import {
-  payments as allPayments,
   PAYMENT_STATUS_LABEL,
   PAYMENT_TYPE_LABEL,
   type Payment,
   type PaymentStatus,
   type PaymentType,
 } from "@/lib/data";
+import { getOrders } from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import { toPayment } from "@/lib/view-models";
 
 const STATUS_OPTIONS = Object.keys(PAYMENT_STATUS_LABEL) as PaymentStatus[];
 const TYPE_OPTIONS = Object.keys(PAYMENT_TYPE_LABEL) as PaymentType[];
@@ -23,7 +25,8 @@ export default function PaymentsPage() {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [needsReview, setNeedsReview] = useState(false);
-  const [rows, setRows] = useState<Payment[]>(allPayments);
+  const loadPayments = useCallback(async () => (await getOrders()).data.map(toPayment).filter((payment): payment is Payment => payment !== null), []);
+  const { data: rows, loading, error } = useApiData(loadPayments, [] as Payment[]);
   const [reviewPayment, setReviewPayment] = useState<Payment | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editStatus, setEditStatus] = useState<PaymentStatus>("pending");
@@ -66,24 +69,15 @@ export default function PaymentsPage() {
   const saveReview = (e: FormEvent) => {
     e.preventDefault();
     if (!reviewPayment) return;
-    const amount = Number(String(editAmount).replace(/[^0-9]/g, ""));
-    setRows((prev) =>
-      prev.map((p) => (p.id === reviewPayment.id ? { ...p, amountReceived: amount, status: editStatus, note: editNote } : p))
-    );
-    toast.push(`Đã lưu kiểm tra giao dịch ${reviewPayment.code}.`, "success");
-    setReviewPayment(null);
+    toast.push("Màn hình này đang ở chế độ đọc dữ liệu đối soát.", "warning");
   };
 
   const fulfill = (p: Payment) => {
-    setRows((prev) => prev.map((r) => (r.id === p.id ? { ...r, status: "matched" } : r)));
-    toast.push(`Đã duyệt & giao hàng cho đơn ${p.orderCode ?? p.code}.`, "success");
-    setReviewPayment(null);
+    toast.push(`Hãy xử lý trạng thái của đơn ${p.orderCode ?? p.code} tại trang Đơn hàng.`, "warning");
   };
 
-  const removePayment = (p: Payment) => {
-    setRows((prev) => prev.filter((r) => r.id !== p.id));
-    toast.push(`Đã xóa giao dịch ${p.code}.`, "warning");
-    setReviewPayment(null);
+  const removePayment = () => {
+    toast.push(`Không xóa dữ liệu thanh toán thật từ màn hình đọc.`, "warning");
   };
 
   const canDelete = (p: Payment) => !p.orderCode && p.status !== "matched";
@@ -94,6 +88,9 @@ export default function PaymentsPage() {
         <Link href="/payments?needsReview=1" className={needsReview ? "btn" : "btn-ghost"}>Chỉ cần xử lý</Link>
         <Link href="/payments" className="btn-ghost">Tất cả giao dịch</Link>
       </PageHeader>
+
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải thanh toán thật từ Supabase...</div>}
 
       <Stats
         items={[
@@ -170,7 +167,6 @@ export default function PaymentsPage() {
                 <tr><td colSpan={6}><EmptyState>Không có giao dịch phù hợp bộ lọc hiện tại.</EmptyState></td></tr>
               )}
               {filtered.map((payment) => {
-                const delta = payment.amountReceived - payment.amountExpected;
                 const attention = ["underpaid", "unknown_code", "failed"].includes(payment.status);
                 return (
                   <tr key={payment.id} className={attention ? "bg-red-50/50" : "hover:bg-surface-soft"}>
@@ -242,20 +238,20 @@ export default function PaymentsPage() {
             <form onSubmit={saveReview} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Số tiền nhận">
-                  <input className="input" inputMode="numeric" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                  <input className="input" inputMode="numeric" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} disabled />
                 </Field>
                 <Field label="Trạng thái">
-                  <select className="input" value={editStatus} onChange={(e) => setEditStatus(e.target.value as PaymentStatus)}>
+                  <select className="input" value={editStatus} onChange={(e) => setEditStatus(e.target.value as PaymentStatus)} disabled>
                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{PAYMENT_STATUS_LABEL[s]}</option>)}
                   </select>
                 </Field>
               </div>
               <Field label="Ghi chú">
-                <input className="input" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Ghi chú xử lý" />
+                <input className="input" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Ghi chú xử lý" disabled />
               </Field>
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" className="btn-ghost" onClick={() => setReviewPayment(null)}>Đóng</button>
-                <button type="submit" className="btn">Lưu</button>
+                <button type="submit" className="btn" disabled>Chỉ đọc</button>
               </div>
             </form>
 
@@ -264,7 +260,7 @@ export default function PaymentsPage() {
                 <button type="button" className="btn w-full" onClick={() => fulfill(reviewPayment)}>Duyệt &amp; giao hàng</button>
               )}
             {canDelete(reviewPayment) && (
-              <button type="button" className="btn-danger w-full" onClick={() => removePayment(reviewPayment)}>Xóa giao dịch</button>
+              <button type="button" className="btn-danger w-full" onClick={removePayment}>Xóa giao dịch</button>
             )}
           </div>
         )}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider } from "./Toast";
 
@@ -160,7 +160,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
   );
 }
 
-function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function SidebarContent({ pathname, username, onLogout, onNavigate }: { pathname: string; username: string; onLogout: () => void; onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-1">
@@ -175,11 +175,12 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
             A
           </span>
           <div className="min-w-0 flex-1 leading-tight">
-            <strong className="block truncate text-sm text-white">admin</strong>
+            <strong className="block truncate text-sm text-white">{username}</strong>
             <small className="text-xs text-slate-400">Quản trị viên</small>
           </div>
-          <Link
-            href="/login"
+          <button
+            type="button"
+            onClick={onLogout}
             aria-label="Đăng xuất"
             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-700/50 hover:text-white"
             title="Đăng xuất"
@@ -189,7 +190,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
               <path d="M2 10h11" />
               <path d="M12 3h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4" />
             </svg>
-          </Link>
+          </button>
         </div>
       </div>
     </div>
@@ -207,8 +208,20 @@ function titleFor(pathname: string): string {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const title = titleFor(pathname);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const [username, setUsername] = useState("Đang tải...");
+
+  useEffect(() => {
+    fetch("/api/backend/admin/auth/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unauthorized");
+        return response.json();
+      })
+      .then((payload) => setUsername(payload.data?.username ?? payload.data?.fullName ?? "Quản trị viên"))
+      .catch(() => router.replace("/login"));
+  }, [router]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -229,12 +242,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (el) el.classList.toggle("hidden");
   };
 
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  };
+
   return (
     <ToastProvider>
       <div className="min-h-screen">
         {/* Sidebar desktop */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 bg-sidebar lg:block">
-          <SidebarContent pathname={pathname} />
+          <SidebarContent pathname={pathname} username={username} onLogout={logout} />
         </aside>
 
         {/* Drawer mobile */}
@@ -254,7 +273,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             >
               ×
             </button>
-            <SidebarContent pathname={pathname} onNavigate={openDrawer} />
+            <SidebarContent pathname={pathname} username={username} onLogout={logout} onNavigate={openDrawer} />
           </div>
         </div>
 
