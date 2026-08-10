@@ -44,19 +44,24 @@ function buildTx(candidate: any | null, existingTransaction: any | null = null) 
         totalAmount: candidate.expectedAmount,
         paymentMethod: candidate.order.paymentMethod,
         createdByUserId: "staff-1",
-        creator: { telegramChatId: null, telegramUserId: null },
+        creator: { telegramChatId: 100n, telegramUserId: 99n },
         items: [{ itemName: "Trà đào", quantity: 2, note: null }],
       } : null),
     },
-    user: { findMany: vi.fn().mockResolvedValue([
-      { id: "barista-1", telegramChatId: 123n, telegramUserId: null },
-    ]) },
+    orderStatusHistory: {
+      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    user: {
+      findMany: vi.fn().mockImplementation(async ({ where }) => where.role === "BARISTA"
+        ? [{ id: "barista-1", telegramChatId: 123n, telegramUserId: null }]
+        : [{ id: "owner-1", telegramChatId: 200n, telegramUserId: 201n }]),
+    },
     notification: {
       upsert: vi.fn().mockResolvedValue({}),
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
-    orderStatusHistory: {
-      createMany: vi.fn().mockResolvedValue({ count: 1 }),
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
     },
   };
 }
@@ -99,6 +104,13 @@ describe("SepayService", () => {
     });
     expect(tx.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: [expect.objectContaining({ recipientUserId: "barista-1", event: "ORDER_PAID" })],
+      skipDuplicates: true,
+    }));
+    expect(tx.notification.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ event: "ORDER_PAID", recipientUserId: "staff-1" }),
+    }));
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "SEPAY_WEBHOOK_MATCHED" }),
     }));
   });
 
@@ -151,6 +163,13 @@ describe("SepayService", () => {
       where: { id: "order-1" },
       data: { paymentStatus: PaymentStatus.UNDERPAID },
     });
+    expect(tx.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ event: "PAYMENT_REVIEW", recipientUserId: "owner-1" })],
+      skipDuplicates: true,
+    }));
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "SEPAY_WEBHOOK_REVIEW_REQUIRED" }),
+    }));
   });
 
   it("classifies overpaid webhook without queueing the order", async () => {
@@ -165,6 +184,26 @@ describe("SepayService", () => {
       where: { id: "order-1" },
       data: { paymentStatus: PaymentStatus.OVERPAID },
     });
+  });
+
+  it("moves cancelled-order payments to review and notifies owners", async () => {
+    const tx = buildTx(buildCandidate(undefined, {
+      order: { fulfillmentStatus: FulfillmentStatus.CANCELLED },
+    }));
+    const result = await buildService(tx).handleWebhook(
+      { id: "99007006", amount: "100000", content: "PAY-TEST-001" },
+      {}
+    );
+
+    expect(result.matchStatus).toBe(TransactionMatchStatus.UNMATCHED);
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: { paymentStatus: PaymentStatus.REVIEW },
+    });
+    expect(tx.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ event: "PAYMENT_REVIEW", orderId: "order-1" })],
+      skipDuplicates: true,
+    }));
   });
 
   it("stores wrong-code webhook without linking payment", async () => {
@@ -182,6 +221,10 @@ describe("SepayService", () => {
     });
     expect(tx.payment.update).not.toHaveBeenCalled();
     expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ event: "PAYMENT_REVIEW", orderId: undefined })],
+      skipDuplicates: true,
+    }));
   });
 
   it("returns success for duplicate webhook without processing twice", async () => {
@@ -207,5 +250,8 @@ describe("SepayService", () => {
     expect(tx.sepayTransaction.create).not.toHaveBeenCalled();
     expect(tx.payment.update).not.toHaveBeenCalled();
     expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.notification.upsert).not.toHaveBeenCalled();
+    expect(tx.notification.createMany).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
   });
 });
