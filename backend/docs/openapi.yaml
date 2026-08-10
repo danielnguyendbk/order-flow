@@ -81,7 +81,7 @@ paths:
                   minimum: 1
                   maximum: 9007199254740991
             example:
-              telegramUserId: 123456789
+              telegramUserId: 94004002
       responses:
         "200":
           description: Active Telegram employee identity
@@ -101,6 +101,19 @@ paths:
                   role:
                     type: string
                     enum: [MANAGER, SERVICE_STAFF, BARISTA]
+              examples:
+                serviceStaff:
+                  value:
+                    employeeId: 00000000-0000-4000-8000-000000004002
+                    telegramUserId: 94004002
+                    displayName: BE004 Service Staff
+                    role: SERVICE_STAFF
+                ownerManager:
+                  value:
+                    employeeId: 00000000-0000-4000-8000-000000004001
+                    telegramUserId: 94004001
+                    displayName: BE004 Owner Manager
+                    role: MANAGER
         "400":
           description: Invalid Telegram user ID
         "401":
@@ -453,7 +466,7 @@ paths:
       tags: [Public Menu]
       operationId: listPublicMenuCategories
       summary: List active public menu categories
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: Active categories ordered by display order
@@ -467,7 +480,7 @@ paths:
       tags: [Public Menu]
       operationId: listPublicMenuItems
       summary: List available public menu items
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/CategoryIdQuery"
         - $ref: "#/components/parameters/SearchQuery"
@@ -486,7 +499,7 @@ paths:
       tags: [Admin Employees]
       operationId: listEmployees
       summary: List employees
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       parameters:
@@ -510,7 +523,7 @@ paths:
       tags: [Admin Employees]
       operationId: createEmployee
       summary: Create an employee
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -542,7 +555,7 @@ paths:
       tags: [Admin Employees]
       operationId: getEmployee
       summary: Get an employee by ID
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       responses:
@@ -562,7 +575,7 @@ paths:
       tags: [Admin Employees]
       operationId: updateEmployee
       summary: Partially update an employee
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -594,7 +607,7 @@ paths:
       tags: [Admin Employees]
       operationId: activateEmployee
       summary: Activate an employee
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       parameters:
@@ -618,7 +631,7 @@ paths:
       tags: [Admin Employees]
       operationId: deactivateEmployee
       summary: Deactivate an employee
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       parameters:
@@ -642,7 +655,7 @@ paths:
       tags: [Admin Menu Categories]
       operationId: listAdminMenuCategories
       summary: List all menu categories
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       parameters:
@@ -666,7 +679,7 @@ paths:
       tags: [Admin Menu Categories]
       operationId: createMenuCategory
       summary: Create a menu category
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -698,7 +711,7 @@ paths:
       tags: [Admin Menu Categories]
       operationId: updateMenuCategory
       summary: Partially update a menu category
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -728,7 +741,7 @@ paths:
       tags: [Admin Menu Categories]
       operationId: deleteMenuCategory
       summary: Delete an unused menu category
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       responses:
@@ -748,7 +761,7 @@ paths:
       tags: [Admin Menu Items]
       operationId: listAdminMenuItems
       summary: List all menu items
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       parameters:
@@ -775,7 +788,7 @@ paths:
       tags: [Admin Menu Items]
       operationId: createMenuItem
       summary: Create a menu item
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -809,7 +822,7 @@ paths:
       tags: [Admin Menu Items]
       operationId: getMenuItem
       summary: Get a menu item by ID
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       responses:
@@ -829,7 +842,7 @@ paths:
       tags: [Admin Menu Items]
       operationId: updateMenuItem
       summary: Partially update a menu item
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       requestBody:
@@ -859,7 +872,7 @@ paths:
       tags: [Admin Menu Items]
       operationId: deleteMenuItem
       summary: Delete an unused menu item
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security:
         - bearerAuth: []
       responses:

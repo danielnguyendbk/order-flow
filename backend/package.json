@@ -22,6 +22,7 @@
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "seed:be004": "tsx prisma/seed.ts be004",
     "seed:thai": "tsx prisma/seed.ts thai",
     "seed:thai001": "tsx prisma/seed.ts thai001",
     "seed:thai002": "tsx prisma/seed.ts thai002",

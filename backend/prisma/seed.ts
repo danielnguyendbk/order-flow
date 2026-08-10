@@ -2,6 +2,7 @@ import { PrismaClient, UserRole, UserStatus } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 import { getSeedConfig } from "../apps/api/src/config/seed.config.js";
+import { seedBe004IntegrationFixtures } from "./seeds/be004-integration-fixtures.seed";
 import { seedThai001CashPayment } from "./seeds/thai001-cash-payment.seed";
 import { seedThai002QrPayment } from "./seeds/thai002-qr-payment.seed";
 import { seedThai003SepayWebhook } from "./seeds/thai003-sepay-webhook.seed";
@@ -86,6 +87,11 @@ async function main(): Promise<void> {
 
   if (target === "thai006") {
     await seedThai006Revenue(prisma);
+    return;
+  }
+
+  if (target === "be004") {
+    await seedBe004IntegrationFixtures(prisma);
     return;
   }
 
