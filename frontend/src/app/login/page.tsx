@@ -10,17 +10,26 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    window.setTimeout(() => {
-      if (username.trim() === "admin" && password === "admin12345") {
-        router.push("/dashboard");
-      } else {
-        setError("Tài khoản hoặc mật khẩu không đúng.");
-        setBusy(false);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { message?: string; error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? payload?.message ?? "Tài khoản hoặc mật khẩu không đúng.");
       }
-    }, 500);
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Không thể kết nối tới máy chủ.");
+      setBusy(false);
+    }
   };
 
   return (

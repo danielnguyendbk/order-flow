@@ -1,42 +1,43 @@
-import { OrderService } from "../order.service";
-import { OrderRepository } from "../order.repository";
-import { HistoryRepository } from "../../order-status-history/history.repository";
-import { PaymentRepository } from "../../payments/payment.repository";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FulfillmentStatus, PaymentStatus } from "../order.types";
 
 // Mock Prisma Client
-jest.mock("@prisma/client", () => {
+vi.mock("@prisma/client", () => {
   const mPrisma = {
     user: {
-      findUnique: jest.fn(),
+      findUnique: vi.fn(),
     },
   };
   return {
-    PrismaClient: jest.fn().mockImplementation(() => mPrisma),
+    PrismaClient: vi.fn().mockImplementation(() => mPrisma),
   };
 });
 
 import { PrismaClient } from "@prisma/client";
+import { OrderService } from "../order.service";
+import { OrderRepository } from "../order.repository";
+import { HistoryRepository } from "../../order-status-history/history.repository";
+import { PaymentRepository } from "../../payments/payment.repository";
 
 /**
  * Test suite for verifying order ownership constraints and assignments.
  */
 describe("Order Ownership and Authorization", () => {
   let orderService: OrderService;
-  let orderRepositoryMock: jest.Mocked<OrderRepository>;
-  let historyRepositoryMock: jest.Mocked<HistoryRepository>;
-  let paymentRepositoryMock: jest.Mocked<PaymentRepository>;
+  let orderRepositoryMock: any;
+  let historyRepositoryMock: any;
+  let paymentRepositoryMock: any;
   let prismaInstance: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     prismaInstance = new PrismaClient();
     orderRepositoryMock = {
-      findById: jest.fn(),
-      updateFulfillmentStatus: jest.fn(),
+      findById: vi.fn(),
+      updateFulfillmentStatus: vi.fn(),
     } as any;
     historyRepositoryMock = {
-      create: jest.fn().mockResolvedValue({} as any),
+      create: vi.fn().mockResolvedValue({} as any),
     } as any;
     paymentRepositoryMock = {} as any;
 

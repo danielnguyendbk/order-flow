@@ -61,6 +61,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - `payments`: payment handling
 - `sepay`: SePay integration
 - `reconciliations`: payment/order reconciliation
+- `refunds`: manual refund recording
 - `barista`: barista-facing workflow
 - `notifications`: notification delivery
 - `reports`: reporting
@@ -68,7 +69,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 ## Current implementation state
 
-- The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
 - Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.
