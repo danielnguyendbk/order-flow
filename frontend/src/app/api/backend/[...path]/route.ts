@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { API_BASE_URL, clearSessionCookies, readSessionTokens, setSessionCookies } from "@/lib/server-api";
 
-async function forward(request: Request, context: RouteContext<"/api/backend/[...path]">) {
+async function forward(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
   const incomingUrl = new URL(request.url);
   const target = `${API_BASE_URL}/${path.join("/")}${incomingUrl.search}`;

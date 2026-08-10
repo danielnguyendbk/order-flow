@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   Order,
   OrderItem,
@@ -12,8 +12,7 @@ import {
 } from "./order.types";
 import { calculateTotal } from "./order-total";
 import { generateOrderCode } from "./order-code";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 /** Include clause used consistently across all order queries. */
 const ORDER_INCLUDE = { items: true } as const;

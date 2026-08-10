@@ -125,12 +125,12 @@ export class OrderController {
   };
 
   // POST /api/v1/orders/:orderId/ready
-  // Body: { requesterId | baristaId | userId }
+  // The acting user is derived from the authenticated admin session.
   public markReady = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const requesterId = req.body?.requesterId || req.body?.baristaId || req.body?.userId;
+      const requesterId = req.auth?.userId;
       if (!requesterId) {
-        res.status(400).json({ message: "requesterId, baristaId, or userId is required" });
+        res.status(401).json({ message: "Authenticated user is required" });
         return;
       }
 
@@ -143,12 +143,12 @@ export class OrderController {
   };
 
   // POST /api/v1/orders/:orderId/deliver
-  // Body: { requesterId | baristaId | userId }
+  // The acting user is derived from the authenticated admin session.
   public deliverOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const requesterId = req.body?.requesterId || req.body?.baristaId || req.body?.userId;
+      const requesterId = req.auth?.userId;
       if (!requesterId) {
-        res.status(400).json({ message: "requesterId, baristaId, or userId is required" });
+        res.status(401).json({ message: "Authenticated user is required" });
         return;
       }
 

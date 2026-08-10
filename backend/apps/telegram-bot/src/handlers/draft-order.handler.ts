@@ -136,6 +136,20 @@ async function showPaymentConfirmation(
   ].join("\n"), paymentConfirmationKeyboard(rotateDraftRevision(draft)));
 }
 
+async function createQrPayment(
+  ctx: DraftOrderContext,
+  api: BackendApi,
+  employee: EmployeeSession,
+  orderId: string,
+): Promise<void> {
+  const payment = await api.createQrPayment(employee.telegramUserId, orderId);
+  clearDraft(ctx);
+  const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
+  const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
+  if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
+  else await ctx.reply(message, keyboard);
+}
+
 async function showItemEditor(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession, itemId: string): Promise<void> {
   const draft = activeDraft(ctx);
   if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
@@ -272,7 +286,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
     }
 
     if (callback.action === "payQr") {
-      await showPaymentConfirmation(ctx, api, employee, "QR");
+      await createQrPayment(ctx, api, employee, draft.orderId);
       completed = true;
       return;
     }
@@ -292,12 +306,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
         clearDraft(ctx);
         await ctx.reply(`Đã xác nhận thanh toán tiền mặt.\n\n${formatOrderStatus(paidOrder)}`, orderStatusKeyboard(paidOrder));
       } else {
-        const payment = await api.createQrPayment(employee.telegramUserId, draft.orderId);
-        clearDraft(ctx);
-        const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
-        const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
-        if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
-        else await ctx.reply(message, keyboard);
+        await createQrPayment(ctx, api, employee, draft.orderId);
       }
       completed = true;
       return;

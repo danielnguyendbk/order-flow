@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-
+import { prisma } from "../../db";
 import { generateOrderCode, generatePaymentCode } from "./order-code";
 import { recordOrderNotification } from "../notifications/notification-outbox.service";
 import { SepayApiClient, SepayApiClientError, type SepayTransactionLookup } from "../sepay/sepay-api.client";
@@ -118,7 +118,7 @@ function assertNote(note: string | undefined): void {
 
 export class TelegramOrderService implements TelegramOrderServiceContract {
   public constructor(
-    private readonly database: PrismaClient = new PrismaClient(),
+    private readonly database: PrismaClient = prisma,
     private readonly qrConfig: TelegramQrConfig = {
       accountNumber: process.env.SEPAY_BANK_ACCOUNT ?? "",
       bankName: process.env.SEPAY_BANK_NAME ?? "",

@@ -9,6 +9,7 @@ import { BaristaService } from "./barista.service";
  * Mounted at: /api/v1/barista
  *
  * Routes:
+ *   GET /employees → getActiveBaristas
  *   GET /queue   → getQueue
  *   GET /orders  → getBaristaOrders
  */
@@ -18,6 +19,7 @@ export function createBaristaRouter(): Router {
 
   const router = Router();
 
+  router.get("/employees", controller.getActiveBaristas);
   router.get("/queue", controller.getQueue);
   router.get("/orders", controller.getBaristaOrders);
 

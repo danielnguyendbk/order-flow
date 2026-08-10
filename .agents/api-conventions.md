@@ -10,9 +10,8 @@
 {
   "success": true,
   "data": {}
-} 
-
-
+}
+```
 
 ## Response lỗi
 

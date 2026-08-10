@@ -196,14 +196,14 @@ describe("Complete service-staff Telegram order flow over HTTP", () => {
     expect(replies.at(-1)).toContain("Chờ pha");
   });
 
-  it("creates QR and refreshes status after payment confirmation", async () => {
+  it("creates QR immediately and refreshes status after payment confirmation", async () => {
     const session: BotSession = {};
     const replies: string[] = [];
     const orderId = await buildReviewedOrder(session, replies);
 
     await handleDraftCallback(callbackContext("draft:pay:qr", session, replies), client);
-    expect(orderService.orders.get(orderId)).toMatchObject({ paymentMethod: null, paymentStatus: "UNPAID" });
-    await handleDraftCallback(callbackContext("draft:payment:confirm", session, replies), client);
+    expect(session.draftOrder).toBeUndefined();
+    expect(orderService.orders.get(orderId)).toMatchObject({ paymentMethod: "QR", paymentStatus: "PENDING" });
     expect(replies.at(-1)).toContain("Chờ xác nhận thanh toán");
     expect(replies.at(-1)).toContain("PAYORD001");
 

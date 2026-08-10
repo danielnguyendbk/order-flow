@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { OrderStatusHistory, CreateHistoryInput } from "./history.types";
-
-const prisma = new PrismaClient();
 
 /**
  * Repository for `order_status_history` database operations.

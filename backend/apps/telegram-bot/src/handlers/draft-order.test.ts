@@ -134,7 +134,7 @@ describe("Telegram draft order flow", () => {
     expect(emptyLabels).not.toEqual(expect.arrayContaining(["Tiền mặt", "QR"]));
   });
 
-  it("shows explicit confirm and cancel actions after selecting a payment method", () => {
+  it("shows explicit confirm and cancel actions for CASH payment", () => {
     const labels = paymentConfirmationKeyboard("deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
     expect(labels).toEqual(["✅ Xác nhận thanh toán", "❌ Hủy"]);
   });
@@ -309,24 +309,31 @@ describe("Telegram draft order flow", () => {
     expect(confirmation.replies.at(-1)).toContain("Chờ pha");
   });
 
-  it("requires confirmation before creating a QR payment", async () => {
+  it("creates a QR payment immediately without a confirmation step", async () => {
     const session = { draftOrder: { orderId: "order-1", step: "REVIEW" as const } };
     const backend = api();
     const selection = callbackContext("draft:pay:qr", session);
 
     await handleDraftCallback(selection, backend);
 
-    expect(backend.createQrPayment).not.toHaveBeenCalled();
-    expect(session.draftOrder).toMatchObject({ step: "PAYMENT_CONFIRMATION", pendingPaymentMethod: "QR" });
-    expect(selection.replies.at(-1)).toContain("Phương thức: QR");
-
-    const confirmation = callbackContext("draft:payment:confirm", session);
-    await handleDraftCallback(confirmation, backend);
-
     expect(backend.createQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(confirmation.session.draftOrder).toBeUndefined();
-    expect(confirmation.replies.at(-1)).toContain("PAYOF001");
-    expect(confirmation.replies.at(-1)).toContain("Chờ xác nhận thanh toán");
+    expect(selection.session.draftOrder).toBeUndefined();
+    expect(selection.replies.at(-1)).toContain("PAYOF001");
+    expect(selection.replies.at(-1)).toContain("Chờ xác nhận thanh toán");
+    expect(selection.replies.at(-1)).not.toContain("XÁC NHẬN THANH TOÁN");
+  });
+
+  it("creates only one QR payment across sequential double-clicks", async () => {
+    const session: BotSession = { draftOrder: { orderId: "order-1", step: "REVIEW", callbackRevision: "deadbeef" } };
+    const backend = api();
+    const data = draftCallbackData("deadbeef", "payQr");
+
+    await handleDraftCallback(callbackContext(data, session), backend);
+    const repeated = callbackContext(data, session);
+    await handleDraftCallback(repeated, backend);
+
+    expect(backend.createQrPayment).toHaveBeenCalledTimes(1);
+    expect(repeated.clears).toEqual(["cleared"]);
   });
 
   it("cancels only the payment selection and returns to the editable order", async () => {

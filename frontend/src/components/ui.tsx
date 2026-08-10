@@ -19,7 +19,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`card p-5 ${className}`}>
+    <section className={`card p-6 ${className}`}>
       {(title || right) && (
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -46,12 +46,12 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-4 pt-1 pb-2">
       <div>
-        <h1 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">{title}</h1>
-        {description && <p className="mt-1.5 text-sm text-muted whitespace-nowrap truncate sm:truncate-none">{description}</p>}
+        <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-ink lg:text-[26px]">{title}</h1>
+        {description && <p className="mt-1.5 text-sm font-normal text-muted">{description}</p>}
       </div>
-      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+      {children && <div className="flex flex-wrap items-center gap-2.5">{children}</div>}
     </div>
   );
 }
@@ -73,16 +73,29 @@ const STAT_TONES: Record<NonNullable<StatItem["tone"]>, string> = {
   teal: "text-brand-700",
 };
 
-export function Stats({ items }: { items: StatItem[] }) {
+const GRID_COLS_MAP: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+  5: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
+  6: "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6",
+};
+
+export function Stats({ items, className }: { items: StatItem[]; className?: string }) {
+  const colsClass = GRID_COLS_MAP[items.length] ?? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6";
+
   return (
-    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className={`mb-6 grid items-stretch gap-3 ${colsClass} ${className ?? ""}`}>
       {items.map((item, i) => (
-        <article key={i} className="card p-4 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/5">
-          <span className="block text-xs font-medium text-muted">{item.label}</span>
-          <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${STAT_TONES[item.tone ?? "teal"]}`}>
-            {item.value}
-          </strong>
-          {item.sub && <span className="mt-0.5 block text-xs text-muted">{item.sub}</span>}
+        <article key={i} className="card flex flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/5">
+          <div>
+            <span className="block text-xs font-medium text-muted">{item.label}</span>
+            <strong className={`mt-1 block text-lg font-extrabold tabular-nums ${STAT_TONES[item.tone ?? "teal"]}`}>
+              {item.value}
+            </strong>
+          </div>
+          {item.sub ? <span className="mt-1.5 block text-xs text-muted">{item.sub}</span> : null}
         </article>
       ))}
     </div>
@@ -241,21 +254,43 @@ export function Modal({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (open && !el.open) el.showModal();
-    if (!open && el.open) el.close();
+    if (open) {
+      if (!el.open) el.showModal();
+      document.body.style.overflow = "hidden";
+    } else {
+      if (el.open) el.close();
+      document.body.style.overflow = "";
+    }
+
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isInDialog =
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom;
+    if (!isInDialog) {
+      onClose();
+    }
+  };
 
   return (
     <dialog
       ref={ref}
       onClose={onClose}
       onCancel={onClose}
-      className="m-auto w-full rounded-2xl bg-white shadow-2xl outline-none backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm"
+      onClick={handleBackdropClick}
+      className="m-auto w-full rounded-2xl bg-white p-0 shadow-2xl outline-none backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm"
       style={{ maxWidth: wide ? "min(94vw, 760px)" : "min(94vw, 520px)" }}
     >
       {/* Chỉ mount nội dung khi mở để tránh form defaultValue bị stale giữa các lần mở */}
       {open && (
-        <div className="max-h-[86vh] overflow-y-auto">
+        <div className="max-h-[86vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
           <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-white px-6 py-4">
             <div>
               {eyebrow && <p className="eyebrow mb-0.5">{eyebrow}</p>}
@@ -309,4 +344,55 @@ export function FulfillmentBadge({ type }: { type: string }) {
       {meta.label}
     </span>
   );
+}
+
+/* ── Spinner icon ── */
+export function Spinner({ size = "md", className = "" }: { size?: "sm" | "md" | "lg"; className?: string }) {
+  const sizeMap = {
+    sm: "h-4 w-4 stroke-[2.5]",
+    md: "h-6 w-6 stroke-[2]",
+    lg: "h-10 w-10 stroke-[2]",
+  };
+  return (
+    <svg
+      className={`animate-spin text-emerald-600 ${sizeMap[size]} ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-90"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+}
+
+/* ── Component hiển thị màn hình Đang tải toàn trang/tính năng ── */
+export function PageLoading({
+  label = "Đang tải dữ liệu...",
+  subText = "Vui lòng chờ trong giây lát",
+}: {
+  label?: string;
+  subText?: string;
+}) {
+  return (
+    <div className="flex min-h-[calc(100vh-10rem)] w-full flex-col items-center justify-center py-8 text-center animate-[fadeUp_.3s_ease-out]">
+      <div className="relative flex items-center justify-center">
+        <div className="absolute h-20 w-20 rounded-full bg-emerald-500/15 animate-ping" />
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100/80 shadow-inner ring-1 ring-emerald-500/20">
+          <Spinner size="lg" />
+        </div>
+      </div>
+      <h3 className="mt-6 text-lg font-extrabold text-slate-800 tracking-tight">{label}</h3>
+      {subText && <p className="mt-2 text-sm font-medium text-slate-400">{subText}</p>}
+    </div>
+  );
+}
+
+/* ── Skeleton Loader ── */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-xl bg-slate-200/70 ${className}`} />;
 }

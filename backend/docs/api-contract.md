@@ -168,12 +168,14 @@ Status: **implemented**
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/v1/barista/employees` | List active Barista employees eligible for assignment |
 | `GET` | `/api/v1/barista/queue` | List queued paid orders for barista processing |
 | `GET` | `/api/v1/barista/orders?baristaId=...` | List preparing or ready orders assigned to a barista |
 | `POST` | `/api/v1/orders/:orderId/claim` | Atomically claim a queued order |
 
 - Queue only shows orders with `fulfillmentStatus = QUEUED` and `paymentStatus = PAID`.
 - Claim is atomic at the database layer: only one barista can win a concurrent claim.
+- Claim rejects a target user unless their current role is `BARISTA` and status is `ACTIVE`.
 - `GET /barista/orders` requires `baristaId`.
 
 ## Public menu

@@ -1,8 +1,7 @@
 import createHttpError from "http-errors";
-import { AuditEntityType, Prisma, PrismaClient } from "@prisma/client";
+import { AuditEntityType, Prisma } from "@prisma/client";
 import { PaymentStatus } from "../orders/order.types";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 export interface RefundOrderInput {
   refundedByUserId: string;

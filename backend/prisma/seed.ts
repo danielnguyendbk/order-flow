@@ -9,6 +9,8 @@ import { seedThai003SepayWebhook } from "./seeds/thai003-sepay-webhook.seed";
 import { seedThai004Reconciliation } from "./seeds/thai004-reconciliation.seed";
 import { seedThai005Refund } from "./seeds/thai005-refund.seed";
 import { seedThai006Revenue } from "./seeds/thai006-revenue.seed";
+import { seedReconciliationDemo } from "./seeds/reconciliation-demo.seed";
+import { seedAuditDemo } from "./seeds/audit-demo.seed";
 import { seedSmallShopMenu } from "./seeds/small-shop-menu.seed";
 
 const prisma = new PrismaClient();
@@ -88,6 +90,16 @@ async function main(): Promise<void> {
 
   if (target === "thai006") {
     await seedThai006Revenue(prisma);
+    return;
+  }
+
+  if (target === "reconcile") {
+    await seedReconciliationDemo(prisma);
+    return;
+  }
+
+  if (target === "audit") {
+    await seedAuditDemo(prisma);
     return;
   }
 

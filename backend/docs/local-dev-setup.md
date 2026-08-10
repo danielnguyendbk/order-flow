@@ -167,4 +167,36 @@ npm run dev
 
 ---
 
-*Cập nhật lần cuối: 2026-08-05*
+## 6. Tiến trình node "zombie" giữ cổng sau khi `tsx watch` bị tắt (Windows)
+
+### Triệu chứng
+API trả về dữ liệu cũ hoặc thiếu field dù đã sửa code và khởi động lại — vì một tiến trình `node.exe` cũ vẫn đang chiếm cổng 3001.
+
+```
+TCP    0.0.0.0:3001    LISTENING    <PID>
+```
+
+### Nguyên nhân
+`tsx watch` tạo một tiến trình con `node.exe` để chạy code. Khi process cha bị kill (Ctrl+C, đóng terminal, kill bằng task manager), process con đôi khi **không tự tắt** theo trên Windows.
+
+### Fix
+
+```powershell
+# 1. Tìm PID đang chiếm cổng 3001
+netstat -ano | findstr :3001
+
+# 2. Kiểm tra tiến trình đó là gì
+wmic process where processid=<PID> get commandline
+
+# 3. Kill nếu đúng là node cũ của project
+taskkill /F /PID <PID>
+
+# 4. Khởi động lại API bình thường
+npm run dev:api
+```
+
+> ⚠️ **Dấu hiệu nhận biết**: nếu log backend không có dòng `CONTROLLER:` mới khi gọi API, hoặc response thiếu field `byDate`, khả năng cao đang bị zombie process chiếm cổng.
+
+---
+
+*Cập nhật lần cuối: 2026-08-10*

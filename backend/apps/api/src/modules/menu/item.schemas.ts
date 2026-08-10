@@ -17,7 +17,7 @@ export const publicItemListQuerySchema = z.object(filterFields).transform((value
 
 export const adminItemListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().max(100).default(20),
+  limit: z.coerce.number().int().positive().max(1000).default(20),
   ...filterFields,
   isAvailable: z
     .enum(["true", "false"])
