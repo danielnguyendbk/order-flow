@@ -1,25 +1,33 @@
-import { BaristaService } from "../barista.service";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-jest.mock("@prisma/client", () => {
+import { FulfillmentStatus, PaymentStatus } from "../../orders/order.types";
+
+vi.mock("@prisma/client", () => {
   const mPrisma = {
     order: {
-      findMany: jest.fn(),
+      findMany: vi.fn(),
     },
   };
+
+  function PrismaClientMock() {
+    return mPrisma;
+  }
+
   return {
-    PrismaClient: jest.fn().mockImplementation(() => mPrisma),
+    PrismaClient: PrismaClientMock,
   };
 });
 
 import { PrismaClient } from "@prisma/client";
-import { FulfillmentStatus, PaymentStatus } from "../../orders/order.types";
+
+import { BaristaService } from "../barista.service";
 
 describe("BaristaService", () => {
   let prismaInstance: any;
   let service: BaristaService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     prismaInstance = new PrismaClient();
     service = new BaristaService();
   });

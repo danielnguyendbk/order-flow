@@ -3,18 +3,24 @@ import { OrderRepository } from "../order.repository";
 import { HistoryRepository } from "../../order-status-history/history.repository";
 import { PaymentRepository } from "../../payments/payment.repository";
 import { FulfillmentStatus, PaymentStatus } from "../order.types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-jest.mock("@prisma/client", () => {
+vi.mock("@prisma/client", () => {
   const mPrisma = {
     order: {
-      update: jest.fn(),
+      update: vi.fn(),
     },
     user: {
-      findUnique: jest.fn(),
+      findUnique: vi.fn(),
     },
   };
+
+  function PrismaClientMock() {
+    return mPrisma;
+  }
+
   return {
-    PrismaClient: jest.fn().mockImplementation(() => mPrisma),
+    PrismaClient: PrismaClientMock,
   };
 });
 
@@ -22,14 +28,14 @@ import { PrismaClient } from "@prisma/client";
 
 describe("Order fulfillment state machine integration", () => {
   let prismaInstance: any;
-  let orderRepositoryMock: jest.Mocked<OrderRepository>;
-  let historyRepositoryMock: jest.Mocked<HistoryRepository>;
-  let paymentRepositoryMock: jest.Mocked<PaymentRepository>;
+  let orderRepositoryMock: any;
+  let historyRepositoryMock: any;
+  let paymentRepositoryMock: any;
   let service: OrderService;
   let currentOrder: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     prismaInstance = new PrismaClient();
     currentOrder = {
       id: "order-1",
@@ -56,8 +62,8 @@ describe("Order fulfillment state machine integration", () => {
     });
 
     orderRepositoryMock = {
-      findById: jest.fn().mockImplementation(async () => currentOrder),
-      updateFulfillmentStatus: jest.fn().mockImplementation(async (_orderId, fulfillmentStatus, opts) => {
+      findById: vi.fn().mockImplementation(async () => currentOrder),
+      updateFulfillmentStatus: vi.fn().mockImplementation(async (_orderId, fulfillmentStatus, opts) => {
         currentOrder = {
           ...currentOrder,
           fulfillmentStatus,
@@ -65,10 +71,10 @@ describe("Order fulfillment state machine integration", () => {
         };
         return currentOrder;
       }),
-      updatePaymentStatus: jest.fn(),
+      updatePaymentStatus: vi.fn(),
     } as any;
     historyRepositoryMock = {
-      create: jest.fn().mockResolvedValue({} as any),
+      create: vi.fn().mockResolvedValue({} as any),
     } as any;
     paymentRepositoryMock = {} as any;
 

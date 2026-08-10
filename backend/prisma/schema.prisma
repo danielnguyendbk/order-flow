@@ -76,6 +76,36 @@ enum NotificationStatus {
   @@map("notification_status")
 }
 
+enum TransactionMatchStatus {
+  UNMATCHED
+  MATCHED
+  WRONG_CODE
+  REVIEWED
+
+  @@map("transaction_match_status")
+}
+
+enum ResolutionAction {
+  NONE
+  LINK_MANUALLY
+  ACCEPT
+  REJECT
+  REFUND_REQUIRED
+
+  @@map("resolution_action")
+}
+
+enum AuditEntityType {
+  USER
+  MENU_CATEGORY
+  MENU_ITEM
+  ORDER
+  PAYMENT
+  SEPAY_TRANSACTION
+
+  @@map("audit_entity_type")
+}
+
 model User {
   id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   fullName           String               @map("full_name") @db.VarChar(150)
@@ -92,6 +122,8 @@ model User {
   confirmedPayments  Payment[]            @relation("CashConfirmer")
   orderStatusChanges OrderStatusHistory[] @relation("HistoryActor")
   notifications      Notification[]       @relation("NotificationRecipient")
+  resolvedTransactions SepayTransaction[] @relation("ResolvedTransactions")
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -181,9 +213,37 @@ model Payment {
   updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
   order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   cashConfirmer         User?     @relation("CashConfirmer", fields: [cashConfirmedByUserId], references: [id])
+  sepayTransactions     SepayTransaction[]
 
   @@index([cashConfirmedByUserId], map: "payments_cash_confirmer_idx")
   @@map("payments")
+}
+
+model SepayTransaction {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sepayTransactionId BigInt                 @unique @map("sepay_transaction_id")
+  paymentId          String?                @map("payment_id") @db.Uuid
+  transactionDate    DateTime               @map("transaction_date") @db.Timestamptz(6)
+  code               String?                @db.VarChar(100)
+  content            String?
+  amountIn           BigInt                 @default(0) @map("amount_in")
+  referenceCode      String?                @map("reference_code") @db.VarChar(150)
+  matchStatus        TransactionMatchStatus @default(UNMATCHED) @map("match_status")
+  differenceAmount   BigInt?                @map("difference_amount")
+  resolutionAction   ResolutionAction       @default(NONE) @map("resolution_action")
+  resolutionNote     String?                @map("resolution_note")
+  resolvedByUserId   String?                @map("resolved_by_user_id") @db.Uuid
+  resolvedAt         DateTime?              @map("resolved_at") @db.Timestamptz(6)
+  rawPayload         Json                   @default("{}") @map("raw_payload")
+  receivedAt         DateTime               @default(now()) @map("received_at") @db.Timestamptz(6)
+  payment            Payment?               @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  resolvedBy         User?                  @relation("ResolvedTransactions", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([paymentId, transactionDate(sort: Desc)], map: "sepay_transactions_payment_date_idx")
+  @@index([receivedAt(sort: Desc)], map: "sepay_transactions_unmatched_received_idx")
+  @@index([code], map: "sepay_transactions_code_idx")
+  @@index([referenceCode], map: "sepay_transactions_reference_code_idx")
+  @@map("sepay_transactions")
 }
 
 model OrderStatusHistory {
@@ -225,4 +285,19 @@ model Notification {
   @@index([orderId], map: "notifications_order_idx")
   @@index([recipientUserId], map: "notifications_recipient_idx")
   @@map("notifications")
+}
+
+model AuditLog {
+  id          BigInt          @id @default(autoincrement())
+  actorUserId String?         @map("actor_user_id") @db.Uuid
+  action      String          @db.VarChar(100)
+  entityType  AuditEntityType @map("entity_type")
+  entityId    String?         @map("entity_id") @db.Uuid
+  details     Json            @default("{}")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor       User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt(sort: Desc)], map: "audit_logs_entity_created_idx")
+  @@index([actorUserId, createdAt(sort: Desc)], map: "audit_logs_actor_created_idx")
+  @@map("audit_logs")
 }

@@ -46,7 +46,7 @@ export function createApiRouter(
     const { createAdminRouter } = require("../modules/admin/admin.routes");
     router.use("/orders", createOrderRouter());
     router.use("/barista", createBaristaRouter());
-    router.use("/admin", createAdminRouter());
+    router.use("/admin", createAdminRouter(authService));
   }
 
   return router;

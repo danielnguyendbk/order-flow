@@ -36,9 +36,9 @@ export class AuthRepository implements AuthRepositoryPort {
   async findAdminByUsername(username: string): Promise<AuthUserWithPassword | null> {
     const result = await this.pool.query<UserRow>(
       `select id, full_name, username, telegram_user_id, password_hash, role, status
-       from public.users
-       where lower(username) = lower($1) and role = 'OWNER'
-       limit 1`,
+        from public.users
+        where lower(username) = lower($1) and role in ('OWNER', 'SERVICE_STAFF')
+        limit 1`,
       [username],
     );
     return result.rows[0] ? mapUser(result.rows[0]) : null;

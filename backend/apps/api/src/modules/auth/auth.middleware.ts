@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { AppError } from "../../core/errors.js";
 import type { AuthServicePort } from "./auth.service.js";
-import type { AccessIdentity } from "./auth.types.js";
+import type { AccessIdentity, AccessRole } from "./auth.types.js";
 
 declare global {
   namespace Express {
@@ -20,7 +20,7 @@ function readBearerToken(request: Request): string {
   return token;
 }
 
-export function requireAdminAuth(authService: AuthServicePort) {
+function requireRoles(authService: AuthServicePort, roles: AccessRole[]) {
   return async function adminAuthMiddleware(
     request: Request,
     _response: Response,
@@ -29,7 +29,7 @@ export function requireAdminAuth(authService: AuthServicePort) {
     try {
       request.auth = await authService.authenticate(
         readBearerToken(request),
-        "OWNER",
+        roles,
       );
       next();
     } catch (error) {
@@ -38,3 +38,10 @@ export function requireAdminAuth(authService: AuthServicePort) {
   };
 }
 
+export function requireAdminAuth(authService: AuthServicePort) {
+  return requireRoles(authService, ["OWNER"]);
+}
+
+export function requireAdminAccess(authService: AuthServicePort) {
+  return requireRoles(authService, ["OWNER", "SERVICE_STAFF"]);
+}

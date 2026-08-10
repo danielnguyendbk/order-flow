@@ -7,6 +7,7 @@ import type { AuthSessionStorePort } from "./auth-session.store.js";
 import { AuthTokenService } from "./auth.tokens.js";
 import type {
   AccessIdentity,
+  AccessRole,
   AuthSessionResult,
   AuthUser,
   PublicAuthUser,
@@ -30,7 +31,10 @@ export interface AuthServicePort {
     metadata?: RequestMetadata,
   ): Promise<AuthSessionResult>;
   refresh(refreshToken: string): Promise<AuthSessionResult>;
-  authenticate(accessToken: string, requiredRole?: "OWNER"): Promise<AccessIdentity>;
+  authenticate(
+    accessToken: string,
+    requiredRoleOrRoles?: AccessRole | AccessRole[],
+  ): Promise<AccessIdentity>;
   me(identity: AccessIdentity): Promise<PublicAuthUser>;
   logout(identity: AccessIdentity): Promise<void>;
 }
@@ -115,7 +119,7 @@ export class AuthService implements AuthServicePort {
 
   async authenticate(
     accessToken: string,
-    requiredRole?: "OWNER",
+    requiredRoleOrRoles?: AccessRole | AccessRole[],
   ): Promise<AccessIdentity> {
     const identity = await this.tokens.verifyAccessToken(accessToken);
     if (!this.sessions.isActive(identity.sessionId, identity.userId)) {
@@ -126,7 +130,13 @@ export class AuthService implements AuthServicePort {
       this.sessions.revoke(identity.sessionId, identity.userId);
       throw new AppError("UNAUTHORIZED", "Session is invalid or expired");
     }
-    if (requiredRole && user.role !== requiredRole) {
+    const requiredRoles = Array.isArray(requiredRoleOrRoles)
+      ? requiredRoleOrRoles
+      : requiredRoleOrRoles
+        ? [requiredRoleOrRoles]
+        : undefined;
+
+    if (requiredRoles && !requiredRoles.includes(user.role)) {
       throw new AppError("FORBIDDEN", "Insufficient permissions");
     }
     return { ...identity, role: user.role };
