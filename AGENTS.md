@@ -93,7 +93,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - `feat-tele` implements KHOA-006 notification outbox records, idempotent event keys, BullMQ dispatch, Telegram retry/failure persistence, Redis Docker infrastructure, and an internal failed-notification requeue command.
 - Fixed local Bot startup after token/secret rotation by replacing `tsx --env-file` with an override-aware development runner and regression coverage.
-- KHOA-006 exposes transaction-scoped hooks for SePay ORDER_PAID/PAYMENT_REVIEW; production call sites remain owned by the still-open webhook/reconciliation issues #18 and #24, with disposable-database replay coverage at the outbox boundary.
+- SePay webhook processing now calls the transaction-scoped notification outbox hooks: exact matches enqueue `ORDER_PAID`, while review classifications enqueue `PAYMENT_REVIEW`. Duplicate webhooks return success without replaying payment, notification, or audit side effects.
 
 ## Progress log — 2026-08-05
 

@@ -20,6 +20,9 @@ tags:
   - name: Admin Auth
   - name: Service Orders
   - name: Barista
+  - name: Payments
+  - name: SePay
+  - name: Admin Finance
   - name: Public Menu
   - name: Admin Employees
   - name: Admin Menu Categories
@@ -391,6 +394,105 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/v1/orders/{orderId}/payments:
+    get:
+      tags: [Payments]
+      operationId: listOrderPayments
+      summary: List payment records for an order
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      responses:
+        "200":
+          description: Order payment records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/orders/{orderId}/payments/qr:
+    post:
+      tags: [Payments]
+      operationId: initQrPayment
+      summary: Initialize or reuse a pending QR payment
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitQrPaymentRequest"
+      responses:
+        "200":
+          description: QR payment initialized or reused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentActionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/orders/{orderId}/payments/cash/confirm:
+    post:
+      tags: [Payments]
+      operationId: confirmCashPayment
+      summary: Confirm cash payment and queue the order
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCashPaymentRequest"
+      responses:
+        "200":
+          description: Cash payment confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentActionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/webhooks/sepay:
+    post:
+      tags: [SePay]
+      operationId: handleSepayWebhook
+      summary: Receive and reconcile a SePay transaction webhook
+      x-implementation-status: implemented
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SepayWebhookRequest"
+      responses:
+        "200":
+          description: Webhook accepted, including duplicate deliveries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SepayWebhookResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
 
   /api/v1/barista/queue:
     get:
@@ -887,6 +989,225 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/admin/transactions:
+    get:
+      tags: [Admin Finance]
+      operationId: listSepayTransactions
+      summary: List received SePay transactions
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: SePay transactions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/transactions/{transactionId}:
+    get:
+      tags: [Admin Finance]
+      operationId: getSepayTransaction
+      summary: Get a received SePay transaction
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SePay transaction detail
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/reconciliations:
+    get:
+      tags: [Admin Finance]
+      operationId: listReconciliations
+      summary: List reconciliation review transactions
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Reconciliation records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/reconciliations/{reconciliationId}:
+    get:
+      tags: [Admin Finance]
+      operationId: getReconciliation
+      summary: Get a reconciliation review transaction
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reconciliationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reconciliation detail
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/reconciliations/{reconciliationId}/resolve:
+    post:
+      tags: [Admin Finance]
+      operationId: resolveReconciliation
+      summary: Resolve a reconciliation review transaction
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reconciliationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveReconciliationRequest"
+      responses:
+        "200":
+          description: Reconciliation resolved
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/orders/{orderId}/refund:
+    post:
+      tags: [Admin Finance]
+      operationId: refundOrder
+      summary: Record a manual order refund
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefundOrderRequest"
+      responses:
+        "200":
+          description: Refund recorded
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/admin/reports/revenue:
+    get:
+      tags: [Admin Finance]
+      operationId: getRevenueReport
+      summary: Get revenue totals by date range and method
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok start of day.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok end of day.
+      responses:
+        "200":
+          description: Revenue report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Admin Finance]
+      operationId: listAuditLogs
+      summary: List financial and administrative audit logs
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericDataListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1056,9 +1377,173 @@ components:
     PaymentMethod:
       type: string
       enum: [QR, CASH]
+    TransactionMatchStatus:
+      type: string
+      enum: [UNMATCHED, MATCHED, WRONG_CODE, REVIEWED]
+    ResolutionAction:
+      type: string
+      enum: [NONE, LINK_MANUALLY, ACCEPT, REJECT, REFUND_REQUIRED]
     OrderStatusDomain:
       type: string
       enum: [PAYMENT, FULFILLMENT]
+
+    GenericDataResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+    GenericDataListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+
+    ConfirmCashPaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmedByUserId]
+      properties:
+        confirmedByUserId:
+          type: string
+        amount:
+          type: integer
+          minimum: 0
+    InitQrPaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [requestedByUserId]
+      properties:
+        requestedByUserId:
+          type: string
+    PaymentRecord:
+      type: object
+      required: [id, orderId, method, status, expectedAmount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        method:
+          $ref: "#/components/schemas/PaymentMethod"
+        status:
+          $ref: "#/components/schemas/PaymentStatus"
+        expectedAmount:
+          type: string
+          description: BigInt amount serialized by the runtime JSON layer.
+        receivedAmount:
+          type: [string, "null"]
+          description: BigInt amount serialized by the runtime JSON layer.
+        paymentCode:
+          type: [string, "null"]
+        transferContent:
+          type: [string, "null"]
+        confirmedByUserId:
+          type: [string, "null"]
+        confirmedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PaymentListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentRecord"
+    PaymentActionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          properties:
+            order:
+              $ref: "#/components/schemas/Order"
+            payment:
+              $ref: "#/components/schemas/PaymentRecord"
+            qr:
+              type: object
+              properties:
+                amount:
+                  type: string
+                transferContent:
+                  type: string
+                paymentCode:
+                  type: string
+    SepayWebhookRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        sepayTransactionId:
+          type: [string, integer]
+          description: Also accepted as sepay_transaction_id, transactionId, transaction_id, or id.
+        amountIn:
+          type: [string, integer]
+          description: Also accepted as amount_in, transferAmount, or amount.
+        content:
+          type: string
+        transferContent:
+          type: string
+        transactionDate:
+          type: string
+          format: date-time
+    SepayWebhookResponse:
+      type: object
+      required: [ok, duplicate]
+      properties:
+        ok:
+          type: boolean
+        duplicate:
+          type: boolean
+        transactionId:
+          type: string
+        paymentId:
+          type: [string, "null"]
+        matchStatus:
+          $ref: "#/components/schemas/TransactionMatchStatus"
+        paymentStatus:
+          $ref: "#/components/schemas/PaymentStatus"
+        fulfillmentStatus:
+          anyOf:
+            - $ref: "#/components/schemas/FulfillmentStatus"
+            - type: "null"
+        reason:
+          type: string
+    ResolveReconciliationRequest:
+      type: object
+      additionalProperties: false
+      required: [resolvedByUserId, resolutionAction, resolutionNote]
+      properties:
+        resolvedByUserId:
+          type: string
+        resolutionAction:
+          $ref: "#/components/schemas/ResolutionAction"
+        resolutionNote:
+          type: string
+          minLength: 1
+    RefundOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [refundedByUserId, reason]
+      properties:
+        refundedByUserId:
+          type: string
+        reason:
+          type: string
+          minLength: 1
+        amount:
+          type: integer
+          minimum: 1
 
     CreateOrderItemRequest:
       type: object

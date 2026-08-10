@@ -95,11 +95,10 @@ the bot to authenticated webhook mode. Build with `npm run build:bot`, then run
 platform. Business transactions write idempotent notification outbox rows in
 PostgreSQL; the dispatcher enqueues `NotificationJob` payloads after commit.
 
-`ORDER_PAID` for CASH and `ORDER_READY` are connected to their current business
-transactions. The SePay webhook/reconciliation tasks (#18 and #24) must call
-`recordOrderNotification` for a reconciled PAID order or
-`recordPaymentReviewNotifications` for a review classification from the same
-Prisma transaction. The outbox unique key makes replayed sources idempotent.
+`ORDER_PAID` for CASH, exact SePay matches, and `ORDER_READY` are connected to
+their current business transactions. SePay review classifications call
+`recordPaymentReviewNotifications` from the same Prisma transaction. The outbox
+unique key makes replayed sources idempotent.
 
 ## Structure
 
