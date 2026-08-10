@@ -13,8 +13,8 @@ async function main(): Promise<void> {
   const queue = createNotificationQueue(config.redisUrl);
   const worker = createNotificationWorker(database, bot.telegram, config.redisUrl);
 
-  await dispatchPendingNotifications(database, queue);
-  const dispatcher = startNotificationDispatcher(database, queue);
+  await dispatchPendingNotifications(database, queue, config.notificationNotBefore);
+  const dispatcher = startNotificationDispatcher(database, queue, config.notificationNotBefore);
 
   worker.on("completed", (job) => console.info(`Notification ${job.id} sent`));
   worker.on("failed", (job, error) => console.error(`Notification ${job?.id} failed`, error));

@@ -18,7 +18,7 @@ export interface BotSession {
   draftOrder?: DraftOrderSession;
 }
 
-export type DraftOrderStep = "CATEGORY" | "ITEM" | "QUANTITY" | "NOTE" | "EDIT_QUANTITY" | "EDIT_NOTE" | "REVIEW";
+export type DraftOrderStep = "CATEGORY" | "ITEM" | "QUANTITY" | "NOTE" | "EDIT_QUANTITY" | "EDIT_NOTE" | "REVIEW" | "PAYMENT_CONFIRMATION";
 
 export interface DraftOrderSession {
   orderId: string;
@@ -29,6 +29,7 @@ export interface DraftOrderSession {
   selectedMenuItemName?: string;
   quantity?: number;
   editingOrderItemId?: string;
+  pendingPaymentMethod?: "CASH" | "QR";
 }
 
 export interface BotContext extends Context {

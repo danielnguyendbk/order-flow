@@ -144,7 +144,15 @@ function draftContext(session: BotSession, replies: string[]): DraftOrderContext
 
 function callbackContext(data: string, session: BotSession, replies: string[]): DraftOrderCallbackContext {
   const match = /^draft:(category|item):(.+)$/.exec(data);
-  const simple = data === "draft:pay:cash" ? "payCash" : data === "draft:pay:qr" ? "payQr" : undefined;
+  const simple = data === "draft:pay:cash"
+    ? "payCash"
+    : data === "draft:pay:qr"
+      ? "payQr"
+      : data === "draft:payment:confirm"
+        ? "confirmPayment"
+        : data === "draft:payment:cancel"
+          ? "cancelPayment"
+          : undefined;
   const callbackData = match
     ? draftCallbackData(session.draftOrder!.callbackRevision, match[1] === "category" ? "category" : "item", match[2])
     : simple
@@ -176,28 +184,32 @@ describe("Complete service-staff Telegram order flow over HTTP", () => {
     const orderId = await buildReviewedOrder(session, replies);
 
     await handleDraftCallback(callbackContext("draft:pay:cash", session, replies), client);
+    expect(orderService.orders.get(orderId)).toMatchObject({ paymentMethod: null, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT" });
+    await handleDraftCallback(callbackContext("draft:payment:confirm", session, replies), client);
     expect(session.draftOrder).toBeUndefined();
     expect(orderService.orders.get(orderId)).toMatchObject({ totalAmount: 60_000, paymentMethod: "CASH", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" });
 
     const tracking: OrderStatusContext = draftContext(session, replies);
     await showMyOrders(tracking, client);
     await showOrderStatus(tracking, client, orderId);
-    expect(replies.at(-1)).toContain("PAID");
-    expect(replies.at(-1)).toContain("QUEUED");
+    expect(replies.at(-1)).toContain("Đã thanh toán");
+    expect(replies.at(-1)).toContain("Chờ pha");
   });
 
-  it("creates QR and refreshes status after payment confirmation", async () => {
+  it("creates QR immediately and refreshes status after payment confirmation", async () => {
     const session: BotSession = {};
     const replies: string[] = [];
     const orderId = await buildReviewedOrder(session, replies);
 
     await handleDraftCallback(callbackContext("draft:pay:qr", session, replies), client);
-    expect(replies.at(-1)).toContain("PENDING");
+    expect(session.draftOrder).toBeUndefined();
+    expect(orderService.orders.get(orderId)).toMatchObject({ paymentMethod: "QR", paymentStatus: "PENDING" });
+    expect(replies.at(-1)).toContain("Chờ xác nhận thanh toán");
     expect(replies.at(-1)).toContain("PAYORD001");
 
     orderService.markQrPaid(orderId);
     await showOrderStatus(draftContext(session, replies), client, orderId);
-    expect(replies.at(-1)).toContain("PAID");
-    expect(replies.at(-1)).toContain("QUEUED");
+    expect(replies.at(-1)).toContain("Đã thanh toán");
+    expect(replies.at(-1)).toContain("Chờ pha");
   });
 });

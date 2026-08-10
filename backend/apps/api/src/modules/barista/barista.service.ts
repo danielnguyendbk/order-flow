@@ -1,11 +1,37 @@
+import type { User } from "@prisma/client";
+
 import { prisma } from "../../db";
 import { Order, FulfillmentStatus } from "../orders/order.types";
+
+export type ActiveBarista = Pick<
+  User,
+  "id" | "fullName" | "username" | "telegramUserId" | "role" | "status"
+>;
 
 /**
  * Service providing barista-specific order views.
  * Uses Prisma directly — read-only queries only.
  */
 export class BaristaService {
+  /** Returns active employees who can be assigned queued orders. */
+  public async getActiveBaristas(): Promise<ActiveBarista[]> {
+    return prisma.user.findMany({
+      where: {
+        role: "BARISTA",
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        telegramUserId: true,
+        role: true,
+        status: true,
+      },
+      orderBy: { fullName: "asc" },
+    });
+  }
+
   /**
    * Returns all QUEUED orders sorted oldest-first.
    * These are paid orders waiting to be claimed by a barista.

@@ -4,15 +4,28 @@ import { describe, expect, it, vi } from "vitest";
 import { recordOrderNotification, recordPaymentReviewNotifications } from "../notification-outbox.service";
 
 describe("notification outbox", () => {
-  it("records a creator notification idempotently and prefers chat id", async () => {
+  it("records the creator and every active barista when an order is paid", async () => {
     const database: any = {
       order: { findUnique: vi.fn().mockResolvedValue({
         id: "order-1",
         orderCode: "ORD-001",
+        totalAmount: 85_000n,
+        paymentMethod: "CASH",
         createdByUserId: "staff-1",
         creator: { telegramChatId: 123n, telegramUserId: 456n },
+        items: [
+          { itemName: "Cà phê sữa đá", quantity: 2, note: "Ít đá" },
+          { itemName: "Trà đào", quantity: 1, note: null },
+        ],
       }) },
-      notification: { upsert: vi.fn().mockResolvedValue({}) },
+      user: { findMany: vi.fn().mockResolvedValue([
+        { id: "barista-1", telegramChatId: 789n, telegramUserId: 790n },
+        { id: "barista-2", telegramChatId: null, telegramUserId: 791n },
+      ]) },
+      notification: {
+        upsert: vi.fn().mockResolvedValue({}),
+        createMany: vi.fn().mockResolvedValue({ count: 2 }),
+      },
     };
 
     await recordOrderNotification(database as Prisma.TransactionClient, "ORDER_PAID", "order-1");
@@ -31,6 +44,40 @@ describe("notification outbox", () => {
       }),
       update: {},
     });
+    expect(database.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ role: "BARISTA", status: "ACTIVE" }),
+    }));
+    expect(database.notification.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          event: "ORDER_PAID",
+          recipientUserId: "barista-1",
+          recipientTelegramChatId: 789n,
+          message: expect.stringContaining("2 × Cà phê sữa đá"),
+        }),
+        expect.objectContaining({ recipientUserId: "barista-2", recipientTelegramChatId: 791n }),
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it("still notifies baristas when the order creator has no Telegram destination", async () => {
+    const database: any = {
+      order: { findUnique: vi.fn().mockResolvedValue({
+        id: "order-1", orderCode: "ORD-001", totalAmount: 30_000n, paymentMethod: "QR",
+        createdByUserId: "staff-1", creator: { telegramChatId: null, telegramUserId: null },
+        items: [{ itemName: "Trà đào", quantity: 1, note: null }],
+      }) },
+      user: { findMany: vi.fn().mockResolvedValue([
+        { id: "barista-1", telegramChatId: 789n, telegramUserId: null },
+      ]) },
+      notification: { upsert: vi.fn(), createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    };
+
+    await recordOrderNotification(database as Prisma.TransactionClient, "ORDER_PAID", "order-1");
+
+    expect(database.notification.upsert).not.toHaveBeenCalled();
+    expect(database.notification.createMany).toHaveBeenCalledOnce();
   });
 
   it("skips an order notification when the creator has no Telegram destination", async () => {

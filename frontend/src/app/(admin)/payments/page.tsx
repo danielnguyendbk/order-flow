@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, Panel, Badge, EmptyState, paymentTone, Field, Stats, PageLoading } from "@/components/ui";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { formatVnd, formatDateTime, formatDate, formatTime } from "@/lib/format";
@@ -50,12 +50,28 @@ function toPaymentView(tx: ApiSepayTransactionFull): PaymentRow {
 const STATUS_OPTIONS = Object.keys(PAYMENT_STATUS_LABEL) as PaymentStatus[];
 
 function PaymentsPageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [status, setStatus] = useState("");
   const [period, setPeriod] = useState<Period | "">("");
-  const [needsReview, setNeedsReview] = useState(searchParams.get("needsReview") === "1");
+  const needsReview = searchParams.get("needsReview") === "1";
   const [detail, setDetail] = useState<PaymentRow | null>(null);
+
+  const setNeedsReview = (enabled: boolean) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (enabled) params.set("needsReview", "1");
+    else params.delete("needsReview");
+    const query = params.toString();
+    router.replace(query ? `/payments?${query}` : "/payments", { scroll: false });
+  };
+
+  const openNeedsReview = () => {
+    setNeedsReview(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById("payment-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const load = useCallback(async () => {
     const payload = await getTransactions();
@@ -120,7 +136,7 @@ function PaymentsPageInner() {
               <strong className="font-bold text-amber-800">Có {stats.needsReview} giao dịch cần kiểm tra</strong>
               <p className="mt-0.5 text-sm text-amber-700">Ưu tiên xử lý giao dịch thiếu tiền, sai mã hoặc lỗi trước khi kiểm tra các dòng đã khớp.</p>
             </div>
-            <Link href="/payments?needsReview=1" className="btn">Mở danh sách cần xử lý</Link>
+            <button type="button" className="btn" onClick={openNeedsReview}>Mở danh sách cần xử lý</button>
           </div>
         </Panel>
       )}
@@ -157,16 +173,17 @@ function PaymentsPageInner() {
         </form>
       </Panel>
 
-      <Panel
-        title="Giao dịch mới nhất"
-        subtitle="Dòng thiếu tiền, sai mã hoặc lỗi sẽ được tô nền để admin xử lý trước."
-        right={
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted">{filtered.length} dòng</span>
-            <button type="button" className="btn-ghost text-xs" onClick={() => void reload()} disabled={loading}>Làm mới</button>
-          </div>
-        }
-      >
+      <div id="payment-list" className="scroll-mt-4">
+        <Panel
+          title="Giao dịch mới nhất"
+          subtitle="Dòng thiếu tiền, sai mã hoặc lỗi sẽ được tô nền để admin xử lý trước."
+          right={
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted">{filtered.length} dòng</span>
+              <button type="button" className="btn-ghost text-xs" onClick={() => void reload()} disabled={loading}>Làm mới</button>
+            </div>
+          }
+        >
         <div className="-mx-5 overflow-x-auto px-5">
           <table className="w-full min-w-[860px]">
             <thead>
@@ -232,7 +249,8 @@ function PaymentsPageInner() {
             </tbody>
           </table>
         </div>
-      </Panel>
+        </Panel>
+      </div>
 
       {/* Modal chi tiết giao dịch (chỉ đọc) */}
       {detail && (

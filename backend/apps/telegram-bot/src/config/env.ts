@@ -14,6 +14,7 @@ export interface NotificationWorkerConfig {
   telegramBotToken: string;
   redisUrl: string;
   databaseUrl: string;
+  notificationNotBefore?: Date;
 }
 
 function required(name: string): string {
@@ -74,9 +75,15 @@ export function getBotConfig(): BotConfig {
 }
 
 export function getNotificationWorkerConfig(): NotificationWorkerConfig {
+  const notBeforeValue = process.env.NOTIFICATION_NOT_BEFORE?.trim();
+  const notificationNotBefore = notBeforeValue ? new Date(notBeforeValue) : undefined;
+  if (notificationNotBefore && Number.isNaN(notificationNotBefore.getTime())) {
+    throw new Error("NOTIFICATION_NOT_BEFORE must be a valid ISO date-time");
+  }
   return {
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     redisUrl: required("REDIS_URL"),
     databaseUrl: required("DATABASE_URL"),
+    ...(notificationNotBefore ? { notificationNotBefore } : {}),
   };
 }

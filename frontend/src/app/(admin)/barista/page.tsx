@@ -8,9 +8,9 @@ import { formatVnd, formatTime } from "@/lib/format";
 import {
   claimOrder,
   deliverOrder,
+  getActiveBaristas,
   getBaristaOrders,
   getBaristaQueue,
-  getCurrentUser,
   markOrderReady,
   type ApiBaristaOrder,
   type ApiUser,
@@ -21,7 +21,8 @@ import { ORDER_FULFILLMENT_STATUS_LABEL } from "@/lib/data";
 interface BaristaData {
   queue: ApiBaristaOrder[];
   mine: ApiBaristaOrder[];
-  me: ApiUser | null;
+  baristas: ApiUser[];
+  selectedBaristaId: string;
 }
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -35,11 +36,13 @@ function OrderCard({
   onAction,
   actionLabel,
   busy,
+  disabled = false,
 }: {
   order: ApiBaristaOrder;
   onAction?: () => void;
   actionLabel?: string;
   busy: boolean;
+  disabled?: boolean;
 }) {
   return (
     <article className="rounded-xl border border-line bg-white p-4 shadow-sm transition hover:shadow-md">
@@ -74,8 +77,8 @@ function OrderCard({
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-line-soft pt-3">
         <strong className="text-base font-extrabold tabular-nums text-ink">{formatVnd(Number(order.totalAmount))}</strong>
-        {onAction && actionLabel && (
-          <button type="button" className="btn text-xs px-3 py-1.5" onClick={onAction} disabled={busy}>
+        {actionLabel && (
+          <button type="button" className="btn text-xs px-3 py-1.5" onClick={onAction} disabled={busy || disabled || !onAction}>
             {actionLabel}
           </button>
         )}
@@ -86,23 +89,30 @@ function OrderCard({
 
 export default function BaristaPage() {
   const toast = useToast();
+  const [selectedBaristaId, setSelectedBaristaId] = useState("");
 
   const load = useCallback(async (): Promise<BaristaData> => {
-    const [queue, mePayload] = await Promise.all([
+    const [queue, baristas] = await Promise.all([
       getBaristaQueue(),
-      getCurrentUser().catch(() => null),
+      getActiveBaristas(),
     ]);
-    const me = mePayload?.data ?? null;
-    const mine = me ? await getBaristaOrders(me.id).catch(() => [] as ApiBaristaOrder[]) : [];
-    return { queue, mine, me };
-  }, []);
+    const effectiveBaristaId = baristas.some((barista) => barista.id === selectedBaristaId)
+      ? selectedBaristaId
+      : (baristas[0]?.id ?? "");
+    const mine = effectiveBaristaId ? await getBaristaOrders(effectiveBaristaId) : [];
+    return { queue, mine, baristas, selectedBaristaId: effectiveBaristaId };
+  }, [selectedBaristaId]);
 
   const { data, loading, error, reload } = useApiData(load, {
     queue: [] as ApiBaristaOrder[],
     mine: [] as ApiBaristaOrder[],
-    me: null as ApiUser | null,
+    baristas: [] as ApiUser[],
+    selectedBaristaId: "",
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  const activeBaristaId = data.baristas.some((barista) => barista.id === selectedBaristaId)
+    ? selectedBaristaId
+    : data.selectedBaristaId;
 
   const stats = useMemo(
     () => ({
@@ -127,27 +137,19 @@ export default function BaristaPage() {
   };
 
   const claim = (order: ApiBaristaOrder) => {
-    if (!data.me) {
-      toast.push("Không lấy được tài khoản đang đăng nhập.", "error");
+    if (!activeBaristaId) {
+      toast.push("Không có Barista đang hoạt động để nhận đơn.", "error");
       return;
     }
-    void act(order, () => claimOrder(order.id, { baristaId: data.me!.id }), `Đã nhận đơn ${order.orderCode}.`);
+    void act(order, () => claimOrder(order.id, { baristaId: activeBaristaId }), `Đã phân công đơn ${order.orderCode}.`);
   };
 
   const markReady = (order: ApiBaristaOrder) => {
-    if (!data.me) {
-      toast.push("Không lấy được tài khoản đang đăng nhập.", "error");
-      return;
-    }
-    void act(order, () => markOrderReady(order.id, { requesterId: data.me!.id }), `Đơn ${order.orderCode} đã sẵn sàng.`);
+    void act(order, () => markOrderReady(order.id), `Đơn ${order.orderCode} đã sẵn sàng.`);
   };
 
   const deliver = (order: ApiBaristaOrder) => {
-    if (!data.me) {
-      toast.push("Không lấy được tài khoản đang đăng nhập.", "error");
-      return;
-    }
-    void act(order, () => deliverOrder(order.id, { requesterId: data.me!.id }), `Đã giao đơn ${order.orderCode}.`);
+    void act(order, () => deliverOrder(order.id), `Đã giao đơn ${order.orderCode}.`);
   };
 
   if (loading && data.queue.length === 0 && data.mine.length === 0) {
@@ -156,11 +158,32 @@ export default function BaristaPage() {
 
   return (
     <div>
-      <PageHeader title="Pha chế" description="Hàng đợi món đã thanh toán và các đơn đang làm của bạn.">
+      <PageHeader title="Pha chế" description="Phân công đơn đã thanh toán và theo dõi tiến độ của từng Barista.">
+        <label className="flex w-full flex-col items-start gap-1.5 text-sm font-semibold text-slate-700 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+          <span>Barista phụ trách</span>
+          <select
+            className="input w-full min-w-0 sm:w-auto sm:min-w-48"
+            value={activeBaristaId}
+            onChange={(event) => setSelectedBaristaId(event.target.value)}
+            disabled={loading || data.baristas.length === 0}
+          >
+            {data.baristas.length === 0 && <option value="">Chưa có Barista hoạt động</option>}
+            {data.baristas.map((barista) => (
+              <option key={barista.id} value={barista.id}>
+                {barista.fullName}{barista.username ? ` (@${barista.username})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className="btn-ghost" onClick={() => void reload()}>Làm mới</button>
       </PageHeader>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {!loading && data.baristas.length === 0 && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Chưa có tài khoản role BARISTA ở trạng thái ACTIVE. Hãy kích hoạt Barista trước khi phân công đơn.
+        </div>
+      )}
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="card p-4">
           <span className="block text-xs font-medium text-muted">Chờ nhận đơn</span>
@@ -192,7 +215,8 @@ export default function BaristaPage() {
                   order={order}
                   busy={busyId === order.id}
                   onAction={() => claim(order)}
-                  actionLabel="Nhận đơn"
+                  actionLabel="Phân công"
+                  disabled={!activeBaristaId}
                 />
               ))}
             </div>
@@ -200,17 +224,12 @@ export default function BaristaPage() {
         </Panel>
 
         <Panel
-          title="Đang pha chế"
-          subtitle="Đơn đã nhận của bạn — hoàn thành rồi chuyển giao."
+          title="Đơn đang xử lý"
+          subtitle="Các đơn của Barista đang được chọn."
           right={<Badge tone="teal">{stats.preparing + stats.ready} đơn</Badge>}
         >
-          {!data.me && !loading && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Không xác định được tài khoản — các thao tác nhận/hoàn thành sẽ bị chặn.
-            </div>
-          )}
           {data.mine.length === 0 && !loading ? (
-            <EmptyState>Chưa nhận đơn nào. Nhận từ hàng đợi bên trái.</EmptyState>
+            <EmptyState>Barista này chưa có đơn đang xử lý.</EmptyState>
           ) : (
             <div className="space-y-3">
               {data.mine.map((order) => (

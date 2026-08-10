@@ -4,11 +4,21 @@ import { BaristaService } from "./barista.service";
 /**
  * Handles HTTP requests for barista-specific order views.
  *
+ *   GET /api/v1/barista/employees → getActiveBaristas
  *   GET /api/v1/barista/queue   → getQueue
  *   GET /api/v1/barista/orders  → getBaristaOrders
  */
 export class BaristaController {
   constructor(private readonly baristaService: BaristaService) {}
+
+  // GET /api/v1/barista/employees
+  // Returns only active BARISTA users that can receive an assignment.
+  public getActiveBaristas = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const baristas = await this.baristaService.getActiveBaristas();
+      res.status(200).json(baristas);
+    } catch (err) { next(err); }
+  };
 
   // GET /api/v1/barista/queue
   // Returns all QUEUED (paid + not yet claimed) orders.

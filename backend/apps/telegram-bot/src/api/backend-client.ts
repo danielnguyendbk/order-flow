@@ -7,6 +7,7 @@ import type {
   MenuCategory,
   MenuItem,
   QrPaymentResult,
+  QrReconciliationResult,
   UpdateOrderItemInput,
 } from "./order-types.js";
 
@@ -28,6 +29,7 @@ export interface BackendApi {
   listMyOrders(telegramUserId: number): Promise<DraftOrder[]>;
   confirmCashPayment(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult>;
+  reconcileQrPayment(telegramUserId: number, orderId: string): Promise<QrReconciliationResult>;
   deliverOrder(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   listBaristaQueue(telegramUserId: number): Promise<BaristaOrder[]>;
   listBaristaOrders(telegramUserId: number): Promise<BaristaOrder[]>;
@@ -112,6 +114,10 @@ export class BackendClient implements BackendApi {
 
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult> {
     return this.post<QrPaymentResult>(`/orders/${encodeURIComponent(orderId)}/payments/qr`, telegramUserId);
+  }
+
+  reconcileQrPayment(telegramUserId: number, orderId: string): Promise<QrReconciliationResult> {
+    return this.post<QrReconciliationResult>(`/orders/${encodeURIComponent(orderId)}/payments/qr/reconcile`, telegramUserId);
   }
 
   deliverOrder(telegramUserId: number, orderId: string): Promise<DraftOrder> {

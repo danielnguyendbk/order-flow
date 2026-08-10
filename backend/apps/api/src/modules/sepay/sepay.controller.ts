@@ -18,7 +18,7 @@ export class SepayController {
       }
 
       const result = await this.sepayService.handleWebhook(req.body, req.headers);
-      res.status(200).json({ ok: true, ...result });
+      res.status(200).json({ success: true, ok: true, ...result });
     } catch (err) {
       next(err);
     }

@@ -258,6 +258,10 @@ export function getBaristaQueue() {
   return apiRequest<ApiBaristaOrder[]>("barista/queue");
 }
 
+export function getActiveBaristas() {
+  return apiRequest<ApiUser[]>("barista/employees");
+}
+
 export function getBaristaOrders(baristaId: string) {
   return apiRequest<ApiBaristaOrder[]>(`barista/orders?baristaId=${encodeURIComponent(baristaId)}`);
 }
@@ -266,12 +270,12 @@ export function claimOrder(orderId: string, body: { baristaId: string }) {
   return apiRequest<ApiBaristaOrder>(`orders/${orderId}/claim`, { method: "POST", body });
 }
 
-export function markOrderReady(orderId: string, body: { requesterId: string }) {
-  return apiRequest<ApiBaristaOrder>(`orders/${orderId}/ready`, { method: "POST", body });
+export function markOrderReady(orderId: string) {
+  return apiRequest<ApiBaristaOrder>(`orders/${orderId}/ready`, { method: "POST" });
 }
 
-export function deliverOrder(orderId: string, body: { requesterId: string }) {
-  return apiRequest<ApiBaristaOrder>(`orders/${orderId}/deliver`, { method: "POST", body });
+export function deliverOrder(orderId: string) {
+  return apiRequest<ApiBaristaOrder>(`orders/${orderId}/deliver`, { method: "POST" });
 }
 
 export function getOrder(orderId: string) {

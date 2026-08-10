@@ -339,6 +339,19 @@ export class OrderService {
    * @throws 409 if order cannot be claimed (already assigned, unpaid, or not queued).
    */
   public async claimOrder(orderId: string, baristaId: string): Promise<Order> {
+    const activeBarista = await prisma.user.findFirst({
+      where: {
+        id: baristaId,
+        role: "BARISTA",
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+
+    if (!activeBarista) {
+      throw createHttpError(400, "Orders can only be assigned to an active BARISTA user.");
+    }
+
     try {
       const updated = await prisma.order.update({
         where: {

@@ -13,7 +13,10 @@ describe("Telegram callback data protocol", () => {
     ["category", "00000000-0000-0000-0000-000000000001"],
     ["item", "00000000-0000-0000-0000-000000000002"],
     ["edit", "00000000-0000-0000-0000-000000000003"],
+    ["quickQuantity", "2"],
     ["editQuantity", "00000000-0000-0000-0000-000000000004"],
+    ["decreaseQuantity", "00000000-0000-0000-0000-000000000004"],
+    ["increaseQuantity", "00000000-0000-0000-0000-000000000004"],
     ["editNote", "00000000-0000-0000-0000-000000000005"],
     ["delete", "00000000-0000-0000-0000-000000000006"],
     ["cancel", undefined],
@@ -23,6 +26,8 @@ describe("Telegram callback data protocol", () => {
     ["skipNote", undefined],
     ["payCash", undefined],
     ["payQr", undefined],
+    ["confirmPayment", undefined],
+    ["cancelPayment", undefined],
   ] satisfies Array<[DraftCallbackAction, string | undefined]>)
   ("round-trips %s within Telegram's 64-byte limit", (action, entityId) => {
     const data = draftCallbackData("deadbeef", action, entityId);

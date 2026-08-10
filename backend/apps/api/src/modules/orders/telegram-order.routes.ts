@@ -119,6 +119,10 @@ export function createTelegramOrderRouter(options: TelegramOrderRouterOptions): 
     try { res.json(await service.createQr(getTelegramEmployee(res).id, String(req.params.orderId))); } catch (error) { handleError(error, res, next); }
   });
 
+  router.post("/orders/:orderId/payments/qr/reconcile", requireServiceStaffOrder, async (req, res, next) => {
+    try { res.json(await service.reconcileQr(getTelegramEmployee(res).id, String(req.params.orderId))); } catch (error) { handleError(error, res, next); }
+  });
+
   router.post("/orders/:orderId/deliver", requireServiceStaff, async (req, res, next) => {
     try { res.json(await service.deliver(getTelegramEmployee(res).id, String(req.params.orderId))); } catch (error) { handleError(error, res, next); }
   });

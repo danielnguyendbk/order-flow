@@ -1,5 +1,5 @@
 import { TransactionMatchStatus } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FulfillmentStatus, PaymentMethod, PaymentStatus } from "../../orders/order.types";
 import { SepayService } from "../sepay.service";
 
@@ -38,20 +38,23 @@ function buildTx(candidate: any | null, existingTransaction: any | null = null) 
     },
     order: {
       update: vi.fn().mockResolvedValue({}),
-      findUnique: vi.fn().mockResolvedValue({
-        id: "order-1",
-        orderCode: "ORDER-001",
+      findUnique: vi.fn().mockResolvedValue(candidate ? {
+        id: candidate.orderId,
+        orderCode: candidate.order.orderCode,
+        totalAmount: candidate.expectedAmount,
+        paymentMethod: candidate.order.paymentMethod,
         createdByUserId: "staff-1",
         creator: { telegramChatId: 100n, telegramUserId: 99n },
-      }),
+        items: [{ itemName: "Trà đào", quantity: 2, note: null }],
+      } : null),
     },
     orderStatusHistory: {
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     user: {
-      findMany: vi.fn().mockResolvedValue([
-        { id: "owner-1", telegramChatId: 200n, telegramUserId: 201n },
-      ]),
+      findMany: vi.fn().mockImplementation(async ({ where }) => where.role === "BARISTA"
+        ? [{ id: "barista-1", telegramChatId: 123n, telegramUserId: null }]
+        : [{ id: "owner-1", telegramChatId: 200n, telegramUserId: 201n }]),
     },
     notification: {
       upsert: vi.fn().mockResolvedValue({}),
@@ -72,6 +75,8 @@ function buildService(tx: any) {
 }
 
 describe("SepayService", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("marks exact QR payments as PAID and QUEUED", async () => {
     const tx = buildTx(buildCandidate());
     const result = await buildService(tx).handleWebhook(
@@ -97,13 +102,53 @@ describe("SepayService", () => {
         paidAt: expect.any(Date),
       },
     });
+    expect(tx.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ recipientUserId: "barista-1", event: "ORDER_PAID" })],
+      skipDuplicates: true,
+    }));
     expect(tx.notification.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ event: "ORDER_PAID", recipientUserId: "staff-1" }),
     }));
-    expect(tx.notification.createMany).not.toHaveBeenCalled();
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ action: "SEPAY_WEBHOOK_MATCHED" }),
     }));
+  });
+
+  it("accepts the official SePay Apikey authorization header", async () => {
+    vi.stubEnv("SEPAY_WEBHOOK_API_KEY", "live-webhook-key");
+    const tx = buildTx(null);
+
+    await expect(buildService(tx).handleWebhook({
+      id: 92704,
+      gateway: "Vietcombank",
+      transactionDate: "2026-08-10 21:00:00",
+      accountNumber: "1017588888",
+      code: "UNKNOWN",
+      content: "UNKNOWN chuyen tien",
+      transferType: "in",
+      transferAmount: 10_000,
+      referenceCode: "FT24012345678",
+    }, { authorization: "Apikey live-webhook-key" })).resolves.toMatchObject({
+      duplicate: false,
+      matched: false,
+      matchStatus: TransactionMatchStatus.WRONG_CODE,
+    });
+  });
+
+  it("rejects an invalid API key and fails closed in production when no key is configured", async () => {
+    vi.stubEnv("SEPAY_WEBHOOK_API_KEY", "live-webhook-key");
+    await expect(buildService(buildTx(null)).handleWebhook(
+      { id: 92705, transferAmount: 10_000, content: "UNKNOWN" },
+      { authorization: "Apikey wrong-key" },
+    )).rejects.toMatchObject({ statusCode: 401 });
+
+    vi.stubEnv("SEPAY_WEBHOOK_API_KEY", "");
+    vi.stubEnv("SEPAY_WEBHOOK_SECRET", "");
+    vi.stubEnv("NODE_ENV", "production");
+    await expect(buildService(buildTx(null)).handleWebhook(
+      { id: 92706, transferAmount: 10_000, content: "UNKNOWN" },
+      {},
+    )).rejects.toMatchObject({ statusCode: 503 });
   });
 
   it("classifies underpaid webhook without queueing the order", async () => {

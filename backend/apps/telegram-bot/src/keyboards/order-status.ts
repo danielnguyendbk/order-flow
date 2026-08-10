@@ -1,10 +1,11 @@
 import { Markup } from "telegraf";
 
 import type { DraftOrder } from "../api/order-types.js";
+import { orderStatusSummary } from "../formatters/order-status.js";
 
 export function myOrdersKeyboard(orders: DraftOrder[]) {
   return Markup.inlineKeyboard(orders.map((order) => [
-    Markup.button.callback(`${order.code} · ${order.paymentStatus}/${order.fulfillmentStatus}`, `order:status:${order.id}`),
+    Markup.button.callback(`${order.code} · ${orderStatusSummary(order.paymentStatus, order.fulfillmentStatus)}`, `order:status:${order.id}`),
   ]));
 }
 
@@ -23,6 +24,6 @@ export function orderStatusKeyboard(order: DraftOrder) {
 export function qrPaymentKeyboard(orderId: string, qrImageUrl: string) {
   return Markup.inlineKeyboard([
     [Markup.button.url("Mở mã QR", qrImageUrl)],
-    [Markup.button.callback("Kiểm tra thanh toán", `order:status:${orderId}`)],
+    [Markup.button.callback("Kiểm tra thanh toán", `order:reconcile:${orderId}`)],
   ]);
 }

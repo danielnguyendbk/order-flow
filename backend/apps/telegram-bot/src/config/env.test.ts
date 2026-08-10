@@ -8,6 +8,7 @@ const relevantVariables = [
   "BOT_INTERNAL_SECRET",
   "REDIS_URL",
   "DATABASE_URL",
+  "NOTIFICATION_NOT_BEFORE",
   "TELEGRAM_WEBHOOK_DOMAIN",
   "TELEGRAM_WEBHOOK_PATH",
   "TELEGRAM_WEBHOOK_SECRET_TOKEN",
@@ -47,6 +48,18 @@ describe("Telegram bot environment", () => {
       redisUrl: "redis://localhost:6379",
       databaseUrl: "postgresql://localhost/order_flow",
     });
+  });
+
+  it("supports an optional notification cutoff and rejects invalid dates", () => {
+    baseEnvironment();
+    vi.stubEnv("REDIS_URL", "redis://localhost:6379");
+    vi.stubEnv("DATABASE_URL", "postgresql://localhost/order_flow");
+    vi.stubEnv("NOTIFICATION_NOT_BEFORE", "2026-08-10T14:30:00.000Z");
+
+    expect(getNotificationWorkerConfig().notificationNotBefore).toEqual(new Date("2026-08-10T14:30:00.000Z"));
+
+    vi.stubEnv("NOTIFICATION_NOT_BEFORE", "not-a-date");
+    expect(() => getNotificationWorkerConfig()).toThrow("NOTIFICATION_NOT_BEFORE must be a valid ISO date-time");
   });
 
   it("builds an authenticated production webhook configuration", () => {

@@ -1,5 +1,6 @@
 import createHttpError from "http-errors";
 import { AuditEntityType, Prisma, PrismaClient, TransactionMatchStatus } from "@prisma/client";
+import { timingSafeEqual } from "node:crypto";
 import {
   FulfillmentStatus,
   OrderStatusDomain,
@@ -25,6 +26,11 @@ export class SepayService {
 
   public async handleWebhook(payload: any, headers: Record<string, any>): Promise<SepayWebhookResult> {
     this.verifyWebhook(headers);
+
+    return this.handleTrustedTransaction(payload);
+  }
+
+  public async handleTrustedTransaction(payload: any): Promise<SepayWebhookResult> {
 
     const normalized = this.normalizePayload(payload);
 
@@ -172,20 +178,29 @@ export class SepayService {
   }
 
   private verifyWebhook(headers: Record<string, any>) {
-    const secret = process.env.SEPAY_WEBHOOK_SECRET;
-    if (!secret) return;
+    const secret = process.env.SEPAY_WEBHOOK_API_KEY?.trim()
+      || process.env.SEPAY_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+      if (process.env.NODE_ENV === "production") {
+        throw createHttpError(503, "SePay webhook API key is not configured");
+      }
+      return;
+    }
 
-    const provided =
+    const rawProvided =
       headers["x-sepay-webhook-secret"] ??
       headers["x-webhook-secret"] ??
       headers["authorization"];
+    const provided = Array.isArray(rawProvided) ? rawProvided[0] : rawProvided;
+    const normalized = typeof provided === "string"
+      ? provided.replace(/^(?:Apikey|Bearer)\s+/i, "").trim()
+      : "";
+    const expectedBuffer = Buffer.from(secret);
+    const providedBuffer = Buffer.from(normalized);
+    const matches = expectedBuffer.length === providedBuffer.length
+      && timingSafeEqual(expectedBuffer, providedBuffer);
 
-    const normalized =
-      typeof provided === "string" && provided.startsWith("Bearer ")
-        ? provided.slice("Bearer ".length)
-        : provided;
-
-    if (normalized !== secret) {
+    if (!matches) {
       throw createHttpError(401, "Invalid SePay webhook secret");
     }
   }
