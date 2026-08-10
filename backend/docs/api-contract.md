@@ -5,6 +5,28 @@ Base path: `/api/v1`
 Status: **mixed** — routes remain planned unless their section explicitly marks them implemented.
 Routes explicitly marked **implemented** have handlers, validation, authorization, and tests. All other route groups remain planned.
 
+## Integration fixtures
+
+Status: **implemented**
+
+BE-004 shared fixtures live in `backend/docs/integration-fixtures.md` and are
+seeded with:
+
+```bash
+npm run seed:be004
+```
+
+The fixture namespace is `BE004`. It provides one active owner/admin-manager,
+one active service staff employee, one active barista, one inactive service
+staff employee, active/inactive menu data, and a `PAID + QUEUED` order for
+barista smoke testing. Bot and Telegram-owned operational requests use:
+
+- `x-bot-internal-secret`
+- `x-telegram-user-id`
+
+Database `OWNER` remains the persisted manager role and is exposed to the
+Telegram Bot as `MANAGER`.
+
 ## Telegram session
 
 Status: **implemented**
@@ -105,7 +127,10 @@ Status: **implemented**
 | `GET` | `/api/v1/menu/categories` | List public menu categories |
 | `GET` | `/api/v1/menu/items` | List public menu items |
 
-Implementation status: **implemented for authenticated Telegram service staff**. Both routes re-check the employee identity and active state.
+Implementation status: **implemented**. Public requests return only active
+categories and available items. Bot operational requests with
+`x-bot-internal-secret` and `x-telegram-user-id` also re-check the employee
+identity and active state.
 
 ## Telegram service-staff orders
 
