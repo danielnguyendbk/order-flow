@@ -1,14 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageHeader, Panel, Badge, EmptyState, Field, Modal, Stats, type Tone } from "@/components/ui";
-import { PeriodFilter } from "@/components/PeriodFilter";
 import { useToast } from "@/components/Toast";
 import { formatVnd, formatDateTime } from "@/lib/format";
 import { inPeriod, type Period } from "@/lib/period";
 import {
-  reconciliations as initialRows,
+  getTransactions,
+  getCurrentUser,
+  resolveReconciliation,
+  type ApiSepayTransactionFull,
+  type ApiUser,
+} from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import {
   RECONCILIATION_CLASSIFICATION_LABEL,
   RECONCILIATION_STATUS_LABEL,
   type Reconciliation,
@@ -16,6 +22,14 @@ import {
 } from "@/lib/data";
 
 const CLASSIFICATION_OPTIONS = Object.keys(RECONCILIATION_CLASSIFICATION_LABEL) as ReconciliationClassification[];
+
+const RESOLUTION_ACTIONS = [
+  { value: "ACCEPT", label: "Chấp nhận" },
+  { value: "REJECT", label: "Từ chối" },
+  { value: "REFUND_REQUIRED", label: "Cần hoàn tiền" },
+  { value: "LINK_MANUALLY", label: "Liên kết thủ công" },
+  { value: "NONE", label: "Không xử lý" },
+];
 
 /* 5 loại phân loại → 5 màu badge khác nhau */
 const CLASS_TONE: Record<ReconciliationClassification, Tone> = {
@@ -34,6 +48,41 @@ const CLASS_DESC: Record<ReconciliationClassification, string> = {
   duplicate: "SePay gửi webhook trùng lặp cho cùng một giao dịch.",
 };
 
+/* Map giao dịch SePay từ backend sang view-model trang Đối soát */
+function toReconciliation(tx: ApiSepayTransactionFull): Reconciliation {
+  const expected = Number(tx.payment?.expectedAmount ?? 0);
+  const received = Number(tx.amountIn);
+  const difference = Number(tx.differenceAmount ?? received - expected);
+
+  let classification: ReconciliationClassification = "unknown_code";
+  if (tx.matchStatus === "MATCHED") classification = "matched";
+  else if (tx.matchStatus === "WRONG_CODE") classification = "unknown_code";
+  else if (tx.matchStatus === "UNMATCHED" && tx.payment) {
+    classification = difference < 0 ? "underpaid" : difference > 0 ? "overpaid" : "matched";
+  } else if (tx.matchStatus === "REVIEWED") {
+    classification = difference < 0 ? "underpaid" : difference > 0 ? "overpaid" : "matched";
+  }
+
+  const resolved = tx.matchStatus === "REVIEWED" || tx.matchStatus === "MATCHED";
+
+  return {
+    id: tx.id,
+    code: tx.code ?? `SP${tx.sepayTransactionId}`,
+    orderCode: tx.payment?.order?.orderCode ?? undefined,
+    orderId: tx.payment?.order?.id ?? undefined,
+    sepayId: tx.sepayTransactionId,
+    amountExpected: expected,
+    amountReceived: received,
+    classification,
+    reason: tx.content ?? (CLASS_DESC[classification] ?? "Giao dịch cần kiểm tra."),
+    status: resolved ? "resolved" : "open",
+    resolvedBy: tx.resolvedBy?.fullName ?? (tx.matchStatus === "MATCHED" ? "Hệ thống" : undefined),
+    resolvedAt: tx.resolvedAt ?? undefined,
+    resolveNote: tx.resolutionNote ?? undefined,
+    createdAt: tx.receivedAt,
+  };
+}
+
 export default function ReconciliationsPage() {
   const toast = useToast();
 
@@ -41,10 +90,23 @@ export default function ReconciliationsPage() {
   const [classification, setClassification] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [period, setPeriod] = useState<Period | "">("");
-  const [rows, setRows] = useState<Reconciliation[]>(initialRows);
+  const [me, setMe] = useState<ApiUser | null>(null);
+
+  const load = useCallback(async () => {
+    const [payload, mePayload] = await Promise.all([
+      getTransactions(),
+      getCurrentUser().catch(() => null),
+    ]);
+    setMe(mePayload?.data ?? null);
+    return payload.data.map(toReconciliation);
+  }, []);
+
+  const { data: rows, loading, error, reload } = useApiData(load, [] as Reconciliation[]);
   const [resolving, setResolving] = useState<Reconciliation | null>(null);
+  const [resolutionAction, setResolutionAction] = useState("ACCEPT");
   const [resolveNote, setResolveNote] = useState("");
   const [detailItem, setDetailItem] = useState<Reconciliation | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -85,26 +147,31 @@ export default function ReconciliationsPage() {
 
   const openResolve = (r: Reconciliation) => {
     setResolving(r);
+    setResolutionAction("ACCEPT");
     setResolveNote("");
   };
 
-  const resolve = () => {
+  const resolve = async () => {
     if (!resolving) return;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === resolving.id
-          ? {
-              ...r,
-              status: "resolved",
-              resolvedBy: "Admin",
-              resolvedAt: new Date().toISOString(),
-              resolveNote: resolveNote.trim() || undefined,
-            }
-          : r
-      )
-    );
-    toast.push(`Đã giải quyết giao dịch ${resolving.code}.`, "success");
-    setResolving(null);
+    if (!me) {
+      toast.push("Không lấy được tài khoản đang đăng nhập.", "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      await resolveReconciliation(resolving.id, {
+        resolvedByUserId: me.id,
+        resolutionAction,
+        resolutionNote: resolveNote.trim() || "Admin xác nhận từ Web Admin",
+      });
+      await reload();
+      toast.push(`Đã giải quyết giao dịch ${resolving.code}.`, "success");
+      setResolving(null);
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể giải quyết giao dịch.", "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const hasFilters = Boolean(q || classification || statusFilter || period);
@@ -115,6 +182,9 @@ export default function ReconciliationsPage() {
         title="Đối soát giao dịch"
         description="Đối chiếu giao dịch SePay với đơn hàng — nhận diện thiếu/thừa tiền, sai mã, trùng lặp webhook."
       />
+
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải giao dịch từ backend...</div>}
 
       <Stats
         items={[
@@ -160,11 +230,6 @@ export default function ReconciliationsPage() {
                 <option value="open">Chưa xử lý</option>
                 <option value="resolved">Đã xử lý</option>
               </select>
-            </Field>
-          </div>
-          <div className="w-full sm:w-72">
-            <Field label="Thời gian">
-              <PeriodFilter value={period} onChange={setPeriod} />
             </Field>
           </div>
           {hasFilters && (
@@ -219,9 +284,9 @@ export default function ReconciliationsPage() {
                     <small className="text-[11px] text-muted">{formatDateTime(r.createdAt)}</small>
                   </td>
                   <td className="td">
-                    {r.orderCode ? (
+                    {r.orderId && r.orderCode ? (
                       <Link
-                        href={`/orders/${r.orderCode}`}
+                        href={`/orders/${r.orderId}`}
                         className="font-mono text-sm font-semibold text-brand-700 hover:underline"
                       >
                         {r.orderCode}
@@ -298,6 +363,15 @@ export default function ReconciliationsPage() {
             <Field label="Lý do phân loại (hệ thống)">
               <p className="input bg-slate-50 text-sm text-slate-700">{resolving.reason}</p>
             </Field>
+            <Field label="Cách xử lý">
+              <select className="input" value={resolutionAction} onChange={(e) => setResolutionAction(e.target.value)}>
+                {RESOLUTION_ACTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Ghi chú xử lý">
               <textarea
                 className="input min-h-[80px] resize-y"
@@ -310,8 +384,8 @@ export default function ReconciliationsPage() {
               <button type="button" className="btn-ghost" onClick={() => setResolving(null)}>
                 Hủy
               </button>
-              <button type="button" className="btn" onClick={resolve}>
-                Giải quyết
+              <button type="button" className="btn" onClick={resolve} disabled={busy}>
+                {busy ? "Đang xử lý..." : "Giải quyết"}
               </button>
             </div>
           </div>
@@ -343,8 +417,8 @@ export default function ReconciliationsPage() {
               <div className="flex justify-between py-2.5">
                 <dt className="text-muted">Đơn liên quan</dt>
                 <dd className="font-mono font-semibold text-brand-700">
-                  {detailItem.orderCode ? (
-                    <Link href={`/orders/${detailItem.orderCode}`} className="hover:underline">
+                  {detailItem.orderId && detailItem.orderCode ? (
+                    <Link href={`/orders/${detailItem.orderId}`} className="hover:underline">
                       {detailItem.orderCode}
                     </Link>
                   ) : (

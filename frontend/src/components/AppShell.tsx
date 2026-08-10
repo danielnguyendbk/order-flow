@@ -55,16 +55,33 @@ const ICONS: Record<string, ReactNode> = {
       <rect x="11" y="11" width="7" height="7" rx="1.5" />
     </svg>
   ),
-  settings: (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
-      <circle cx="10" cy="10" r="2.5" />
-      <path d="M10 2v1.5M10 16.5V18M2 10h1.5M16.5 10H18M4.22 4.22l1.06 1.06M14.72 14.72l1.06 1.06M4.22 15.78l1.06-1.06M14.72 5.28l1.06-1.06" />
-    </svg>
-  ),
   audit: (
     <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
       <circle cx="10" cy="10" r="8" />
       <path d="M10 6v4l3 2" />
+    </svg>
+  ),
+  reconciliations: (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
+      <path d="M4 13l3 3 3-3" />
+      <path d="M7 16V5" />
+      <path d="M16 7l-3-3-3 3" />
+      <path d="M13 4v11" />
+    </svg>
+  ),
+  reports: (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
+      <path d="M3 3v14h14" />
+      <path d="M7 13v-3M11 13V7M15 13v-5" />
+    </svg>
+  ),
+  barista: (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
+      <path d="M5 7h10v4a5 5 0 0 1-10 0V7Z" />
+      <path d="M5 7H3.5A1.5 1.5 0 0 1 2 5.5 1.5 1.5 0 0 1 3.5 4H5" />
+      <path d="M15 7h1.5A1.5 1.5 0 0 0 18 5.5 1.5 1.5 0 0 0 16.5 4H15" />
+      <path d="M8 4h4l.5-2h-5L8 4Z" />
+      <path d="M10 16v2" />
     </svg>
   ),
 };
@@ -85,7 +102,8 @@ const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: "/orders", label: "Đơn hàng", icon: "orders" },
       { href: "/payments", label: "Thanh toán", icon: "payments" },
-      { href: "/users", label: "Khách hàng", icon: "users" },
+      { href: "/reconciliations", label: "Đối soát", icon: "reconciliations" },
+      { href: "/users", label: "Nhân viên", icon: "users" },
     ],
   },
   {
@@ -96,11 +114,16 @@ const NAV: { section: string; items: NavItem[] }[] = [
     ],
   },
   {
+    section: "Pha chế",
+    items: [{ href: "/barista", label: "Hàng đợi pha chế", icon: "barista" }],
+  },
+  {
+    section: "Báo cáo",
+    items: [{ href: "/reports/revenue", label: "Doanh thu", icon: "reports" }],
+  },
+  {
     section: "Hệ thống",
-    items: [
-      { href: "/settings", label: "Cấu hình", icon: "settings" },
-      { href: "/audit", label: "Nhật ký", icon: "audit" },
-    ],
+    items: [{ href: "/audit", label: "Nhật ký", icon: "audit" }],
   },
 ];
 
@@ -300,13 +323,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 className="hidden rounded-lg px-3 py-1.5 text-sm font-medium text-brand-700 transition hover:bg-brand-50 sm:block"
               >
                 Đơn cần xử lý
-              </Link>
-              <Link
-                href="/settings"
-                aria-label="Cấu hình"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-xs font-bold text-white transition hover:opacity-90"
-              >
-                A
               </Link>
             </div>
           </header>

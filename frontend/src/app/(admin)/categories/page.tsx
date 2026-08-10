@@ -41,7 +41,7 @@ export default function CategoriesPage() {
       form.reset();
       setCreating(false);
       await reload();
-      toast.push("Đã tạo danh mục trên Supabase.", "success");
+      toast.push("Đã tạo danh mục trên hệ thống.", "success");
     } catch (actionError) {
       toast.push(actionError instanceof Error ? actionError.message : "Không thể tạo danh mục.", "error");
     }
@@ -73,7 +73,7 @@ export default function CategoriesPage() {
 
   return (
     <div>
-      <PageHeader title="Danh mục thực đơn" description="Dữ liệu danh mục đang được đọc trực tiếp từ Supabase qua API.">
+      <PageHeader title="Danh mục thực đơn" description="Dữ liệu danh mục đang được đọc trực tiếp từ backend qua API.">
         <button type="button" className="btn" onClick={() => setCreating(true)}>Thêm danh mục</button>
       </PageHeader>
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -83,7 +83,7 @@ export default function CategoriesPage() {
         { label: "Đang bật", value: stats.active, tone: "green" },
         { label: "Món trong thực đơn", value: stats.products, tone: "teal" },
       ]} />
-      <Modal open={creating} onClose={() => setCreating(false)} eyebrow="THÊM MỚI" title="Tạo danh mục" subtitle="Dữ liệu sẽ được ghi vào Supabase.">
+      <Modal open={creating} onClose={() => setCreating(false)} eyebrow="THÊM MỚI" title="Tạo danh mục" subtitle="Dữ liệu sẽ được ghi vào hệ thống.">
         <form onSubmit={create} className="space-y-3">
           <Field label="Tên danh mục"><input className="input" name="name" required /></Field>
           <Field label="Thứ tự"><input className="input" name="displayOrder" type="number" defaultValue={0} /></Field>
@@ -91,7 +91,7 @@ export default function CategoriesPage() {
         </form>
       </Modal>
       <Panel title="Danh sách danh mục" right={<span className="text-sm text-muted">{rows.length} danh mục</span>}>
-        {rows.length === 0 && !loading && <EmptyState>Supabase chưa có danh mục.</EmptyState>}
+        {rows.length === 0 && !loading && <EmptyState>Chưa có danh mục.</EmptyState>}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((category) => (
             <article key={category.id} className="rounded-lg border border-line bg-surface-soft p-4">

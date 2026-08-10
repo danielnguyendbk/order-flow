@@ -36,7 +36,7 @@ export default function CatalogPage() {
       });
       form.reset();
       await reload();
-      toast.push("Đã thêm món vào Supabase.", "success");
+      toast.push("Đã thêm món vào hệ thống.", "success");
     } catch (actionError) {
       toast.push(actionError instanceof Error ? actionError.message : "Không thể thêm món.", "error");
     }
@@ -53,9 +53,21 @@ export default function CatalogPage() {
     } finally { setBusyId(null); }
   };
 
+  const removeItem = async (item: ApiMenuItem) => {
+    if (!window.confirm(`Xóa món "${item.name}" khỏi thực đơn?`)) return;
+    setBusyId(item.id);
+    try {
+      await apiRequest(`admin/menu-items/${item.id}`, { method: "DELETE" });
+      await reload();
+      toast.push(`Đã xóa "${item.name}".`, "warning");
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể xóa món.", "error");
+    } finally { setBusyId(null); }
+  };
+
   return (
     <div>
-      <PageHeader title="Quản lý Thực đơn" description="Danh mục và món được đồng bộ từ database Supabase." />
+      <PageHeader title="Quản lý Thực đơn" description="Danh mục và món được đồng bộ từ backend." />
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       {loading && <div className="mb-4 text-sm text-muted">Đang tải thực đơn thật...</div>}
       <Panel title="Thêm món" className="mb-6">
@@ -69,7 +81,7 @@ export default function CatalogPage() {
         </form>
       </Panel>
       <Panel title="Thực đơn hiện tại" right={<span className="text-sm text-muted">{data.items.length} món</span>}>
-        {data.items.length === 0 && !loading && <EmptyState>Supabase chưa có món nào.</EmptyState>}
+        {data.items.length === 0 && !loading && <EmptyState>Chưa có món nào trong thực đơn.</EmptyState>}
         <div className="space-y-6">
           {data.categories.map((category) => {
             const items = data.items.filter((item) => item.categoryId === category.id);
@@ -78,7 +90,7 @@ export default function CatalogPage() {
                 <div className="mb-2 flex items-center justify-between"><strong className="text-ink">{category.name}</strong><Badge tone={category.isActive ? "green" : "gray"}>{items.length} món</Badge></div>
                 <div className="overflow-x-auto rounded-lg border border-line">
                   <table className="w-full min-w-[620px]"><thead><tr className="border-b border-line"><th className="th">Món</th><th className="th">Giá</th><th className="th">Thứ tự</th><th className="th">Trạng thái</th><th className="th">Thao tác</th></tr></thead>
-                    <tbody className="divide-y divide-line-soft">{items.map((item) => <tr key={item.id}><td className="td"><strong className="block text-sm text-ink">{item.name}</strong><small className="text-xs text-muted">{item.description || "Không có mô tả"}</small></td><td className="td font-bold">{formatVnd(item.price)}</td><td className="td">{item.displayOrder}</td><td className="td"><Badge tone={item.isAvailable ? "green" : "gray"}>{item.isAvailable ? "Đang bán" : "Đã tắt"}</Badge></td><td className="td"><button className="btn-ghost" disabled={busyId === item.id} onClick={() => void updateAvailability(item)}>{item.isAvailable ? "Tắt bán" : "Bật bán"}</button></td></tr>)}</tbody>
+                    <tbody className="divide-y divide-line-soft">{items.map((item) => <tr key={item.id}><td className="td"><strong className="block text-sm text-ink">{item.name}</strong><small className="text-xs text-muted">{item.description || "Không có mô tả"}</small></td><td className="td font-bold">{formatVnd(item.price)}</td><td className="td">{item.displayOrder}</td><td className="td"><Badge tone={item.isAvailable ? "green" : "gray"}>{item.isAvailable ? "Đang bán" : "Đã tắt"}</Badge></td><td className="td"><div className="flex flex-wrap gap-2"><button className="btn-ghost" disabled={busyId === item.id} onClick={() => void updateAvailability(item)}>{item.isAvailable ? "Tắt bán" : "Bật bán"}</button><button className="btn-danger" disabled={busyId === item.id} onClick={() => void removeItem(item)}>Xóa</button></div></td></tr>)}</tbody>
                   </table>
                 </div>
               </section>

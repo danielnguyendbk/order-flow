@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, Field, Modal } from "@/components/ui";
 import { useToast } from "@/components/Toast";
@@ -100,10 +101,12 @@ function OrdersPageInner() {
 
   return (
     <div>
-      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt." />
+      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt.">
+        <Link href="/orders/new" className="btn">+ Tạo đơn</Link>
+      </PageHeader>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải đơn hàng thật từ Supabase...</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải đơn hàng thật từ backend...</div>}
 
       {/* Tóm tắt */}
       <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">

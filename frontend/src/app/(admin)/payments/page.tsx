@@ -1,96 +1,65 @@
 "use client";
 
-import { useCallback, useMemo, useState, type FormEvent } from "react";
-import Link from "next/link";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader, Panel, Badge, EmptyState, paymentTone, Field, Modal, Stats } from "@/components/ui";
-import { useToast } from "@/components/Toast";
 import { formatVnd, formatDate, formatTime } from "@/lib/format";
 import {
   PAYMENT_STATUS_LABEL,
-  PAYMENT_TYPE_LABEL,
   type Payment,
   type PaymentStatus,
-  type PaymentType,
 } from "@/lib/data";
 import { getOrders } from "@/lib/api";
 import { useApiData } from "@/lib/use-api-data";
 import { toPayment } from "@/lib/view-models";
 
 const STATUS_OPTIONS = Object.keys(PAYMENT_STATUS_LABEL) as PaymentStatus[];
-const TYPE_OPTIONS = Object.keys(PAYMENT_TYPE_LABEL) as PaymentType[];
 
-export default function PaymentsPage() {
-  const toast = useToast();
-  const [q, setQ] = useState("");
+const REVIEW_STATUSES: PaymentStatus[] = ["underpaid", "overpaid", "unknown_code"];
+
+function PaymentsPageInner() {
+  const searchParams = useSearchParams();
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [status, setStatus] = useState("");
-  const [type, setType] = useState("");
-  const [needsReview, setNeedsReview] = useState(false);
+  const [needsReview, setNeedsReview] = useState(searchParams.get("needsReview") === "1");
   const loadPayments = useCallback(async () => (await getOrders()).data.map(toPayment).filter((payment): payment is Payment => payment !== null), []);
   const { data: rows, loading, error } = useApiData(loadPayments, [] as Payment[]);
-  const [reviewPayment, setReviewPayment] = useState<Payment | null>(null);
-  const [editAmount, setEditAmount] = useState("");
-  const [editStatus, setEditStatus] = useState<PaymentStatus>("pending");
-  const [editNote, setEditNote] = useState("");
+  const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     return rows.filter((p) => {
       if (status && p.status !== status) return false;
-      if (type && p.type !== type) return false;
-      if (needsReview && !["underpaid", "unknown_code", "failed", "duplicate", "overpaid"].includes(p.status)) return false;
+      if (needsReview && !REVIEW_STATUSES.includes(p.status)) return false;
       if (term) {
         const hay = `${p.code} ${p.sepayId ?? ""} ${p.user.username} ${p.user.telegramId} ${p.orderCode ?? ""}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
     });
-  }, [rows, q, status, type, needsReview]);
+  }, [rows, q, status, needsReview]);
 
   const stats = useMemo(
     () => ({
       total: rows.length,
       matched: rows.filter((p) => p.status === "matched").length,
       pending: rows.filter((p) => p.status === "pending").length,
-      needsReview: rows.filter((p) => ["underpaid", "unknown_code", "failed"].includes(p.status)).length,
-      duplicates: rows.filter((p) => p.status === "duplicate").length,
+      needsReview: rows.filter((p) => REVIEW_STATUSES.includes(p.status)).length,
       received: rows.reduce((s, p) => s + p.amountReceived, 0),
       filteredTotal: filtered.length,
     }),
     [rows, filtered]
   );
 
-  const openReview = (p: Payment) => {
-    setReviewPayment(p);
-    setEditAmount(String(p.amountReceived));
-    setEditStatus(p.status);
-    setEditNote(p.note ?? "");
-  };
-
-  const saveReview = (e: FormEvent) => {
-    e.preventDefault();
-    if (!reviewPayment) return;
-    toast.push("Màn hình này đang ở chế độ đọc dữ liệu đối soát.", "warning");
-  };
-
-  const fulfill = (p: Payment) => {
-    toast.push(`Hãy xử lý trạng thái của đơn ${p.orderCode ?? p.code} tại trang Đơn hàng.`, "warning");
-  };
-
-  const removePayment = () => {
-    toast.push(`Không xóa dữ liệu thanh toán thật từ màn hình đọc.`, "warning");
-  };
-
-  const canDelete = (p: Payment) => !p.orderCode && p.status !== "matched";
-
   return (
     <div>
       <PageHeader title="Đối soát Thanh toán" description="Đối soát giao dịch tự động từ SePay QR Code và xác nhận thu tiền mặt từ nhân viên phục vụ.">
-        <Link href="/payments?needsReview=1" className={needsReview ? "btn" : "btn-ghost"}>Chỉ cần xử lý</Link>
-        <Link href="/payments" className="btn-ghost">Tất cả giao dịch</Link>
+        <button type="button" className={needsReview ? "btn" : "btn-ghost"} onClick={() => setNeedsReview(true)}>Chỉ cần xử lý</button>
+        <button type="button" className="btn-ghost" onClick={() => setNeedsReview(false)}>Tất cả giao dịch</button>
       </PageHeader>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải thanh toán thật từ Supabase...</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải dữ liệu thanh toán từ backend...</div>}
 
       <Stats
         items={[
@@ -98,7 +67,6 @@ export default function PaymentsPage() {
           { label: "Đã khớp (SePay/Mặt)", value: stats.matched, tone: "green" },
           { label: "Chờ SePay", value: stats.pending, tone: "amber" },
           { label: "Cần kiểm tra (Lệch)", value: stats.needsReview, tone: "red" },
-          { label: "Trùng webhook", value: stats.duplicates, tone: "amber" },
           { label: "Tổng tiền thu", value: formatVnd(stats.received), tone: "teal" },
         ]}
       />
@@ -108,15 +76,15 @@ export default function PaymentsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <strong className="font-bold text-amber-800">Có {stats.needsReview} giao dịch cần kiểm tra</strong>
-              <p className="mt-0.5 text-sm text-amber-700">Ưu tiên xử lý giao dịch thiếu tiền, sai mã hoặc lỗi trước khi kiểm tra các dòng đã khớp.</p>
+              <p className="mt-0.5 text-sm text-amber-700">Ưu tiên xử lý giao dịch thiếu tiền, thừa tiền hoặc sai mã trước khi kiểm tra các dòng đã khớp.</p>
             </div>
-            <Link href="/payments?needsReview=1" className="btn">Mở danh sách cần xử lý</Link>
+            <button type="button" className="btn" onClick={() => setNeedsReview(true)}>Mở danh sách cần xử lý</button>
           </div>
         </Panel>
       )}
 
       <Panel className="mb-6">
-        <form onSubmit={(e) => e.preventDefault()} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <form onSubmit={(e) => e.preventDefault()} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Tìm kiếm">
             <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, SePay ID, username..." />
           </Field>
@@ -126,12 +94,6 @@ export default function PaymentsPage() {
               {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{PAYMENT_STATUS_LABEL[s]}</option>)}
             </select>
           </Field>
-          <Field label="Loại giao dịch">
-            <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="">Tất cả loại</option>
-              {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{PAYMENT_TYPE_LABEL[t]}</option>)}
-            </select>
-          </Field>
           <label className="flex items-end pb-2">
             <span className="flex items-center gap-2 text-sm text-ink">
               <input type="checkbox" checked={needsReview} onChange={(e) => setNeedsReview(e.target.checked)} className="h-4 w-4 rounded border-line accent-brand-600" />
@@ -139,19 +101,18 @@ export default function PaymentsPage() {
             </span>
           </label>
           <div className="flex items-end gap-2">
-            <button type="button" className="btn" onClick={() => {}}>Lọc</button>
-            <button type="button" className="btn-ghost" onClick={() => { setQ(""); setStatus(""); setType(""); setNeedsReview(false); }}>Xóa lọc</button>
+            <button type="button" className="btn-ghost" onClick={() => { setQ(""); setStatus(""); setNeedsReview(false); }}>Xóa lọc</button>
           </div>
         </form>
       </Panel>
 
       <Panel
         title="Giao dịch mới nhất"
-        subtitle="Dòng thiếu tiền, sai mã hoặc lỗi sẽ được tô nền để admin xử lý trước."
+        subtitle="Dòng thiếu tiền, thừa tiền hoặc sai mã sẽ được tô nền để admin xử lý trước."
         right={<span className="text-sm text-muted">{filtered.length}/{stats.filteredTotal} dòng</span>}
       >
         <div className="-mx-5 overflow-x-auto px-5">
-          <table className="w-full min-w-[860px]">
+          <table className="w-full min-w-[820px]">
             <thead>
               <tr className="border-b border-line">
                 <th className="th">Giao dịch</th>
@@ -167,14 +128,11 @@ export default function PaymentsPage() {
                 <tr><td colSpan={6}><EmptyState>Không có giao dịch phù hợp bộ lọc hiện tại.</EmptyState></td></tr>
               )}
               {filtered.map((payment) => {
-                const attention = ["underpaid", "unknown_code", "failed"].includes(payment.status);
+                const attention = REVIEW_STATUSES.includes(payment.status);
                 return (
                   <tr key={payment.id} className={attention ? "bg-red-50/50" : "hover:bg-surface-soft"}>
                     <td className="td">
-                      <div className="flex items-center gap-2">
-                        <strong className="font-bold text-ink">{payment.code}</strong>
-                        <Badge tone="gray">{PAYMENT_TYPE_LABEL[payment.type]}</Badge>
-                      </div>
+                      <strong className="font-bold text-ink">{payment.code}</strong>
                       <small className="block text-xs text-muted">SePay: {payment.sepayId ?? "Chưa có"}</small>
                     </td>
                     <td className="td">
@@ -195,7 +153,7 @@ export default function PaymentsPage() {
                       <span className="block text-[11px] text-slate-400">{formatTime(payment.createdAt)}</span>
                     </td>
                     <td className="td">
-                      <button type="button" className="btn-ghost" onClick={() => openReview(payment)}>Chi tiết</button>
+                      <button type="button" className="btn-ghost" onClick={() => setDetailPayment(payment)}>Chi tiết</button>
                     </td>
                   </tr>
                 );
@@ -205,28 +163,29 @@ export default function PaymentsPage() {
         </div>
       </Panel>
 
-      {/* Modal chi tiết giao dịch */}
+      {/* Modal chi tiết giao dịch (chỉ đọc) */}
       <Modal
-        open={reviewPayment !== null}
-        onClose={() => setReviewPayment(null)}
+        open={detailPayment !== null}
+        onClose={() => setDetailPayment(null)}
         eyebrow="THANH TOÁN"
-        title={`Chi tiết giao dịch ${reviewPayment?.code ?? ""}`}
+        title={`Chi tiết giao dịch ${detailPayment?.code ?? ""}`}
         subtitle="Thông tin chi tiết giao dịch, số tiền nhận, trạng thái và ghi chú."
       >
-        {reviewPayment && (
+        {detailPayment && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4">
               {[
-                { label: "SePay ID", value: reviewPayment.sepayId ?? "Chưa có" },
-                { label: "Số tiền nhận", value: formatVnd(reviewPayment.amountReceived) },
-                { label: "Dự kiến", value: formatVnd(reviewPayment.amountExpected) },
-                { 
-                  label: "Chênh lệch", 
-                  value: reviewPayment.amountReceived - reviewPayment.amountExpected !== 0
-                    ? `${reviewPayment.amountReceived - reviewPayment.amountExpected > 0 ? "+" : ""}${formatVnd(reviewPayment.amountReceived - reviewPayment.amountExpected)}`
+                { label: "SePay ID", value: detailPayment.sepayId ?? "Chưa có" },
+                { label: "Số tiền nhận", value: formatVnd(detailPayment.amountReceived) },
+                { label: "Dự kiến", value: formatVnd(detailPayment.amountExpected) },
+                {
+                  label: "Chênh lệch",
+                  value: detailPayment.amountReceived - detailPayment.amountExpected !== 0
+                    ? `${detailPayment.amountReceived - detailPayment.amountExpected > 0 ? "+" : ""}${formatVnd(detailPayment.amountReceived - detailPayment.amountExpected)}`
                     : "Đúng số tiền"
                 },
-                { label: "Trạng thái", value: PAYMENT_STATUS_LABEL[reviewPayment.status] },
+                { label: "Trạng thái", value: PAYMENT_STATUS_LABEL[detailPayment.status] },
+                { label: "Đơn liên quan", value: detailPayment.orderCode ?? "Chưa liên kết" },
               ].map((item) => (
                 <div key={item.label}>
                   <span className="block text-xs text-muted">{item.label}</span>
@@ -234,37 +193,23 @@ export default function PaymentsPage() {
                 </div>
               ))}
             </div>
-
-            <form onSubmit={saveReview} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Số tiền nhận">
-                  <input className="input" inputMode="numeric" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} disabled />
-                </Field>
-                <Field label="Trạng thái">
-                  <select className="input" value={editStatus} onChange={(e) => setEditStatus(e.target.value as PaymentStatus)} disabled>
-                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{PAYMENT_STATUS_LABEL[s]}</option>)}
-                  </select>
-                </Field>
-              </div>
-              <Field label="Ghi chú">
-                <input className="input" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Ghi chú xử lý" disabled />
-              </Field>
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="btn-ghost" onClick={() => setReviewPayment(null)}>Đóng</button>
-                <button type="submit" className="btn" disabled>Chỉ đọc</button>
-              </div>
-            </form>
-
-            {(reviewPayment.status === "pending" || reviewPayment.status === "underpaid") &&
-              reviewPayment.amountReceived >= reviewPayment.amountExpected && reviewPayment.type !== "manual" && (
-                <button type="button" className="btn w-full" onClick={() => fulfill(reviewPayment)}>Duyệt &amp; giao hàng</button>
-              )}
-            {canDelete(reviewPayment) && (
-              <button type="button" className="btn-danger w-full" onClick={removePayment}>Xóa giao dịch</button>
-            )}
+            <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-muted">
+              Màn hình này là chế độ đọc dữ liệu đối soát. Muốn xác nhận/đổi trạng thái, hãy thao tác ở trang <strong className="text-ink">Đơn hàng</strong> hoặc <strong className="text-ink">Đối soát giao dịch</strong>.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" className="btn" onClick={() => setDetailPayment(null)}>Đóng</button>
+            </div>
           </div>
         )}
       </Modal>
     </div>
+  );
+}
+
+export default function PaymentsPage() {
+  return (
+    <Suspense>
+      <PaymentsPageInner />
+    </Suspense>
   );
 }

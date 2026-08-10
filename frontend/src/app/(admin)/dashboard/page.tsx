@@ -37,12 +37,12 @@ export default function DashboardPage() {
     const peak = Math.max(...rows.map(([, value]) => value.amount), 1);
     return rows.map(([date, value]) => ({ date, ...value, height: Math.max(5, Math.round(value.amount / peak * 100)) }));
   }, [orders]);
-  const alerts = payments.filter((payment) => ["underpaid", "overpaid", "unknown_code", "failed"].includes(payment.status)).slice(0, 4);
+  const alerts = payments.filter((payment) => ["underpaid", "overpaid", "unknown_code"].includes(payment.status)).slice(0, 4);
 
   return <div>
-    <PageHeader title="Tổng quan kinh doanh" description="Số liệu thực từ Supabase, cập nhật mỗi lần tải trang."><button className="btn-ghost" onClick={() => void reload()}>Làm mới</button></PageHeader>
+    <PageHeader title="Tổng quan kinh doanh" description="Số liệu thực từ backend, cập nhật mỗi lần tải trang."><button className="btn-ghost" onClick={() => void reload()}>Làm mới</button></PageHeader>
     {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-    {loading && <div className="mb-4 text-sm text-muted">Đang đọc dữ liệu thật từ Supabase...</div>}
+    {loading && <div className="mb-4 text-sm text-muted">Đang đọc dữ liệu thật từ backend...</div>}
     <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Doanh thu đã thu" value={formatVnd(stats.revenue)} hint={`${stats.paidOrders} đơn đã thanh toán`} />
       <Metric label="Trung bình / đơn" value={formatVnd(stats.average)} hint="Theo các đơn đã thanh toán" />
@@ -58,7 +58,7 @@ export default function DashboardPage() {
       </Panel>
     </div>
     <Panel title="Đơn mới nhất" right={<Link href="/orders" className="text-sm text-brand-700">Xem tất cả</Link>}>
-      <div className="overflow-x-auto"><table className="w-full min-w-[720px]"><thead><tr className="border-b border-line"><th className="th">Mã đơn</th><th className="th">Người tạo</th><th className="th">Món</th><th className="th">Tổng tiền</th><th className="th">Trạng thái</th></tr></thead><tbody className="divide-y divide-line-soft">{orders.slice(0, 8).map((order: Order) => <tr key={order.id}><td className="td"><strong className="block">{order.code}</strong><small className="text-muted">{formatDate(order.createdAt)} {formatTime(order.createdAt)}</small></td><td className="td">@{order.user.username || order.user.telegramId}</td><td className="td">{order.productName}</td><td className="td font-bold">{formatVnd(order.amountVnd)}</td><td className="td"><Badge tone={orderPaymentTone(order.paymentStatus)}>{ORDER_PAYMENT_STATUS_LABEL[order.paymentStatus]}</Badge></td></tr>)}{orders.length === 0 && !loading && <tr><td colSpan={5}><EmptyState>Supabase chưa có đơn hàng.</EmptyState></td></tr>}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[720px]"><thead><tr className="border-b border-line"><th className="th">Mã đơn</th><th className="th">Người tạo</th><th className="th">Món</th><th className="th">Tổng tiền</th><th className="th">Trạng thái</th></tr></thead><tbody className="divide-y divide-line-soft">{orders.slice(0, 8).map((order: Order) => <tr key={order.id}><td className="td"><strong className="block">{order.code}</strong><small className="text-muted">{formatDate(order.createdAt)} {formatTime(order.createdAt)}</small></td><td className="td">@{order.user.username || order.user.telegramId}</td><td className="td">{order.productName}</td><td className="td font-bold">{formatVnd(order.amountVnd)}</td><td className="td"><Badge tone={orderPaymentTone(order.paymentStatus)}>{ORDER_PAYMENT_STATUS_LABEL[order.paymentStatus]}</Badge></td></tr>)}{orders.length === 0 && !loading && <tr><td colSpan={5}><EmptyState>Chưa có đơn hàng.</EmptyState></td></tr>}</tbody></table></div>
     </Panel>
   </div>;
 }

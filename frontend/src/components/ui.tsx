@@ -180,26 +180,7 @@ export function paymentTone(status: string): Tone {
       return "amber";
     case "underpaid":
     case "overpaid":
-    case "duplicate":
-    case "failed":
       return "red";
-    default:
-      return "gray";
-  }
-}
-
-export function warrantyTone(status: string): Tone {
-  switch (status) {
-    case "open":
-      return "blue";
-    case "processing":
-    case "waiting_customer":
-      return "amber";
-    case "resolved":
-      return "green";
-    case "rejected":
-    case "closed":
-      return "gray";
     default:
       return "gray";
   }
@@ -313,35 +294,4 @@ export function Modal({
   );
 }
 
-/* ── Hạng khách hàng ── */
-export function RankBadge({ tier, name }: { tier: string; name: string }) {
-  const map: Record<string, string> = {
-    diamond: "from-cyan-500 to-blue-600 text-white",
-    platinum: "from-slate-400 to-slate-600 text-white",
-    gold: "from-amber-400 to-amber-600 text-white",
-    silver: "from-slate-300 to-slate-400 text-slate-700",
-    bronze: "from-orange-400 to-orange-600 text-white",
-    new: "from-slate-200 to-slate-300 text-slate-600",
-  };
-  const cls = map[tier] ?? map.new;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full bg-gradient-to-r px-2.5 py-0.5 text-xs font-bold shadow-sm ${cls}`}>
-      {name}
-    </span>
-  );
-}
 
-/* ── Fulfillment badge ── */
-export function FulfillmentBadge({ type }: { type: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    stock: { label: "Kho tự động", cls: "bg-brand-50 text-brand-700 ring-brand-600/15" },
-    manual_upgrade: { label: "Nâng cấp thủ công", cls: "bg-violet-50 text-violet-700 ring-violet-600/15" },
-    dealer_api: { label: "API đối tác", cls: "bg-blue-50 text-blue-700 ring-blue-600/15" },
-  };
-  const meta = map[type] ?? { label: type, cls: "bg-slate-100 text-slate-600 ring-slate-500/15" };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${meta.cls}`}>
-      {meta.label}
-    </span>
-  );
-}

@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: [
+      "src/routes/**/*.test.ts",
       "src/modules/auth/tests/**/*.test.ts",
       "src/modules/payments/tests/**/*.test.ts",
       "src/modules/sepay/tests/**/*.test.ts",

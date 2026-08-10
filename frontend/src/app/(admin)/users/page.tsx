@@ -35,7 +35,7 @@ export default function StaffPage() {
     try {
       await apiRequest(editing ? `admin/employees/${editing.id}` : "admin/employees", { method: editing ? "PATCH" : "POST", body });
       form.reset(); setCreating(false); setEditing(null); await reload();
-      toast.push("Đã lưu nhân viên vào Supabase.", "success");
+      toast.push("Đã lưu nhân viên vào hệ thống.", "success");
     } catch (actionError) {
       toast.push(actionError instanceof Error ? actionError.message : "Không thể lưu nhân viên.", "error");
     }
@@ -54,7 +54,7 @@ export default function StaffPage() {
 
   const stats = { total: rows.length, active: rows.filter((row) => row.status !== "INACTIVE").length, baristas: rows.filter((row) => row.role === "BARISTA").length };
   return <div>
-    <PageHeader title="Nhân viên" description="Tài khoản Telegram của nhân viên được đọc trực tiếp từ Supabase."><button className="btn" onClick={() => setCreating(true)}>Thêm nhân viên</button></PageHeader>
+    <PageHeader title="Nhân viên" description="Tài khoản Telegram của nhân viên được đọc trực tiếp từ backend."><button className="btn" onClick={() => setCreating(true)}>Thêm nhân viên</button></PageHeader>
     {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
     {loading && <div className="mb-4 text-sm text-muted">Đang tải nhân viên...</div>}
     <Stats items={[{ label: "Tổng nhân viên", value: stats.total }, { label: "Đang hoạt động", value: stats.active, tone: "green" }, { label: "Pha chế", value: stats.baristas, tone: "teal" }]} />

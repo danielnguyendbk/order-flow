@@ -186,26 +186,6 @@ aside::-webkit-scrollbar {
   }
 }
 
-@keyframes waveShift {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ── Reusable component classes ── */
 @layer components {
   /* Card — borderless, shadow-only như Donezo */
@@ -238,21 +218,7 @@ aside::-webkit-scrollbar {
   }
   .empty-state {
     @apply py-10 text-center text-sm text-muted;
-  }
-
-  /* Bar chart — cột dạng pill striped (Donezo: rounded-full + diagonal stripes) */
-  .bar-striped {
-    border-radius: 999px;
-    background-color: var(--color-brand-100);
-    background-image: repeating-linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.6) 0 5px,
-      transparent 5px 10px
-    );
-  }
-  .group:hover .bar-striped {
-    background-color: var(--color-brand-200);
-  }
+  }
 
   /* Table */
   .th {
