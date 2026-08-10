@@ -151,10 +151,14 @@ Mở `http://localhost:3000` → tự chuyển về `/login`. Dùng đúng **use
 
 ### 2.12 Báo cáo doanh thu (`/reports/revenue`)
 
-- [ ] Chọn khoảng ngày → **Xem báo cáo**.
-- [ ] Thống kê: Doanh thu thuần, Tổng thu (gross), Đã hoàn tiền, Số đơn đã thanh toán.
-- [ ] Phân bổ theo phương thức: Tiền mặt / Chuyển khoản / Đã hoàn (kèm thanh tỷ lệ %).
-- [ ] Bảng chi tiết tổng hợp + dòng tổng thuần.
+- [ ] Vào trang → dữ liệu tự tải ngay (mặc định **30 ngày gần nhất**, không cần bấm nút).
+- [ ] Thay đổi ngày Từ/Đến hoặc bộ lọc Phương thức → **biểu đồ và bảng tự cập nhật tức thì** (không cần nút "Xem báo cáo").
+- [ ] Thống kê tóm tắt: Doanh thu thuần, Đã hoàn tiền (REFUNDED), Số đơn hợp lệ, Trung bình/ngày.
+- [ ] Biểu đồ cột theo ngày: chỉ hiện cột **có dữ liệu > 0đ**, không vẽ cột rỗng cho ngày không có giao dịch.
+- [ ] Bảng "Chi tiết theo ngày": chỉ liệt kê những ngày **có giao dịch thực sự**, không xuất hiện các dòng 0đ.
+- [ ] Badge góc trên bảng hiển thị đúng số ngày có giao dịch (vd: "6 ngày có giao dịch").
+- [ ] Lọc **Tiền mặt** / **Chuyển khoản QR** → biểu đồ và bảng chỉ tính đúng phương thức đó.
+- [ ] Cột "Đã hoàn (REFUNDED)" hiển thị dấu `−` màu đỏ khi có hoàn tiền; hiển thị `—` khi không có.
 
 ### 2.13 Nhật ký (`/audit`)
 

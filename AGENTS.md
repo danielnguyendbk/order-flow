@@ -82,6 +82,14 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
 
+## Progress log — 2026-08-10
+
+- Fixed the Supabase schema gap that caused 500s on admin tabs: the remote DB was missing the `sepay_transactions` and `audit_logs` tables plus the `transaction_match_status`, `resolution_action` and `audit_entity_type` enum types. Added the idempotent migration `backend/prisma/sql/2026-08-10_sepay_audit_tables.sql` (safe to re-run) and a small runner at `backend/scripts/run-migration.cjs` (`node scripts/run-migration.cjs prisma/sql/<file>.sql`) for applying future SQL migrations against Supabase.
+- Switched `DATABASE_URL` in the root `.env.local` from the Supabase **session pooler (5432)** to the **transaction pooler (6543)** with `pgbouncer=true`. The API creates many separate `new PrismaClient()` instances (each holding its own connection pool), which exceeded the 15-connection cap of the session pooler and caused intermittent `max clients reached` 500s whenever the admin UI fired several requests in parallel (e.g. the dashboard). Transaction pooling releases connections after each transaction; `DIRECT_URL` (5432) is unchanged for migrations.
+- Fixed `Request validation failed` on the Thực đơn (catalog) and Danh mục (categories) pages: the admin menu-item and employee list schemas capped `limit` at 100 while the admin UI loads up to 500–1000 rows. Raised the cap to 1000 in `adminItemListQuerySchema` (`item.schemas.ts`) and `employeeListQuerySchema` (`employee.schemas.ts`).
+- Consolidated all backend services to consume the shared `PrismaClient` singleton (`src/db.ts`). Configured `connection_limit=5` in `src/db.ts` and `max: 3` in `src/config/database.ts` (node-postgres `pg.Pool`). This caps total active connections at 8, completely below Supabase Transaction Pooler's ceiling of 15 connections, eliminating `EMAXCONNSESSION` process crashes under concurrent admin UI navigation.
+- Verified after the fixes: all admin endpoints (orders, transactions, reconciliations, revenue, audit-logs, menu, employees, barista queue) return 200 both directly and through the FE `/api/backend` proxy, including 7 parallel calls × 3 rounds; API type-check and 57 API tests pass.
+
 ## Progress log — 2026-08-07
 
 - Split the two Telegram authentication contracts: Telegram Web App JWT creation remains `POST /api/v1/telegram/session`, while internal Bot employee resolution now uses `POST /api/v1/telegram/bot/session`.

@@ -1,8 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { Payment } from "../orders/order.types";
 import { generatePaymentCode } from "../orders/order-code";
-
-const prisma = new PrismaClient();
 
 /**
  * Repository for all `payments` database operations.

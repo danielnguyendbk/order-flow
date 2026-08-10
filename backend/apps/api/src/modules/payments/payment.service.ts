@@ -1,5 +1,5 @@
 import createHttpError from "http-errors";
-import { AuditEntityType, Prisma, PrismaClient } from "@prisma/client";
+import { AuditEntityType, Prisma } from "@prisma/client";
 import {
   FulfillmentStatus,
   OrderStatusDomain,
@@ -9,8 +9,7 @@ import {
 } from "../orders/order.types";
 import { PaymentRepository } from "./payment.repository";
 import { generatePaymentCode } from "../orders/order-code";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 export interface ConfirmCashInput {
   confirmedByUserId: string;

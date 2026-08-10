@@ -22,6 +22,9 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { message?: string; error?: { message?: string } } | null;
+    if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
     throw new ApiError(payload?.error?.message ?? payload?.message ?? "Không thể tải dữ liệu từ máy chủ.", response.status);
   }
 
@@ -122,6 +125,17 @@ export interface ApiSepayTransactionFull {
   resolvedBy: { id: string; fullName: string; username: string | null } | null;
 }
 
+export interface ApiDailyRevenueItem {
+  date: string;
+  cashAmount: string;
+  qrAmount: string;
+  grossRevenue: string;
+  refundedAmount: string;
+  netRevenue: string;
+  orderCount: number;
+  refundCount: number;
+}
+
 export interface ApiRevenueReport {
   range: { from: string; to: string };
   summary: {
@@ -130,12 +144,15 @@ export interface ApiRevenueReport {
     netRevenue: string;
     paidOrderCount: number;
     refundCount: number;
+    totalDays?: number;
+    avgDailyNetRevenue?: string;
   };
   byMethod: {
     CASH: { amount: string; count: number };
     QR: { amount: string; count: number };
     REFUNDED: { amount: string; count: number };
   };
+  byDate?: ApiDailyRevenueItem[];
 }
 
 export interface ApiCategory {
@@ -261,12 +278,41 @@ export function getOrder(orderId: string) {
   return apiRequest<ApiOrder>(`admin/orders/${orderId}`);
 }
 
+/** Bản ghi thanh toán của một đơn (không kèm sepayTransactions). */
+export interface ApiOrderPaymentRecord {
+  id: string;
+  orderId: string;
+  paymentCode: string | null;
+  expectedAmount: string;
+  receivedAmount: string;
+  cashConfirmedByUserId: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getOrderPayments(orderId: string) {
+  return apiRequest<{ data: ApiOrderPaymentRecord[] }>(`orders/${orderId}/payments`);
+}
+
 export function getCurrentUser() {
   return apiRequest<{ data: ApiUser }>("admin/auth/me");
 }
 
 export function getTransactions() {
   return apiRequest<{ data: ApiSepayTransactionFull[] }>("admin/transactions");
+}
+
+export function getTransaction(transactionId: string) {
+  return apiRequest<ApiSepayTransactionFull>(`admin/transactions/${transactionId}`);
+}
+
+export function getReconciliations() {
+  return apiRequest<{ data: ApiSepayTransactionFull[] }>("admin/reconciliations");
+}
+
+export function getReconciliation(reconciliationId: string) {
+  return apiRequest<ApiSepayTransactionFull>(`admin/reconciliations/${reconciliationId}`);
 }
 
 export function getRevenueReport(from: string, to: string) {
@@ -308,10 +354,97 @@ export function getMenuItems(limit = 100) {
   return apiRequest<Paginated<ApiMenuItem>>(`admin/menu-items?limit=${limit}`);
 }
 
+export function getMenuItem(itemId: string) {
+  return apiRequest<{ data: ApiMenuItem }>(`admin/menu-items/${itemId}`);
+}
+
 export function getEmployees(limit = 100) {
   return apiRequest<Paginated<ApiUser>>(`admin/employees?limit=${limit}`);
 }
 
+export function getEmployee(employeeId: string) {
+  return apiRequest<{ data: ApiUser }>(`admin/employees/${employeeId}`);
+}
+
 export function getAuditLogs() {
   return apiRequest<{ data: ApiAuditLog[] }>("admin/audit-logs");
+}
+
+/* ── Quản lý danh mục thực đơn (admin) ── */
+
+export interface ApiCreateCategoryInput {
+  name: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export function createCategory(body: ApiCreateCategoryInput) {
+  return apiRequest<{ data: ApiCategory }>("admin/menu-categories", { method: "POST", body });
+}
+
+export function updateCategory(categoryId: string, body: Partial<ApiCreateCategoryInput>) {
+  return apiRequest<{ data: ApiCategory }>(`admin/menu-categories/${categoryId}`, { method: "PATCH", body });
+}
+
+export function deleteCategory(categoryId: string) {
+  return apiRequest<void>(`admin/menu-categories/${categoryId}`, { method: "DELETE" });
+}
+
+/* ── Quản lý món ăn / đồ uống (admin) ── */
+
+export interface ApiCreateMenuItemInput {
+  categoryId: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  isAvailable?: boolean;
+  imageUrl?: string | null;
+  displayOrder?: number;
+}
+
+export function createMenuItem(body: ApiCreateMenuItemInput) {
+  return apiRequest<{ data: ApiMenuItem }>("admin/menu-items", { method: "POST", body });
+}
+
+export function updateMenuItem(itemId: string, body: Partial<ApiCreateMenuItemInput>) {
+  return apiRequest<{ data: ApiMenuItem }>(`admin/menu-items/${itemId}`, { method: "PATCH", body });
+}
+
+export function deleteMenuItem(itemId: string) {
+  return apiRequest<void>(`admin/menu-items/${itemId}`, { method: "DELETE" });
+}
+
+/* ── Quản lý nhân viên (admin) ── */
+
+export interface ApiCreateEmployeeInput {
+  fullName: string;
+  telegramUserId: string;
+  telegramChatId?: string | null;
+  username?: string | null;
+  role: "SERVICE_STAFF" | "BARISTA";
+}
+
+export function createEmployee(body: ApiCreateEmployeeInput) {
+  return apiRequest<{ data: ApiUser }>("admin/employees", { method: "POST", body });
+}
+
+export function updateEmployee(employeeId: string, body: Partial<ApiCreateEmployeeInput>) {
+  return apiRequest<{ data: ApiUser }>(`admin/employees/${employeeId}`, { method: "PATCH", body });
+}
+
+export function activateEmployee(employeeId: string) {
+  return apiRequest<{ data: ApiUser }>(`admin/employees/${employeeId}/activate`, { method: "POST" });
+}
+
+export function deactivateEmployee(employeeId: string) {
+  return apiRequest<{ data: ApiUser }>(`admin/employees/${employeeId}/deactivate`, { method: "POST" });
+}
+
+/* ── Admin override trạng thái đơn ── */
+
+export function overrideOrderStatus(
+  orderId: string,
+  body: { domain: "PAYMENT" | "FULFILLMENT"; status: string; reason: string },
+) {
+  return apiRequest<ApiOrder>(`admin/orders/${orderId}/override-status`, { method: "POST", body });
 }

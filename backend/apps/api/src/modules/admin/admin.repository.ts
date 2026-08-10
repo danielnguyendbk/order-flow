@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { Order, OrderFilters, PaginatedResult } from "../orders/order.types";
-
-const prisma = new PrismaClient();
 
 function toOrderWithTimeline(order: unknown): Order {
   const data = order as any;

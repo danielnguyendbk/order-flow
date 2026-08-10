@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -10,6 +10,7 @@ import {
   EmptyState,
   Field,
   Modal,
+  PageLoading,
   orderPaymentTone,
   orderFulfillmentTone,
   type Tone,
@@ -17,13 +18,30 @@ import {
 import { useToast } from "@/components/Toast";
 import { formatVnd, formatDateTime } from "@/lib/format";
 import {
-  orderDetails,
+  getOrder,
+  getOrderPayments,
+  getCurrentUser,
+  getMenuItems,
+  getCategories,
+  confirmCash,
+  initQrPayment,
+  refundOrder,
+  cancelOrder,
+  overrideOrderStatus,
+  addOrderItem,
+  updateOrderItem,
+  deleteOrderItem,
+  type ApiOrder,
+  type ApiOrderPaymentRecord,
+  type ApiUser,
+  type ApiMenuItem,
+  type ApiCategory,
+} from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import {
   ORDER_PAYMENT_STATUS_LABEL,
   ORDER_FULFILLMENT_STATUS_LABEL,
-  TIMELINE_STATUS_LABEL,
-  type OrderDetail,
   type OrderFulfillmentStatus,
-  type OrderTimelineEvent,
 } from "@/lib/data";
 
 const FULFILLMENT_OPTIONS = Object.keys(ORDER_FULFILLMENT_STATUS_LABEL) as OrderFulfillmentStatus[];
@@ -41,12 +59,21 @@ function timelineTone(status: string): Tone {
       return "green";
     case "UNDERPAID":
     case "OVERPAID":
+    case "REVIEW":
       return "red";
     case "PENDING_PAYMENT":
       return "amber";
     default:
       return orderFulfillmentTone(status);
   }
+}
+
+/* Tên hiển thị cho từng mốc timeline từ newStatus + domain */
+function timelineLabel(statusDomain: string, newStatus: string): string {
+  if (statusDomain === "PAYMENT") {
+    return ORDER_PAYMENT_STATUS_LABEL[newStatus as keyof typeof ORDER_PAYMENT_STATUS_LABEL] ?? newStatus;
+  }
+  return ORDER_FULFILLMENT_STATUS_LABEL[newStatus as keyof typeof ORDER_FULFILLMENT_STATUS_LABEL] ?? newStatus;
 }
 
 /* QR giả (placeholder) sinh từ mã đơn để mỗi đơn có hoa văn riêng */
@@ -102,20 +129,263 @@ export default function OrderDetailPage() {
 function OrderDetailView({ orderId }: { orderId: string }) {
   const toast = useToast();
 
-  const [detail, setDetail] = useState<OrderDetail | null>(
-    () => orderDetails.find((d) => d.code === orderId) ?? null
-  );
+  const loadOrder = useCallback(async () => {
+    const [order, mePayload, paymentsPayload] = await Promise.all([
+      getOrder(orderId),
+      getCurrentUser().catch(() => null),
+      getOrderPayments(orderId).catch(() => ({ data: [] as ApiOrderPaymentRecord[] })),
+    ]);
+    return { order, me: mePayload?.data ?? null, payments: paymentsPayload.data };
+  }, [orderId]);
+
+  const { data, loading, error, reload } = useApiData(loadOrder, {
+    order: null as ApiOrder | null,
+    me: null as ApiUser | null,
+    payments: [] as ApiOrderPaymentRecord[],
+  });
+  const { order, me, payments } = data;
+
+  // Dữ liệu thực đơn để thêm món
+  const loadMenu = useCallback(async () => {
+    const [itemsPayload, categoriesPayload] = await Promise.all([
+      getMenuItems(500),
+      getCategories(),
+    ]);
+    return { items: itemsPayload.data, categories: categoriesPayload.data };
+  }, []);
+  const { data: menu } = useApiData(loadMenu, {
+    items: [] as ApiMenuItem[],
+    categories: [] as ApiCategory[],
+  });
+  const availableItems = useMemo(() => menu.items.filter((item) => item.isAvailable), [menu.items]);
 
   // Modals
   const [cashOpen, setCashOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [qrContent, setQrContent] = useState("");
+  const [qrAmount, setQrAmount] = useState("0");
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundReason, setRefundReason] = useState("");
-  const [refundBy, setRefundBy] = useState("Admin");
   const [overrideStatus, setOverrideStatus] = useState<OrderFulfillmentStatus | "">("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  // Sửa món
+  const [addItemOpen, setAddItemOpen] = useState(false);
+  const [addItemId, setAddItemId] = useState("");
+  const [addItemQty, setAddItemQty] = useState(1);
+  const [addItemNote, setAddItemNote] = useState("");
+  const [editItem, setEditItem] = useState<{ id: string; name: string; quantity: number; note: string } | null>(null);
+  const [editQty, setEditQty] = useState(1);
+  const [editNote, setEditNote] = useState("");
 
-  if (!detail) {
+  const totalVnd = Number(order?.totalAmount ?? 0);
+  const paidAmount = Number(order?.payment?.receivedAmount ?? 0);
+  const expectedAmount = Number(order?.payment?.expectedAmount ?? 0);
+  const paymentMethod = order?.paymentMethod === "CASH" ? "cash" : "qr";
+  const paymentStatus = order?.paymentStatus === "REVIEW" ? "PAYMENT_REVIEW" : (order?.paymentStatus ?? "UNPAID");
+  const isUnpaid = order?.paymentStatus === "UNPAID" && order?.fulfillmentStatus === "PENDING_PAYMENT";
+  const canEditItems = order?.paymentStatus === "UNPAID" && order?.fulfillmentStatus === "PENDING_PAYMENT";
+  const canRefund = ["PAID", "OVERPAID", "UNDERPAID"].includes(order?.paymentStatus ?? "");
+  const canCancel = ["PENDING_PAYMENT", "QUEUED", "PREPARING"].includes(order?.fulfillmentStatus ?? "");
+
+  const timeline = useMemo(() => {
+    if (!order) return [];
+    const events = order.timeline ?? [];
+    // Thêm mốc tạo đơn nếu chưa có
+    const hasCreated = events.some((e) => e.newStatus === "ORDER_CREATED");
+    const created = hasCreated
+      ? []
+      : [{
+          id: `${order.id}-created`,
+          status: "ORDER_CREATED",
+          label: "Tạo đơn",
+          at: order.createdAt,
+          by: order.creator?.fullName ?? "Khách hàng",
+          note: order.customerNote ?? undefined,
+        }];
+    const mapped = events.map((e) => ({
+      id: e.id,
+      status: e.newStatus,
+      label: timelineLabel(e.statusDomain, e.newStatus),
+      at: e.createdAt,
+      by: e.changedByUserId && e.changedByUserId === order.createdByUserId
+        ? order.creator?.fullName ?? "Người tạo"
+        : e.changedByUserId
+          ? "Admin"
+          : "Hệ thống",
+      note: e.reason ?? undefined,
+    }));
+    return [...created, ...mapped];
+  }, [order]);
+
+  const act = async (action: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    try {
+      await action();
+      await reload();
+      toast.push(success, "success");
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể thực hiện thao tác.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const currentUserId = me?.id;
+
+  /* ── Xác nhận tiền mặt ── */
+  const confirmCashSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!order || !currentUserId) {
+      toast.push("Không xác định được tài khoản đang đăng nhập.", "error");
+      return;
+    }
+    void act(
+      () => confirmCash(order.id, { confirmedByUserId: currentUserId, amount: totalVnd }),
+      `Đã xác nhận thu tiền mặt ${formatVnd(totalVnd)} cho đơn ${order.orderCode}.`,
+    );
+    setCashOpen(false);
+  };
+
+  /* ── Khởi tạo QR ── */
+  const openQr = async () => {
+    if (!order || !currentUserId) {
+      toast.push("Không xác định được tài khoản đang đăng nhập.", "error");
+      return;
+    }
+    setQrOpen(true);
+    setQrContent("Đang khởi tạo...");
+    setQrAmount("0");
+    try {
+      const result = await initQrPayment(order.id, { requestedByUserId: currentUserId });
+      setQrContent(result.transferContent);
+      setQrAmount(result.amount);
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không khởi tạo được QR.", "error");
+      setQrOpen(false);
+    }
+  };
+
+  /* ── Đã nhận tiền QR (PAID) ── */
+  const confirmQrPaid = () => {
+    if (!order) return;
+    void act(
+      () => overrideOrderStatus(order.id, { domain: "PAYMENT", status: "PAID", reason: "Admin xác nhận đã nhận chuyển khoản QR" }),
+      `Đã ghi nhận thanh toán QR cho đơn ${order.orderCode}.`,
+    );
+    setQrOpen(false);
+  };
+
+  /* ── Xác nhận đã thu đủ cho đơn thiếu tiền ── */
+  const confirmUnderpaidAsPaid = () => {
+    if (!order) return;
+    void act(
+      () => overrideOrderStatus(order.id, { domain: "PAYMENT", status: "PAID", reason: "Admin xác nhận đã thu đủ số tiền còn thiếu" }),
+      `Đã xác nhận thu đủ ${formatVnd(totalVnd)} cho đơn ${order.orderCode}.`,
+    );
+  };
+
+  /* ── Hoàn tiền (Refund) ── */
+  const submitRefund = (e: FormEvent) => {
+    e.preventDefault();
+    if (!order || !currentUserId) return;
+    const amount = Math.min(Math.max(0, refundAmount || 0), paidAmount || totalVnd);
+    if (amount <= 0) {
+      toast.push("Số tiền hoàn phải lớn hơn 0.", "error");
+      return;
+    }
+    if (!refundReason.trim()) {
+      toast.push("Vui lòng nhập lý do hoàn tiền.", "error");
+      return;
+    }
+    void act(
+      () => refundOrder(order.id, { refundedByUserId: currentUserId, reason: refundReason.trim(), amount }),
+      `Đã hoàn tiền ${formatVnd(amount)} cho đơn ${order.orderCode}.`,
+    );
+    setRefundOpen(false);
+    setRefundAmount(0);
+    setRefundReason("");
+  };
+
+  /* ── Hủy đơn ── */
+  const submitCancel = (e: FormEvent) => {
+    e.preventDefault();
+    if (!order || !currentUserId) return;
+    if (!cancelReason.trim()) {
+      toast.push("Vui lòng nhập lý do hủy đơn.", "error");
+      return;
+    }
+    void act(
+      () => cancelOrder(order.id, { reason: cancelReason.trim(), requesterId: currentUserId }),
+      `Đã hủy đơn ${order.orderCode}.`,
+    );
+    setCancelOpen(false);
+    setCancelReason("");
+  };
+
+  /* ── Đổi trạng thái thực hiện ── */
+  const applyStatus = () => {
+    if (!order || !overrideStatus || overrideStatus === order.fulfillmentStatus) return;
+    const label = ORDER_FULFILLMENT_STATUS_LABEL[overrideStatus];
+    void act(
+      () => overrideOrderStatus(order.id, { domain: "FULFILLMENT", status: overrideStatus, reason: "Cập nhật thủ công từ Web Admin" }),
+      `Đã đổi trạng thái đơn ${order.orderCode} sang “${label}”.`,
+    );
+    setOverrideStatus("");
+  };
+
+  /* ── Thêm món ── */
+  const submitAddItem = (e: FormEvent) => {
+    e.preventDefault();
+    if (!order || !addItemId) {
+      toast.push("Vui lòng chọn món cần thêm.", "error");
+      return;
+    }
+    void act(
+      () => addOrderItem(order.id, {
+        menuItemId: addItemId,
+        quantity: Math.max(1, Math.round(addItemQty) || 1),
+        note: addItemNote.trim() || undefined,
+      }),
+      "Đã thêm món vào đơn.",
+    );
+    setAddItemOpen(false);
+    setAddItemId("");
+    setAddItemQty(1);
+    setAddItemNote("");
+  };
+
+  /* ── Sửa / Xóa món ── */
+  const submitEditItem = (e: FormEvent) => {
+    e.preventDefault();
+    if (!order || !editItem) return;
+    void act(
+      () => updateOrderItem(order.id, editItem.id, {
+        quantity: Math.max(1, Math.round(editQty) || 1),
+        note: editNote.trim() || null,
+      }),
+      "Đã cập nhật món.",
+    );
+    setEditItem(null);
+  };
+
+  const removeItem = (itemId: string, itemName: string) => {
+    if (!order) return;
+    if (order.items.length <= 1) {
+      toast.push("Không thể xóa món cuối cùng của đơn.", "error");
+      return;
+    }
+    if (!confirm(`Xóa món "${itemName}" khỏi đơn?`)) return;
+    void act(() => deleteOrderItem(order.id, itemId), `Đã xóa món "${itemName}".`);
+  };
+
+  if (loading && !order) {
+    return <PageLoading label="Đang tải chi tiết đơn hàng..." subText="Đang đồng bộ snapshot món ăn và trạng thái thanh toán..." />;
+  }
+
+  if (!order) {
     return (
       <div>
         <PageHeader title="Không tìm thấy đơn">
@@ -125,144 +395,49 @@ function OrderDetailView({ orderId }: { orderId: string }) {
         </PageHeader>
         <Panel>
           <EmptyState>
-            Không có đơn hàng nào khớp mã <strong className="text-ink">{orderId}</strong>. Vui lòng kiểm tra lại mã đơn.
+            {error ? error : `Không có đơn hàng nào khớp mã ${orderId}. Vui lòng kiểm tra lại mã đơn.`}
           </EmptyState>
         </Panel>
       </div>
     );
   }
 
-  const canRefund = ["PAID", "OVERPAID", "UNDERPAID"].includes(detail.paymentStatus);
-  const isUnpaid = detail.paymentStatus === "UNPAID";
-
-  const pushEvent = (event: OrderTimelineEvent) =>
-    setDetail((d) => (d ? { ...d, timeline: [...d.timeline, event] } : d));
-
-  const nowIso = () => new Date().toISOString();
-
-  /* ── Xác nhận tiền mặt ── */
-  const confirmCash = (e: FormEvent) => {
-    e.preventDefault();
-    pushEvent({
-      id: `${detail.id}-cash-${Date.now()}`,
-      status: "PAID",
-      label: "Đã thu tiền mặt",
-      at: nowIso(),
-      by: "Admin",
-      note: `Thu ${formatVnd(detail.totalVnd)} tại quầy`,
-    });
-    setDetail((d) => (d ? { ...d, paymentStatus: "PAID", paidAmount: d.totalVnd } : d));
-    toast.push(`Đã xác nhận thu tiền mặt ${formatVnd(detail.totalVnd)} cho đơn ${detail.code}.`, "success");
-    setCashOpen(false);
-  };
-
-  /* ── QR đã nhận tiền ── */
-  const confirmQrPaid = () => {
-    pushEvent({
-      id: `${detail.id}-qr-${Date.now()}`,
-      status: "PAID",
-      label: "Thanh toán thành công (QR)",
-      at: nowIso(),
-      by: "Admin",
-      note: `Nhận chuyển khoản ${formatVnd(detail.totalVnd)}`,
-    });
-    setDetail((d) => (d ? { ...d, paymentStatus: "PAID", paidAmount: d.totalVnd } : d));
-    toast.push(`Đã ghi nhận thanh toán QR ${formatVnd(detail.totalVnd)} cho đơn ${detail.code}.`, "success");
-    setQrOpen(false);
-  };
-
-  /* ── Xác nhận đã thu đủ cho đơn thiếu tiền ── */
-  const confirmUnderpaidAsPaid = () => {
-    const diff = detail.totalVnd - detail.paidAmount;
-    pushEvent({
-      id: `${detail.id}-underpaid-paid-${Date.now()}`,
-      status: "PAID",
-      label: "Đã thu đủ tiền",
-      at: nowIso(),
-      by: "Admin",
-      note: `Thu bổ sung ${formatVnd(diff)} còn thiếu`,
-    });
-    setDetail((d) => (d ? { ...d, paymentStatus: "PAID", paidAmount: d.totalVnd } : d));
-    toast.push(`Đã xác nhận thu đủ ${formatVnd(detail.totalVnd)} cho đơn ${detail.code}.`, "success");
-  };
-
-  /* ── Hoàn tiền (Refund) ── */
-  const submitRefund = (e: FormEvent) => {
-    e.preventDefault();
-    const amount = Math.min(Math.max(0, refundAmount || 0), detail.paidAmount || detail.totalVnd);
-    if (amount <= 0) {
-      toast.push("Số tiền hoàn phải lớn hơn 0.", "error");
-      return;
-    }
-    pushEvent({
-      id: `${detail.id}-refund-${Date.now()}`,
-      status: "REFUNDED",
-      label: `Hoàn tiền ${formatVnd(amount)}`,
-      at: nowIso(),
-      by: refundBy || "Admin",
-      note: refundReason,
-    });
-    setDetail((d) => (d ? { ...d, paymentStatus: "REFUNDED", paidAmount: Math.max(0, d.paidAmount - amount) } : d));
-    toast.push(`Đã hoàn tiền ${formatVnd(amount)} cho đơn ${detail.code}.`, "success");
-    setRefundOpen(false);
-    setRefundAmount(0);
-    setRefundReason("");
-  };
-
-  /* ── Đổi trạng thái thực hiện ── */
-  const applyStatus = () => {
-    if (!overrideStatus || overrideStatus === detail.fulfillmentStatus) return;
-    const label = ORDER_FULFILLMENT_STATUS_LABEL[overrideStatus];
-    pushEvent({
-      id: `${detail.id}-st-${Date.now()}`,
-      status: overrideStatus,
-      label: `Chuyển trạng thái → ${label}`,
-      at: nowIso(),
-      by: "Admin",
-      note: "Cập nhật thủ công từ Web Admin",
-    });
-    setDetail((d) => (d ? { ...d, fulfillmentStatus: overrideStatus } : d));
-    toast.push(`Đã đổi trạng thái đơn ${detail.code} sang “${label}”.`, "success");
-    setOverrideStatus("");
-  };
-
   return (
     <div>
       <PageHeader
         title={
           <>
-            Đơn <span className="font-mono text-brand-700">{detail.code}</span>
+            Đơn <span className="font-mono text-brand-700">{order.orderCode}</span>
           </>
         }
-        description={`Tạo lúc ${formatDateTime(detail.createdAt)} · ${detail.customerInput || "Không ghi vị trí"}`}
+        description={`Tạo lúc ${formatDateTime(order.createdAt)} · ${order.customerNote || "Không ghi vị trí"}`}
       >
         <Link href="/orders" className="btn-ghost">
           ← Quay lại
         </Link>
       </PageHeader>
 
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
       {/* Tóm tắt đơn */}
       <Panel className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={orderPaymentTone(detail.paymentStatus)}>
-              TT thanh toán: {ORDER_PAYMENT_STATUS_LABEL[detail.paymentStatus]}
+            <Badge tone={orderPaymentTone(paymentStatus)}>
+              TT thanh toán: {ORDER_PAYMENT_STATUS_LABEL[paymentStatus]}
             </Badge>
-            <Badge tone={orderFulfillmentTone(detail.fulfillmentStatus)}>
-              TT thực hiện: {ORDER_FULFILLMENT_STATUS_LABEL[detail.fulfillmentStatus]}
+            <Badge tone={orderFulfillmentTone(order.fulfillmentStatus)}>
+              TT thực hiện: {ORDER_FULFILLMENT_STATUS_LABEL[order.fulfillmentStatus]}
             </Badge>
-            <Badge tone={detail.paymentMethod === "qr" ? "teal" : "amber"}>
-              {detail.paymentMethod === "qr" ? "Chuyển khoản QR" : "Tiền mặt"}
+            <Badge tone={paymentMethod === "qr" ? "teal" : "amber"}>
+              {paymentMethod === "qr" ? "Chuyển khoản QR" : "Tiền mặt"}
             </Badge>
           </div>
           <div className="text-right">
             <span className="block text-xs font-medium text-muted">Tổng tiền</span>
             <strong className="block text-2xl font-extrabold tabular-nums tracking-tight text-ink">
-              {formatVnd(detail.totalVnd)}
+              {formatVnd(totalVnd)}
             </strong>
-            {detail.discountVnd > 0 && (
-              <small className="text-xs text-emerald-600">Đã giảm {formatVnd(detail.discountVnd)}</small>
-            )}
           </div>
         </div>
       </Panel>
@@ -272,7 +447,15 @@ function OrderDetailView({ orderId }: { orderId: string }) {
         {/* Cột chính */}
         <div className="flex flex-col space-y-6 xl:col-span-2">
           {/* Chi tiết món */}
-          <Panel title="Chi tiết món" subtitle="Giá và tên được lưu snapshot tại thời điểm đặt hàng.">
+          <Panel
+            title="Chi tiết món"
+            subtitle="Giá và tên được lưu snapshot tại thời điểm đặt hàng."
+            right={
+              canEditItems ? (
+                <button type="button" className="btn text-xs" onClick={() => setAddItemOpen(true)}>+ Thêm món</button>
+              ) : undefined
+            }
+          >
             <div className="-mx-5 overflow-x-auto px-5">
               <table className="w-full min-w-[560px]">
                 <thead>
@@ -281,39 +464,57 @@ function OrderDetailView({ orderId }: { orderId: string }) {
                     <th className="th text-right">Đơn giá</th>
                     <th className="th text-center">SL</th>
                     <th className="th text-right">Thành tiền</th>
+                    {canEditItems && <th className="th text-right">Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-soft">
-                  {detail.items.map((item) => (
+                  {order.items.map((item) => (
                     <tr key={item.id} className="hover:bg-surface-soft transition-colors">
                       <td className="td">
-                        <strong className="block text-sm text-ink">{item.productName}</strong>
-                        {item.nameEn && <small className="text-xs text-muted">{item.nameEn}</small>}
+                        <strong className="block text-sm text-ink">{item.itemName}</strong>
+                        {item.note && <small className="text-xs text-muted">📝 {item.note}</small>}
                       </td>
-                      <td className="td text-right tabular-nums text-slate-700">{formatVnd(item.unitPriceVnd)}</td>
+                      <td className="td text-right tabular-nums text-slate-700">{formatVnd(Number(item.unitPrice))}</td>
                       <td className="td text-center font-bold tabular-nums text-ink">×{item.quantity}</td>
-                      <td className="td text-right font-bold tabular-nums text-ink">{formatVnd(item.lineTotalVnd)}</td>
+                      <td className="td text-right font-bold tabular-nums text-ink">
+                        {formatVnd(Number(item.unitPrice) * item.quantity)}
+                      </td>
+                      {canEditItems && (
+                        <td className="td">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              className="btn-ghost text-xs px-3 py-1 rounded-full"
+                              onClick={() => {
+                                setEditItem({ id: item.id, name: item.itemName, quantity: item.quantity, note: item.note ?? "" });
+                                setEditQty(item.quantity);
+                                setEditNote(item.note ?? "");
+                              }}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-danger text-xs px-3 py-1 rounded-full"
+                              disabled={order.items.length <= 1}
+                              title={order.items.length <= 1 ? "Không thể xóa món cuối cùng" : undefined}
+                              onClick={() => removeItem(item.id, item.itemName)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-line">
-                    <td colSpan={3} className="td text-right text-xs text-muted">
-                      Tạm tính
-                    </td>
-                    <td className="td text-right tabular-nums text-slate-700">{formatVnd(detail.subtotalVnd)}</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={3} className="td text-right text-xs text-muted">
-                      Giảm giá
-                    </td>
-                    <td className="td text-right tabular-nums text-emerald-600">−{formatVnd(detail.discountVnd)}</td>
-                  </tr>
-                  <tr>
-                    <td colSpan={3} className="td text-right text-sm font-bold text-ink">
+                    <td colSpan={canEditItems ? 4 : 3} className="td text-right text-xs text-muted">
                       Tổng cộng
                     </td>
-                    <td className="td text-right text-base font-extrabold tabular-nums text-ink">{formatVnd(detail.totalVnd)}</td>
+                    <td className="td text-right text-base font-extrabold tabular-nums text-ink">{formatVnd(totalVnd)}</td>
+                    {canEditItems && <td />}
                   </tr>
                 </tfoot>
               </table>
@@ -323,7 +524,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
           {/* Timeline */}
           <Panel title="Timeline" subtitle="Lịch sử trạng thái của đơn theo thời gian." className="flex-1">
             <ol className="relative space-y-0 border-l border-line pl-6">
-              {detail.timeline.map((event) => (
+              {timeline.map((event) => (
                 <li key={event.id} className="relative pb-6 last:pb-0">
                   <span
                     className={`absolute -left-[31px] top-1 h-3 w-3 rounded-full ring-4 ring-white ${
@@ -338,7 +539,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
                   />
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Badge tone={timelineTone(event.status)}>{TIMELINE_STATUS_LABEL[event.status]}</Badge>
+                      <Badge tone={timelineTone(event.status)}>{event.label}</Badge>
                       <strong className="text-sm font-bold text-ink">{event.label}</strong>
                     </div>
                     <time className="text-xs tabular-nums text-muted">{formatDateTime(event.at)}</time>
@@ -360,40 +561,42 @@ function OrderDetailView({ orderId }: { orderId: string }) {
           {/* Thao tác */}
           <Panel title="Thao tác">
             <div className="space-y-2.5">
-              {detail.paymentMethod === "cash" && isUnpaid && (
-                <button type="button" className="btn w-full" onClick={() => setCashOpen(true)}>
+              {paymentMethod === "cash" && isUnpaid && (
+                <button type="button" className="btn w-full" disabled={busy} onClick={() => setCashOpen(true)}>
                   💵 Xác nhận tiền mặt
                 </button>
               )}
-              {detail.paymentMethod === "qr" && isUnpaid && (
-                <button type="button" className="btn w-full" onClick={() => setQrOpen(true)}>
+              {paymentMethod === "qr" && isUnpaid && (
+                <button type="button" className="btn w-full" disabled={busy} onClick={() => void openQr()}>
                   📱 Khởi tạo QR
                 </button>
               )}
-              {detail.paymentStatus === "UNDERPAID" && (
+              {order.paymentStatus === "UNDERPAID" && (
                 <>
-                  <button type="button" className="btn w-full" onClick={confirmUnderpaidAsPaid}>
-                    ✓ Xác nhận đã thu đủ (+{formatVnd(detail.totalVnd - detail.paidAmount)})
+                  <button type="button" className="btn w-full" disabled={busy} onClick={confirmUnderpaidAsPaid}>
+                    ✓ Xác nhận đã thu đủ (+{formatVnd(Math.max(0, expectedAmount - paidAmount))})
                   </button>
                   <button
                     type="button"
                     className="btn-danger w-full"
+                    disabled={busy}
                     onClick={() => {
-                      setRefundAmount(detail.paidAmount);
+                      setRefundAmount(paidAmount);
                       setRefundReason("Khách chuyển thiếu tiền và muốn hủy đơn/hoàn tiền");
                       setRefundOpen(true);
                     }}
                   >
-                    ↺ Hoàn lại {formatVnd(detail.paidAmount)} cho khách
+                    ↺ Hoàn lại {formatVnd(paidAmount)} cho khách
                   </button>
                 </>
               )}
-              {canRefund && detail.paymentStatus !== "UNDERPAID" && (
+              {canRefund && order.paymentStatus !== "UNDERPAID" && (
                 <button
                   type="button"
                   className="btn-danger w-full"
+                  disabled={busy}
                   onClick={() => {
-                    setRefundAmount(Math.min(detail.totalVnd, detail.paidAmount || detail.totalVnd));
+                    setRefundAmount(Math.min(totalVnd, paidAmount || totalVnd));
                     setRefundReason("");
                     setRefundOpen(true);
                   }}
@@ -401,77 +604,121 @@ function OrderDetailView({ orderId }: { orderId: string }) {
                   ↺ Hoàn tiền
                 </button>
               )}
-              {!canRefund && !isUnpaid && detail.paymentStatus !== "REFUNDED" && (
+              {canCancel && (
+                <button type="button" className="btn-danger w-full" disabled={busy} onClick={() => setCancelOpen(true)}>
+                  ✕ Hủy đơn
+                </button>
+              )}
+              {!canRefund && !isUnpaid && (paymentStatus as string) !== "REFUNDED" && (
                 <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-muted">
-                  Đơn ở trạng thái <strong className="text-ink">{ORDER_PAYMENT_STATUS_LABEL[detail.paymentStatus]}</strong> — không có thao tác thu/hoàn tiền.
+                  Đơn ở trạng thái <strong className="text-ink">{ORDER_PAYMENT_STATUS_LABEL[paymentStatus]}</strong> — không có thao tác thu/hoàn tiền.
                 </p>
               )}
             </div>
 
-            <div className="mt-4 border-t border-line pt-4">
-              <Field label="Đổi trạng thái thực hiện">
-                <div className="flex gap-2">
-                  <select
-                    className="input flex-1"
-                    value={overrideStatus}
-                    onChange={(e) => setOverrideStatus(e.target.value as OrderFulfillmentStatus)}
-                  >
-                    <option value="">Chọn trạng thái…</option>
-                    {FULFILLMENT_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {ORDER_FULFILLMENT_STATUS_LABEL[s]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="btn-ghost shrink-0"
-                    disabled={!overrideStatus || overrideStatus === detail.fulfillmentStatus}
-                    onClick={applyStatus}
-                  >
-                    Áp dụng
-                  </button>
-                </div>
-              </Field>
-            </div>
+            {order.fulfillmentStatus !== "DELIVERED" && order.fulfillmentStatus !== "CANCELLED" && (
+              <div className="mt-4 border-t border-line pt-4">
+                <Field label="Đổi trạng thái thực hiện">
+                  <div className="flex gap-2">
+                    <select
+                      className="input flex-1"
+                      value={overrideStatus}
+                      onChange={(e) => setOverrideStatus(e.target.value as OrderFulfillmentStatus)}
+                    >
+                      <option value="">Chọn trạng thái…</option>
+                      {FULFILLMENT_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {ORDER_FULFILLMENT_STATUS_LABEL[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-ghost shrink-0"
+                      disabled={!overrideStatus || overrideStatus === order.fulfillmentStatus || busy}
+                      onClick={applyStatus}
+                    >
+                      Áp dụng
+                    </button>
+                  </div>
+                </Field>
+              </div>
+            )}
           </Panel>
 
           {/* Thanh toán */}
           <Panel title="Thanh toán">
             <dl className="divide-y divide-line-soft">
               <DetailRow label="Phương thức">
-                {detail.paymentMethod === "qr" ? "Chuyển khoản QR" : "Tiền mặt"}
+                {paymentMethod === "qr" ? "Chuyển khoản QR" : "Tiền mặt"}
               </DetailRow>
               <DetailRow label="Đã thanh toán">
-                <span className={detail.paidAmount >= detail.totalVnd && detail.paidAmount > 0 ? "text-emerald-600" : detail.paidAmount > 0 ? "text-amber-600" : "text-slate-500"}>
-                  {formatVnd(detail.paidAmount)}
+                <span className={paidAmount >= totalVnd && paidAmount > 0 ? "text-emerald-600" : paidAmount > 0 ? "text-amber-600" : "text-slate-500"}>
+                  {formatVnd(paidAmount)}
                 </span>
               </DetailRow>
               <DetailRow label="Trạng thái">
-                <Badge tone={orderPaymentTone(detail.paymentStatus)}>{ORDER_PAYMENT_STATUS_LABEL[detail.paymentStatus]}</Badge>
+                <Badge tone={orderPaymentTone(paymentStatus)}>{ORDER_PAYMENT_STATUS_LABEL[paymentStatus]}</Badge>
               </DetailRow>
-              {detail.paymentStatus === "UNDERPAID" && detail.totalVnd > detail.paidAmount && (
+              {paymentStatus === "UNDERPAID" && totalVnd > paidAmount && (
                 <DetailRow label="Còn thiếu">
-                  <span className="text-red-600">{formatVnd(detail.totalVnd - detail.paidAmount)}</span>
+                  <span className="text-red-600">{formatVnd(totalVnd - paidAmount)}</span>
+                </DetailRow>
+              )}
+              {order.payment?.paymentCode && (
+                <DetailRow label="Mã thanh toán">
+                  <span className="font-mono text-xs">{order.payment.paymentCode}</span>
                 </DetailRow>
               )}
             </dl>
+
+            {payments.length > 0 && (
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="mb-2 text-xs font-semibold text-slate-500">Lịch sử thanh toán</p>
+                <ul className="space-y-2">
+                  {payments.map((p) => (
+                    <li key={p.id} className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink">{p.paymentCode ?? "—"}</span>
+                        <Badge tone={Number(p.receivedAmount) > 0 ? "green" : "gray"}>
+                          {Number(p.receivedAmount) > 0 ? "Đã thanh toán" : "Chưa thanh toán"}
+                        </Badge>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-muted">
+                        <span>Dự kiến {formatVnd(Number(p.expectedAmount))}</span>
+                        <span className="tabular-nums">{formatDateTime(p.createdAt)}</span>
+                      </div>
+                      {Number(p.receivedAmount) > 0 && (
+                        <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted">
+                          <span>Đã nhận {formatVnd(Number(p.receivedAmount))}</span>
+                          {p.confirmedAt && <span className="tabular-nums">{formatDateTime(p.confirmedAt)}</span>}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Panel>
 
           {/* Khách hàng */}
           <Panel title="Khách hàng" className="flex-1">
             <dl className="divide-y divide-line-soft">
               <DetailRow label="Họ tên">
-                {detail.user.firstName} {detail.user.lastName}
+                {order.creator.fullName}
               </DetailRow>
               <DetailRow label="Telegram">
-                <span className="font-mono text-xs">{detail.user.telegramId}</span>
+                <span className="font-mono text-xs">{order.creator.telegramUserId ?? "—"}</span>
               </DetailRow>
-              <DetailRow label="Username">@{detail.user.username || "—"}</DetailRow>
-              <DetailRow label="Vị trí">{detail.customerInput || "—"}</DetailRow>
-              <DetailRow label="Hạn chờ thanh toán">{detail.expiresAt ? formatDateTime(detail.expiresAt) : "—"}</DetailRow>
-              {detail.deliveredAt && (
-                <DetailRow label="Đã giao lúc">{formatDateTime(detail.deliveredAt)}</DetailRow>
+              <DetailRow label="Username">@{order.creator.username || "—"}</DetailRow>
+              <DetailRow label="Vị trí">{order.customerNote || "—"}</DetailRow>
+              {order.paidAt && (
+                <DetailRow label="Thanh toán lúc">{formatDateTime(order.paidAt)}</DetailRow>
+              )}
+              {order.assignedBaristaId && (
+                <DetailRow label="Barista phụ trách">
+                  <span className="font-mono text-xs">{order.assignedBaristaId}</span>
+                </DetailRow>
               )}
             </dl>
           </Panel>
@@ -483,18 +730,18 @@ function OrderDetailView({ orderId }: { orderId: string }) {
         open={cashOpen}
         onClose={() => setCashOpen(false)}
         eyebrow="THU TIỀN MẶT"
-        title={`Xác nhận đã thu ${formatVnd(detail.totalVnd)}`}
-        subtitle={`Đơn ${detail.code} · ${detail.customerInput || "Không ghi vị trí"}`}
+        title={`Xác nhận đã thu ${formatVnd(totalVnd)}`}
+        subtitle={`Đơn ${order.orderCode} · ${order.customerNote || "Không ghi vị trí"}`}
       >
-        <form onSubmit={confirmCash} className="space-y-4">
+        <form onSubmit={confirmCashSubmit} className="space-y-4">
           <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Xác nhận bạn đã nhận đủ <strong>{formatVnd(detail.totalVnd)}</strong> tiền mặt từ khách hàng. Đơn sẽ được chuyển sang trạng thái <strong>“Đã thanh toán”</strong>.
+            Xác nhận bạn đã nhận đủ <strong>{formatVnd(totalVnd)}</strong> tiền mặt từ khách hàng. Đơn sẽ được chuyển sang trạng thái <strong>“Đã thanh toán”</strong>.
           </p>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={() => setCashOpen(false)}>
               Hủy
             </button>
-            <button type="submit" className="btn">
+            <button type="submit" className="btn" disabled={busy}>
               Xác nhận đã thu tiền
             </button>
           </div>
@@ -506,20 +753,20 @@ function OrderDetailView({ orderId }: { orderId: string }) {
         open={qrOpen}
         onClose={() => setQrOpen(false)}
         eyebrow="THANH TOÁN QR"
-        title={`Chuyển khoản ${formatVnd(detail.totalVnd)}`}
+        title={`Chuyển khoản ${formatVnd(Number(qrAmount) || totalVnd)}`}
         subtitle="Khách quét mã và chuyển khoản đúng nội dung bên dưới."
       >
         <div className="space-y-4">
-          <FakeQR seed={detail.code} />
+          <FakeQR seed={order.orderCode} />
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-center">
             <span className="block text-xs text-muted">Nội dung chuyển khoản</span>
-            <strong className="mt-0.5 block font-mono text-lg font-extrabold tracking-widest text-ink">{detail.code}</strong>
+            <strong className="mt-0.5 block font-mono text-lg font-extrabold tracking-widest text-ink">{qrContent || order.orderCode}</strong>
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={() => setQrOpen(false)}>
               Hủy
             </button>
-            <button type="button" className="btn" onClick={confirmQrPaid}>
+            <button type="button" className="btn" disabled={busy} onClick={confirmQrPaid}>
               Đã nhận tiền (PAID)
             </button>
           </div>
@@ -531,16 +778,16 @@ function OrderDetailView({ orderId }: { orderId: string }) {
         open={refundOpen}
         onClose={() => setRefundOpen(false)}
         eyebrow="HOÀN TIỀN"
-        title={`Hoàn tiền cho đơn ${detail.code}`}
+        title={`Hoàn tiền cho đơn ${order.orderCode}`}
         subtitle="Chỉ khả dụng với đơn đã thanh toán (PAID / thiếu / thừa)."
       >
         <form onSubmit={submitRefund} className="space-y-4">
-          <Field label="Số tiền hoàn" hint={`Số dư đã thanh toán: ${formatVnd(detail.paidAmount)}`}>
+          <Field label="Số tiền hoàn" hint={`Số dư đã thanh toán: ${formatVnd(paidAmount)}`}>
             <input
               className="input"
               type="number"
               min={0}
-              max={detail.paidAmount || detail.totalVnd}
+              max={paidAmount || totalVnd}
               value={refundAmount || ""}
               onChange={(e) => setRefundAmount(Number(e.target.value))}
               required
@@ -555,16 +802,109 @@ function OrderDetailView({ orderId }: { orderId: string }) {
               required
             />
           </Field>
-          <Field label="Người xác nhận">
-            <input className="input" value={refundBy} onChange={(e) => setRefundBy(e.target.value)} />
-          </Field>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost" onClick={() => setRefundOpen(false)}>
               Hủy
             </button>
-            <button type="submit" className="btn-danger">
+            <button type="submit" className="btn-danger" disabled={busy}>
               Xác nhận hoàn tiền
             </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal hủy đơn */}
+      <Modal
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        eyebrow="HỦY ĐƠN"
+        title={`Hủy đơn ${order.orderCode}`}
+        subtitle="Đơn sẽ chuyển sang trạng thái đã hủy và không thể tiếp tục."
+      >
+        <form onSubmit={submitCancel} className="space-y-4">
+          <Field label="Lý do hủy đơn (bắt buộc)">
+            <textarea
+              className="input min-h-[90px] resize-y"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Ví dụ: khách hủy, hết nguyên liệu..."
+              required
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setCancelOpen(false)}>
+              Hủy
+            </button>
+            <button type="submit" className="btn-danger" disabled={busy}>
+              Xác nhận hủy
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal thêm món */}
+      <Modal
+        open={addItemOpen}
+        onClose={() => setAddItemOpen(false)}
+        eyebrow="THÊM MÓN"
+        title="Thêm món vào đơn"
+        subtitle="Chỉ món đang bán — giá luôn lấy từ backend."
+        wide
+      >
+        <form onSubmit={submitAddItem} className="space-y-4">
+          <Field label="Món">
+            <select className="input" value={addItemId} onChange={(e) => setAddItemId(e.target.value)} required>
+              <option value="">Chọn món…</option>
+              {menu.categories
+                .filter((category) => category.isActive)
+                .map((category) => (
+                  <optgroup key={category.id} label={category.name}>
+                    {availableItems
+                      .filter((item) => item.categoryId === category.id)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} — {formatVnd(item.price)}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Số lượng">
+              <input className="input" type="number" min={1} value={addItemQty} onChange={(e) => setAddItemQty(Number(e.target.value))} />
+            </Field>
+            <Field label="Ghi chú món">
+              <input className="input" value={addItemNote} onChange={(e) => setAddItemNote(e.target.value)} placeholder="Ít đá, không đường…" />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setAddItemOpen(false)}>Hủy</button>
+            <button type="submit" className="btn" disabled={busy}>Thêm món</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal sửa món */}
+      <Modal
+        open={editItem !== null}
+        onClose={() => setEditItem(null)}
+        eyebrow="SỬA MÓN"
+        title={`Sửa món ${editItem?.name ?? ""}`}
+        subtitle="Số lượng và ghi chú sẽ được cập nhật lại tổng tiền đơn."
+      >
+        <form onSubmit={submitEditItem} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Số lượng">
+              <input className="input" type="number" min={1} value={editQty} onChange={(e) => setEditQty(Number(e.target.value))} />
+            </Field>
+            <Field label="Ghi chú món">
+              <input className="input" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="Ít đá, không đường…" />
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setEditItem(null)}>Hủy</button>
+            <button type="submit" className="btn" disabled={busy}>Lưu</button>
           </div>
         </form>
       </Modal>

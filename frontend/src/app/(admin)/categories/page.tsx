@@ -1,85 +1,163 @@
 "use client";
 
-import { useState, Fragment, type FormEvent } from "react";
-import { PageHeader, Panel, Badge, EmptyState, Field, Modal, Stats } from "@/components/ui";
+import { useCallback, useMemo, useState, Fragment, type FormEvent } from "react";
+import { PageHeader, Panel, Badge, EmptyState, Field, Modal, Stats, PageLoading } from "@/components/ui";
 import { useToast } from "@/components/Toast";
-import { categories, type Category } from "@/lib/data";
+import {
+  getCategories,
+  getMenuItems,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  type ApiCategory,
+} from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+
+interface CategoryRow extends ApiCategory {
+  itemCount: number;
+}
 
 export default function CategoriesPage() {
   const toast = useToast();
-  const [rows, setRows] = useState<Category[]>(categories);
-  const [creating, setCreating] = useState(false);
 
-  const stats = {
-    total: rows.length,
-    active: rows.filter((c) => c.active).length,
-    products: rows.reduce((s, c) => s + c.productCount, 0),
-  };
-
-  const create = (e: FormEvent) => {
-    e.preventDefault();
-    const form = e.target as HTMLFormElement;
-    const formData = new FormData(form);
-    const newCat: Category = {
-      id: `cat_${Date.now()}`,
-      name: (formData.get("name") as string) || "Danh mục mới",
-      nameEn: (formData.get("nameEn") as string) || undefined,
-      slug: (formData.get("slug") as string) || "danh-muc-moi",
-      emoji: (formData.get("emoji") as string) || "📂",
-      sortOrder: Number(formData.get("sortOrder")) || 0,
-      active: true,
-      productCount: 0,
+  const load = useCallback(async (): Promise<{ categories: CategoryRow[] }> => {
+    const [categoriesPayload, itemsPayload] = await Promise.all([getCategories(), getMenuItems(500)]);
+    const countByCategory = new Map<string, number>();
+    for (const item of itemsPayload.data) {
+      countByCategory.set(item.categoryId, (countByCategory.get(item.categoryId) ?? 0) + 1);
+    }
+    return {
+      categories: categoriesPayload.data.map((c) => ({ ...c, itemCount: countByCategory.get(c.id) ?? 0 })),
     };
-    setRows([newCat, ...rows]);
-    toast.push(`Đã tạo danh mục "${newCat.name}".`, "success");
-    setCreating(false);
-  };
+  }, []);
 
-  const remove = (cat: Category) => {
-    if (confirm(`Bạn có chắc muốn xóa danh mục "${cat.name}"?`)) {
-      setRows(rows.filter((c) => c.id !== cat.id));
-      toast.push(`Đã xóa danh mục "${cat.name}".`, "warning");
+  const { data, loading, error, reload } = useApiData(load, { categories: [] as CategoryRow[] });
+  const rows = data.categories;
+
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<CategoryRow | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [formName, setFormName] = useState("");
+  const [formOrder, setFormOrder] = useState("0");
+  const [formActive, setFormActive] = useState(true);
+
+  const stats = useMemo(
+    () => ({
+      total: rows.length,
+      active: rows.filter((c) => c.isActive).length,
+      products: rows.reduce((s, c) => s + c.itemCount, 0),
+    }),
+    [rows]
+  );
+
+  const act = async (action: () => Promise<unknown>, success: string) => {
+    setBusy(true);
+    try {
+      await action();
+      await reload();
+      toast.push(success, "success");
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể thực hiện thao tác.", "error");
+    } finally {
+      setBusy(false);
     }
   };
 
+  const openCreate = () => {
+    setFormName("");
+    setFormOrder("0");
+    setFormActive(true);
+    setCreating(true);
+  };
+
+  const openEdit = (cat: CategoryRow) => {
+    setEditing(cat);
+    setFormName(cat.name);
+    setFormOrder(String(cat.displayOrder ?? 0));
+    setFormActive(cat.isActive);
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) {
+      toast.push("Vui lòng nhập tên danh mục.", "error");
+      return;
+    }
+    const body = { name: formName.trim(), displayOrder: Number(formOrder) || 0, isActive: formActive };
+    if (editing) {
+      void act(() => updateCategory(editing.id, body), `Đã lưu danh mục "${formName.trim()}".`);
+    } else {
+      void act(() => createCategory(body), `Đã tạo danh mục "${formName.trim()}".`);
+    }
+    setCreating(false);
+    setEditing(null);
+  };
+
+  const remove = (cat: CategoryRow) => {
+    if (cat.itemCount > 0) {
+      toast.push(`Không thể xóa vì còn ${cat.itemCount} món trong danh mục.`, "error");
+      return;
+    }
+    if (!confirm(`Bạn có chắc muốn xóa danh mục "${cat.name}"?`)) return;
+    void act(() => deleteCategory(cat.id), `Đã xóa danh mục "${cat.name}".`);
+  };
+
+  if (loading && rows.length === 0) {
+    return <PageLoading label="Đang tải danh mục thực đơn..." subText="Đang lấy danh sách danh mục phân loại..." />;
+  }
+
   return (
     <div>
-      <PageHeader title="Danh mục thực đơn" description="Tách riêng danh mục khỏi trang sản phẩm để dễ sắp xếp, đặt tên song ngữ và bật/tắt hiển thị.">
-        <button type="button" className="btn" onClick={() => setCreating(true)}>Thêm danh mục</button>
+      <PageHeader title="Danh mục thực đơn" description="Tách riêng danh mục khỏi trang sản phẩm để dễ sắp xếp và bật/tắt hiển thị.">
+        <button type="button" className="btn" onClick={openCreate}>Thêm danh mục</button>
       </PageHeader>
 
-      <Stats
-        items={[
-          { label: "Tổng danh mục", value: stats.total },
-          { label: "Đang bật", value: stats.active, tone: "green" },
-          { label: "Sản phẩm", value: stats.products, tone: "teal" },
-        ]}
-      />
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          <Stats
+            items={[
+              { label: "Tổng danh mục", value: stats.total },
+              { label: "Đang bật", value: stats.active, tone: "green" },
+              { label: "Món trong thực đơn", value: stats.products, tone: "teal" },
+            ]}
+          />
 
       <Modal
-        open={creating}
-        onClose={() => setCreating(false)}
-        eyebrow="THÊM MỚI"
-        title="Tạo danh mục"
-        subtitle="Danh mục mới sẽ xuất hiện trong bot và trang sản phẩm."
+        open={creating || editing !== null}
+        onClose={() => { setCreating(false); setEditing(null); }}
+        eyebrow="THÊM / SỬA"
+        title={editing ? `Sửa danh mục "${editing.name}"` : "Tạo danh mục"}
+        subtitle="Danh mục mới sẽ xuất hiện trong bot và trang thực đơn."
       >
-        <form onSubmit={create} className="space-y-3">
-          <Field label="Tên tiếng Việt"><input className="input" name="name" placeholder="Ví dụ: Đồ uống đá xay" required /></Field>
-          <Field label="Tên tiếng Anh"><input className="input" name="nameEn" placeholder="Ice Blended" /></Field>
+        <form onSubmit={submit} className="space-y-3">
+          <Field label="Tên danh mục">
+            <input className="input" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Ví dụ: Cà phê" required />
+          </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Slug"><input className="input" name="slug" placeholder="do-uong-da-xay" required /></Field>
-            <Field label="Biểu tượng"><input className="input" name="emoji" placeholder="🍹" /></Field>
-            <Field label="Thứ tự"><input className="input" name="sortOrder" type="number" defaultValue={0} /></Field>
-            <label className="flex items-end pb-2 text-sm text-ink"><input type="checkbox" defaultChecked className="h-4 w-4 rounded border-line accent-forest-800" /> Đang hiển thị</label>
+            <Field label="Thứ tự">
+              <input className="input" type="number" value={formOrder} onChange={(e) => setFormOrder(e.target.value)} />
+            </Field>
+            <label className="flex items-end pb-2 text-sm text-ink">
+              <input type="checkbox" checked={formActive} onChange={(e) => setFormActive(e.target.checked)} className="h-4 w-4 rounded border-line accent-forest-800" /> Đang hiển thị
+            </label>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setCreating(false)}>Đóng</button>
-            <button type="submit" className="btn">Thêm danh mục</button>
+            <button type="button" className="btn-ghost" onClick={() => { setCreating(false); setEditing(null); }}>Đóng</button>
+            <button type="submit" className="btn" disabled={busy}>{busy ? "Đang lưu..." : "Lưu"}</button>
           </div>
         </form>
       </Modal>
 
-      <Panel eyebrow="DANH SÁCH" title="Quản lý danh mục" right={<span className="text-sm text-muted">{rows.length} danh mục</span>}>
+      <Panel
+        eyebrow="DANH SÁCH"
+        title="Quản lý danh mục"
+        right={
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted">{rows.length} danh mục</span>
+            <button type="button" className="btn-ghost text-xs" onClick={() => void reload()} disabled={loading}>Làm mới</button>
+          </div>
+        }
+      >
         {rows.length === 0 ? (
           <EmptyState>Chưa có danh mục. Bấm “Thêm danh mục” để tạo danh mục đầu tiên.</EmptyState>
         ) : (
@@ -87,7 +165,6 @@ export default function CategoriesPage() {
             <table className="w-full min-w-[760px] table-fixed">
               <colgroup>
                 <col className="w-[30%]" />
-                <col className="w-[20%]" />
                 <col className="w-[12%]" />
                 <col className="w-[12%]" />
                 <col className="w-[12%]" />
@@ -96,16 +173,42 @@ export default function CategoriesPage() {
               <thead>
                 <tr className="border-b border-line bg-slate-50/70">
                   <th className="th">Danh mục</th>
-                  <th className="th">Slug</th>
                   <th className="th text-center">Thứ tự</th>
-                  <th className="th text-center">Sản phẩm</th>
+                  <th className="th text-center">Món</th>
                   <th className="th">Trạng thái</th>
                   <th className="th text-right pr-4">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line-soft">
                 {rows.map((cat) => (
-                  <CategoryRow key={cat.id} category={cat} onDelete={() => remove(cat)} />
+                  <Fragment key={cat.id}>
+                    <tr className="border-b border-line-soft transition hover:bg-slate-50/80">
+                      <td className="td">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg shadow-xs">🍽️</span>
+                          <div>
+                            <strong className="block text-sm font-bold text-ink leading-tight">{cat.name}</strong>
+                            <small className="text-xs text-muted">#{cat.displayOrder}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="td text-center font-bold tabular-nums text-ink">{cat.displayOrder}</td>
+                      <td className="td text-center font-bold tabular-nums text-ink">{cat.itemCount} món</td>
+                      <td className="td whitespace-nowrap">
+                        <Badge tone={cat.isActive ? "green" : "gray"}>{cat.isActive ? "Đang bật" : "Đã tắt"}</Badge>
+                      </td>
+                      <td className="td pr-4">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                          <button type="button" className="btn-ghost text-xs px-3 py-1 rounded-full whitespace-nowrap" onClick={() => openEdit(cat)}>
+                            Sửa
+                          </button>
+                          <button type="button" className="btn-danger text-xs px-3 py-1 rounded-full whitespace-nowrap" disabled={busy} onClick={() => remove(cat)}>
+                            Xóa
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -113,65 +216,5 @@ export default function CategoriesPage() {
         )}
       </Panel>
     </div>
-  );
-}
-
-function CategoryRow({ category, onDelete }: { category: Category; onDelete: () => void }) {
-  const toast = useToast();
-  const [editing, setEditing] = useState(false);
-
-  return (
-    <Fragment>
-      <tr className="border-b border-line-soft transition hover:bg-slate-50/80">
-        <td className="td">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-lg shadow-xs">{category.emoji || "•"}</span>
-            <div>
-              <strong className="block text-sm font-bold text-ink leading-tight">{category.name}</strong>
-              <small className="text-xs text-muted">{category.nameEn || "Chưa có tên EN"}</small>
-            </div>
-          </div>
-        </td>
-        <td className="td font-mono text-xs font-semibold text-ink">{category.slug}</td>
-        <td className="td text-center font-bold tabular-nums text-ink">{category.sortOrder}</td>
-        <td className="td text-center font-bold tabular-nums text-ink">{category.productCount} món</td>
-        <td className="td whitespace-nowrap">
-          <Badge tone={category.active ? "green" : "gray"}>{category.active ? "Đang bật" : "Đã tắt"}</Badge>
-        </td>
-        <td className="td pr-4">
-          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-            <button type="button" className="btn-ghost text-xs px-3 py-1 rounded-full whitespace-nowrap" onClick={() => setEditing(!editing)}>
-              {editing ? "Đóng" : "Sửa"}
-            </button>
-            <button type="button" className="btn-danger text-xs px-3 py-1 rounded-full whitespace-nowrap" onClick={onDelete}>
-              Xóa
-            </button>
-          </div>
-        </td>
-      </tr>
-      {editing && (
-        <tr>
-          <td colSpan={6} className="bg-brand-50/30 p-4 border-b border-line">
-            <form
-              onSubmit={(e) => { e.preventDefault(); toast.push(`Đã lưu danh mục "${category.name}".`, "success"); setEditing(false); }}
-              className="space-y-3 rounded-xl border border-brand-200 bg-white p-4 shadow-xs"
-            >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Tên VN"><input className="input" defaultValue={category.name} required /></Field>
-                <Field label="Tên EN"><input className="input" defaultValue={category.nameEn} placeholder="English name" /></Field>
-                <Field label="Slug"><input className="input" defaultValue={category.slug} required /></Field>
-                <Field label="Biểu tượng"><input className="input" defaultValue={category.emoji} /></Field>
-                <Field label="Thứ tự"><input className="input" type="number" defaultValue={category.sortOrder} /></Field>
-                <label className="flex items-end pb-2 text-sm text-ink"><input type="checkbox" defaultChecked={category.active} className="h-4 w-4 rounded border-line accent-forest-800" /> Đang hiển thị</label>
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>Hủy</button>
-                <button type="submit" className="btn">Lưu danh mục</button>
-              </div>
-            </form>
-          </td>
-        </tr>
-      )}
-    </Fragment>
   );
 }

@@ -2,12 +2,13 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageHeader, Panel, Badge, EmptyState, Field, Modal, Stats, type Tone } from "@/components/ui";
+import { PageHeader, Panel, Badge, EmptyState, Field, Modal, Stats, PageLoading, type Tone } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { formatVnd, formatDateTime } from "@/lib/format";
 import { inPeriod, type Period } from "@/lib/period";
 import {
   getTransactions,
+  getReconciliations,
   getCurrentUser,
   resolveReconciliation,
   type ApiSepayTransactionFull,
@@ -90,16 +91,17 @@ export default function ReconciliationsPage() {
   const [classification, setClassification] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [period, setPeriod] = useState<Period | "">("");
+  const [needsReview, setNeedsReview] = useState(false);
   const [me, setMe] = useState<ApiUser | null>(null);
 
   const load = useCallback(async () => {
     const [payload, mePayload] = await Promise.all([
-      getTransactions(),
+      needsReview ? getReconciliations() : getTransactions(),
       getCurrentUser().catch(() => null),
     ]);
     setMe(mePayload?.data ?? null);
     return payload.data.map(toReconciliation);
-  }, []);
+  }, [needsReview]);
 
   const { data: rows, loading, error, reload } = useApiData(load, [] as Reconciliation[]);
   const [resolving, setResolving] = useState<Reconciliation | null>(null);
@@ -174,7 +176,11 @@ export default function ReconciliationsPage() {
     }
   };
 
-  const hasFilters = Boolean(q || classification || statusFilter || period);
+  const hasFilters = Boolean(q || classification || statusFilter || period || needsReview);
+
+  if (loading && rows.length === 0) {
+    return <PageLoading label="Đang tải dữ liệu đối soát..." subText="Đang tải danh sách giao dịch SePay từ server..." />;
+  }
 
   return (
     <div>
@@ -184,18 +190,27 @@ export default function ReconciliationsPage() {
       />
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải giao dịch từ backend...</div>}
-
-      <Stats
-        items={[
-          { label: "Tổng giao dịch", value: stats.total },
-          { label: "Đúng tiền", value: stats.matched, tone: "green" },
-          { label: "Sai lệch (thiếu + thừa)", value: stats.discrepancy, tone: "amber" },
-          { label: "Sai mã", value: stats.unknownCode, tone: "red" },
-          { label: "Trùng lặp", value: stats.duplicates, tone: "blue" },
-          { label: "Đã xử lý", value: stats.resolved, tone: "teal" },
-        ]}
-      />
+          {needsReview ? (
+            <Stats
+              items={[
+                { label: "Cần xử lý", value: stats.total, tone: "red" },
+                { label: "Sai lệch (thiếu + thừa)", value: stats.discrepancy, tone: "amber" },
+                { label: "Sai mã", value: stats.unknownCode, tone: "red" },
+                { label: "Trùng lặp", value: stats.duplicates, tone: "blue" },
+              ]}
+            />
+          ) : (
+            <Stats
+              items={[
+                { label: "Tổng giao dịch", value: stats.total },
+                { label: "Đúng tiền", value: stats.matched, tone: "green" },
+                { label: "Sai lệch (thiếu + thừa)", value: stats.discrepancy, tone: "amber" },
+                { label: "Sai mã", value: stats.unknownCode, tone: "red" },
+                { label: "Trùng lặp", value: stats.duplicates, tone: "blue" },
+                { label: "Đã xử lý", value: stats.resolved, tone: "teal" },
+              ]}
+            />
+          )}
 
       {/* Bộ lọc */}
       <Panel className="mb-6">
@@ -225,12 +240,21 @@ export default function ReconciliationsPage() {
           </div>
           <div className="w-full sm:w-48">
             <Field label="Trạng thái">
-              <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <select
+                className="input"
+                value={needsReview ? "open" : statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                disabled={needsReview}
+              >
                 <option value="">Tất cả trạng thái</option>
                 <option value="open">Chưa xử lý</option>
                 <option value="resolved">Đã xử lý</option>
               </select>
             </Field>
+          </div>
+          <div className="flex items-center gap-2 h-10 px-3.5 rounded-xl border border-line bg-slate-50/80">
+            <input type="checkbox" id="needsReviewRec" checked={needsReview} onChange={(e) => setNeedsReview(e.target.checked)} className="h-4 w-4 rounded border-line accent-forest-800 cursor-pointer" />
+            <label htmlFor="needsReviewRec" className="text-xs font-semibold text-slate-700 cursor-pointer whitespace-nowrap">Chỉ giao dịch cần xử lý</label>
           </div>
           {hasFilters && (
             <button
@@ -241,6 +265,7 @@ export default function ReconciliationsPage() {
                 setClassification("");
                 setStatusFilter("");
                 setPeriod("");
+                setNeedsReview(false);
               }}
             >
               Xóa lọc

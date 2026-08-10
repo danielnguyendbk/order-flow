@@ -1,5 +1,5 @@
 import createHttpError from "http-errors";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { OrderRepository } from "./order.repository";
 import { HistoryRepository } from "../order-status-history/history.repository";
 import { PaymentRepository } from "../payments/payment.repository";
@@ -20,8 +20,6 @@ import {
   isFulfillmentTerminal,
   isValidPaymentTransition,
 } from "./state-machine";
-
-const prisma = new PrismaClient();
 
 function isRecordNotFoundError(error: unknown): boolean {
   return (error as { code?: string }).code === "P2025";

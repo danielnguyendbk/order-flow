@@ -10,8 +10,7 @@ import {
   recordOrderNotification,
   recordPaymentReviewNotifications,
 } from "../notifications/notification-outbox.service";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 export interface SepayWebhookResult {
   duplicate: boolean;

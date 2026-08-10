@@ -1,56 +1,31 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import Link from "next/link";
-import { Badge, orderPaymentTone, PageHeader } from "@/components/ui";
-import { useToast } from "@/components/Toast";
-import { formatVnd, formatTime } from "@/lib/format";
-import {
-  dashboardStats as stats,
-  dashboardHealth as health,
-  revenueChartPoints,
-  recentOrders,
-  trafficSources,
-  serverUptime,
-  ORDER_PAYMENT_STATUS_LABEL,
-  type Order,
-} from "@/lib/data";
+import { Badge, orderPaymentTone, PageHeader, PageLoading, Spinner } from "@/components/ui";
+import { formatVnd, formatTime, formatDate } from "@/lib/format";
+import { getOrders, getTransactions, type ApiOrder, type ApiSepayTransactionFull } from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import { ORDER_PAYMENT_STATUS_LABEL } from "@/lib/data";
 
-const PERIODS = {
-  week: {
-    label: "Tuần",
-    range: "7 ngày qua",
-    summary: { totalRevenueVnd: 144000000, totalOrders: 142, averageOrderVnd: 1088028 },
-    points: revenueChartPoints,
-  },
-  month: {
-    label: "Tháng",
-    range: "30 ngày qua",
-    summary: { totalRevenueVnd: 476000000, totalOrders: 408, averageOrderVnd: 1166666 },
-    points: [
-      { label: "T1", revenueVnd: 52000000, orderCount: 45, heightPct: 72 },
-      { label: "T2", revenueVnd: 58000000, orderCount: 51, heightPct: 81 },
-      { label: "T3", revenueVnd: 49000000, orderCount: 42, heightPct: 68 },
-      { label: "T4", revenueVnd: 61000000, orderCount: 55, heightPct: 85 },
-      { label: "T5", revenueVnd: 66000000, orderCount: 58, heightPct: 92 },
-      { label: "T6", revenueVnd: 72000000, orderCount: 61, heightPct: 100 },
-    ],
-  },
-  day: {
-    label: "Ngày",
-    range: "Hôm nay",
-    summary: { totalRevenueVnd: 12500000, totalOrders: 12, averageOrderVnd: 1041666 },
-    points: [
-      { label: "8h", revenueVnd: 900000, orderCount: 1, heightPct: 22 },
-      { label: "10h", revenueVnd: 2100000, orderCount: 2, heightPct: 52 },
-      { label: "12h", revenueVnd: 3300000, orderCount: 3, heightPct: 82 },
-      { label: "14h", revenueVnd: 2400000, orderCount: 2, heightPct: 60 },
-      { label: "16h", revenueVnd: 3800000, orderCount: 4, heightPct: 94 },
-    ],
-  },
-} as const;
+interface DashboardPayload {
+  orders: ApiOrder[];
+  transactions: ApiSepayTransactionFull[];
+}
 
-type Period = keyof typeof PERIODS;
+const AVATAR_COLORS = [
+  "from-brand-400 to-brand-600",
+  "from-amber-400 to-orange-500",
+  "from-blue-400 to-indigo-500",
+  "from-emerald-400 to-teal-600",
+  "from-rose-400 to-red-500",
+  "from-violet-400 to-purple-600",
+];
+
+function initialsOf(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
 
 /* ── Mũi tên xu hướng ── */
 function Trend({ up, children }: { up: boolean; children: ReactNode }) {
@@ -68,56 +43,26 @@ function Trend({ up, children }: { up: boolean; children: ReactNode }) {
   );
 }
 
-/* ── KPI ── */
-const KPIS = [
-  {
-    label: "Tổng doanh thu",
-    value: formatVnd(stats.salesAmount),
-    trend: "+12,5%",
-    up: true,
-    sub: "so với tuần trước",
-    dark: true,
-  },
-  { label: "Tổng đơn hàng", value: String(stats.revenueOrders), trend: "+8,2%", up: true, sub: "so với tuần trước" },
-  { label: "Khách hàng mới", value: String(health.users), trend: "+3,1%", up: true, sub: "tuần này" },
-  { label: "Tỷ lệ chuyển đổi", value: "4,8%", trend: "−0,4%", up: false, sub: "so với tuần trước" },
-];
-
-/* ── Biểu đồ cột doanh thu ── */
-function RevenueChart() {
-  const [period, setPeriod] = useState<Period>("week");
-  const data = PERIODS[period];
-  const maxIndex = data.points.reduce(
-    (best, p, i) => (p.revenueVnd > data.points[best].revenueVnd ? i : best),
-    0
-  );
+/* ── Biểu đồ cột doanh thu 7 ngày ── */
+function RevenueChart({ points }: { points: { label: string; revenueVnd: number; orderCount: number }[] }) {
+  const maxIndex = points.reduce((best, p, i) => (p.revenueVnd > points[best].revenueVnd ? i : best), 0);
+  const maxValue = Math.max(1, ...points.map((p) => p.revenueVnd));
+  const total = points.reduce((s, p) => s + p.revenueVnd, 0);
 
   return (
     <section className="card flex h-full flex-col justify-between p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-bold text-ink">Doanh thu theo tuần</h2>
-          <p className="mt-0.5 text-sm text-muted">{data.range} · tổng {formatVnd(data.summary.totalRevenueVnd)}</p>
-        </div>
-        <div className="flex rounded-xl border border-line bg-slate-50 p-0.5">
-          {(Object.keys(PERIODS) as Period[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setPeriod(key)}
-              className={`cursor-pointer rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                period === key ? "bg-forest-800 text-white shadow-sm" : "text-muted hover:text-ink"
-              }`}
-            >
-              {PERIODS[key].label}
-            </button>
-          ))}
+          <h2 className="text-[15px] font-bold text-ink">Doanh thu theo ngày</h2>
+          <p className="mt-0.5 text-sm text-muted">7 ngày gần nhất có đơn thanh toán · tổng {formatVnd(total)}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex min-h-[260px] flex-1 items-end gap-1.5 pt-2 sm:gap-2" role="img" aria-label={`Biểu đồ cột doanh thu ${data.label.toLowerCase()}`}>
-        {data.points.map((point, i) => {
+      <div className="mt-4 flex min-h-[260px] flex-1 items-end gap-1.5 pt-2 sm:gap-2" role="img" aria-label="Biểu đồ cột doanh thu 7 ngày gần nhất">
+        {points.length === 0 && <p className="w-full text-center text-sm text-muted">Chưa có đơn thanh toán trong 7 ngày qua.</p>}
+        {points.map((point, i) => {
           const highlight = i === maxIndex;
+          const heightPct = Math.max(4, Math.round((point.revenueVnd / maxValue) * 100));
           return (
             <div key={point.label} className="group relative flex h-full flex-1 flex-col justify-end">
               <div className="relative flex h-full items-end">
@@ -127,7 +72,7 @@ function RevenueChart() {
                       ? "bg-gradient-to-b from-forest-600 to-forest-900 shadow-lg shadow-forest-800/30"
                       : "bar-striped"
                   }`}
-                  style={{ height: `${Math.max(4, point.heightPct)}%` }}
+                  style={{ height: `${point.revenueVnd > 0 ? heightPct : 4}%`, opacity: point.revenueVnd > 0 ? 1 : 0.35 }}
                 >
                   <div className="pointer-events-none absolute -top-11 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-xl border border-line bg-white px-3 py-1.5 text-xs opacity-0 shadow-xl transition group-hover:opacity-100">
                     <strong className="block font-bold text-ink">{formatVnd(point.revenueVnd)}</strong>
@@ -147,49 +92,44 @@ function RevenueChart() {
 }
 
 /* ── Đơn hàng gần đây ── */
-const AVATAR_COLORS = [
-  "from-brand-400 to-brand-600",
-  "from-amber-400 to-orange-500",
-  "from-blue-400 to-indigo-500",
-  "from-emerald-400 to-teal-600",
-  "from-rose-400 to-red-500",
-  "from-violet-400 to-purple-600",
-];
-
-function initialsOf(order: Order) {
-  const fromName = `${order.user.firstName?.[0] ?? ""}${order.user.lastName?.[0] ?? ""}`.trim();
-  return fromName || order.user.username[0]?.toUpperCase() || "?";
-}
-
-function RecentOrders() {
+function RecentOrders({ orders }: { orders: ApiOrder[] }) {
   return (
     <section className="card flex h-full flex-col justify-between p-6">
       <div className="mb-2 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-bold text-ink">Đơn hàng gần đây</h2>
-          <p className="mt-0.5 text-sm text-muted">6 đơn mới nhất</p>
+          <p className="mt-0.5 text-sm text-muted">8 đơn mới nhất</p>
         </div>
         <Link href="/orders" className="text-xs font-semibold text-brand-700 hover:text-brand-800">
           Xem tất cả →
         </Link>
       </div>
       <ul className="divide-y divide-line-soft">
-        {recentOrders.map((order, i) => (
+        {orders.length === 0 && <li className="py-6 text-center text-sm text-muted">Chưa có đơn hàng nào.</li>}
+        {orders.map((order, i) => (
           <li key={order.id} className="flex items-center gap-3 py-3">
             <span
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-xs font-bold text-white ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
             >
-              {initialsOf(order)}
+              {initialsOf(order.creator.fullName)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">{order.productName}</p>
-              <p className="text-xs text-muted">
-                @{order.user.username} · {formatTime(order.createdAt)}
+              <Link
+                href={`/orders/${order.id}`}
+                className="block truncate text-sm font-semibold text-ink hover:text-brand-700 hover:underline"
+                title={`${order.orderCode} · ${order.items.map((item) => item.itemName).join(", ") || "Chưa có món"}`}
+              >
+                {order.orderCode} · {order.items.map((item) => item.itemName).join(", ") || "Chưa có món"}
+              </Link>
+              <p className="truncate text-xs text-muted">
+                @{order.creator.username ?? "—"} · {formatTime(order.createdAt)}
               </p>
             </div>
             <div className="shrink-0 text-right">
-              <p className="text-sm font-bold tabular-nums text-ink">{formatVnd(order.amountVnd)}</p>
-              <Badge tone={orderPaymentTone(order.paymentStatus)}>{ORDER_PAYMENT_STATUS_LABEL[order.paymentStatus]}</Badge>
+              <p className="text-sm font-bold tabular-nums text-ink">{formatVnd(Number(order.totalAmount))}</p>
+              <Badge tone={orderPaymentTone(order.paymentStatus === "REVIEW" ? "PAYMENT_REVIEW" : order.paymentStatus)}>
+                {ORDER_PAYMENT_STATUS_LABEL[order.paymentStatus === "REVIEW" ? "PAYMENT_REVIEW" : order.paymentStatus]}
+              </Badge>
             </div>
           </li>
         ))}
@@ -198,203 +138,224 @@ function RecentOrders() {
   );
 }
 
-/* ── Donut nguồn truy cập ── */
-function DonutChart() {
-  const R = 50;
-  const C = 2 * Math.PI * R;
-  const top = trafficSources[0];
+/* ── Panel cần chú ý (giao dịch thiếu/thừa/sai mã) ── */
+function AttentionPanel({ transactions }: { transactions: ApiSepayTransactionFull[] }) {
+  const items = useMemo(() => {
+    return transactions
+      .filter((tx) => {
+        const received = Number(tx.amountIn);
+        const expected = Number(tx.payment?.expectedAmount ?? 0);
+        if (tx.matchStatus === "WRONG_CODE") return true;
+        if (tx.matchStatus === "REVIEWED") return true;
+        if (tx.payment && received !== expected) return true;
+        return false;
+      })
+      .slice(0, 5);
+  }, [transactions]);
 
-  // Tính sẵn độ dài + vị trí bắt đầu của từng phân đoạn (bất biến, không mutate khi render)
-  const segments = trafficSources.reduce<
-    { label: string; percent: number; color: string; len: number; offset: number }[]
-  >((acc, s) => {
-    const prev = acc[acc.length - 1];
-    const offset = prev ? prev.offset + prev.len : 0;
-    acc.push({ ...s, len: (s.percent / 100) * C, offset });
-    return acc;
-  }, []);
+  const tone = (tx: ApiSepayTransactionFull): "amber" | "red" => {
+    const diff = Number(tx.amountIn) - Number(tx.payment?.expectedAmount ?? 0);
+    if (tx.matchStatus === "WRONG_CODE" || diff < 0) return "red";
+    return "amber";
+  };
 
   return (
     <section className="card flex h-full flex-col justify-between p-6">
-      <h2 className="text-[15px] font-bold text-ink">Nguồn truy cập</h2>
-      <p className="mt-0.5 text-sm text-muted">Phân bổ lượt truy cập website</p>
-
-      <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-center">
-        <div className="relative h-40 w-40 shrink-0">
-          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-            <circle cx="60" cy="60" r={R} fill="none" stroke="#eef1f0" strokeWidth={13} />
-            {segments.map((s) => (
-              <circle
-                key={s.label}
-                cx="60"
-                cy="60"
-                r={R}
-                fill="none"
-                stroke={s.color}
-                strokeWidth={13}
-                strokeDasharray={`${s.len} ${C - s.len}`}
-                strokeDashoffset={-s.offset}
-                className="transition-all duration-500"
-              />
-            ))}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <strong className="text-2xl font-extrabold tracking-tight text-ink">{top.percent}%</strong>
-            <span className="text-[11px] font-medium text-muted">{top.label.toLowerCase()}</span>
-          </div>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-bold text-ink">Cần chú ý</h2>
+          <p className="mt-0.5 text-sm text-muted">Giao dịch thiếu / thừa / sai mã</p>
         </div>
-
-        <ul className="w-full max-w-[220px] space-y-2.5">
-          {trafficSources.map((s) => (
-            <li key={s.label} className="flex items-center gap-2.5 text-sm">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="flex-1 text-slate-600">{s.label}</span>
-              <strong className="tabular-nums text-ink">{s.percent}%</strong>
-            </li>
-          ))}
-        </ul>
+        <Link href="/payments?needsReview=1" className="text-xs font-semibold text-brand-700 hover:text-brand-800">
+          Xem tất cả →
+        </Link>
       </div>
+      <ul className="divide-y divide-line-soft">
+        {items.length === 0 && (
+          <li className="py-6 text-center text-sm text-muted">Không có giao dịch nào cần xử lý. 🎉</li>
+        )}
+        {items.map((tx) => {
+          const diff = Number(tx.amountIn) - Number(tx.payment?.expectedAmount ?? 0);
+          return (
+            <li key={tx.id}>
+              <Link
+                href={`/payments?q=${encodeURIComponent(tx.code ?? tx.sepayTransactionId)}`}
+                className="flex items-center gap-3 rounded-lg py-3 transition hover:bg-slate-50"
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm ${tone(tx) === "red" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"}`}>
+                  {tx.matchStatus === "WRONG_CODE" ? "⚠" : diff < 0 ? "↓" : "↑"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink">{tx.code ?? `SP${tx.sepayTransactionId}`}</p>
+                  <p className="text-xs text-muted">
+                    {tx.payment?.order?.orderCode ?? "Chưa liên kết"} · {formatDate(tx.receivedAt)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold tabular-nums text-ink">{formatVnd(Number(tx.amountIn))}</p>
+                  <Badge tone={tone(tx)}>
+                    {tx.matchStatus === "WRONG_CODE" ? "Sai mã" : diff < 0 ? "Thiếu" : "Thừa"}
+                  </Badge>
+                </div>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
 
-/* ── Server uptime ── */
-function UptimeCard() {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    const since = new Date(serverUptime.sinceIso).getTime();
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - since) / 1000)));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const d = Math.floor(elapsed / 86400);
-  const h = Math.floor((elapsed % 86400) / 3600);
-  const m = Math.floor((elapsed % 3600) / 60);
-  const s = elapsed % 60;
-
-  return (
-    <section className="relative flex flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br from-forest-900 to-forest-800 p-6 text-white shadow-xl shadow-forest-900/25">
-      <div className="relative z-10">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
-            <svg viewBox="0 0 20 20" className="h-4 w-4 text-brand-300" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="2" y="6" width="16" height="10" rx="2" />
-              <path d="M6 10h.01M9 10h.01M12 10h.01M6 13h.01M9 13h.01" />
-            </svg>
-          </span>
-          <div>
-            <h2 className="text-[15px] font-bold">Thời gian hoạt động</h2>
-            <p className="text-xs text-brand-200/80">{serverUptime.label}</p>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <div className="flex items-baseline gap-2">
-            <strong className="text-5xl font-extrabold tracking-tight">{String(serverUptime.percent).replace(".", ",")}%</strong>
-            <span className="text-sm font-semibold text-brand-300">uptime</span>
-          </div>
-          <p className="mt-3 font-mono text-lg font-bold tabular-nums tracking-widest text-brand-100">
-            {pad(d)}<span className="text-brand-400">d</span> : {pad(h)}
-            <span className="text-brand-400">h</span> : {pad(m)}
-            <span className="text-brand-400">m</span> : {pad(s)}
-            <span className="text-brand-400">s</span>
-          </p>
-          <ul className="mt-4 space-y-1.5 text-xs text-brand-200/85">
-            {serverUptime.events.map((event) => (
-              <li key={event.label} className="flex items-center gap-2">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    event.tone === "green" ? "bg-emerald-400" : "bg-brand-300/60"
-                  }`}
-                />
-                {event.label}
-              </li>
-            ))}
-          </ul>
-        </div>
+/* ── Thẻ KPI ── */
+function KpiCard({
+  label,
+  value,
+  trend,
+  up,
+  sub,
+  dark = false,
+}: {
+  label: string;
+  value: string;
+  trend?: string;
+  up?: boolean;
+  sub: string;
+  dark?: boolean;
+}) {
+  return dark ? (
+    <article className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-forest-700 to-forest-950 p-5 text-white shadow-lg shadow-forest-900/30 transition hover:-translate-y-0.5 hover:shadow-xl">
+      <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-brand-400/15 blur-2xl" aria-hidden />
+      <div className="pointer-events-none absolute -bottom-4 -left-4 h-20 w-20 rounded-full bg-brand-300/10 blur-xl" aria-hidden />
+      <div className="relative flex items-start justify-between">
+        <span className="text-xs font-medium text-brand-200/80">{label}</span>
+        {trend && <Trend up={up ?? true}>{trend}</Trend>}
       </div>
-
-      {/* Sóng xanh trang trí */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 opacity-90" aria-hidden>
-        <svg viewBox="0 0 2400 120" preserveAspectRatio="none" className="absolute bottom-0 left-0 h-full w-[200%]" style={{ animation: "waveShift 9s linear infinite" }}>
-          <path d="M0 70 Q150 30 300 70 T600 70 T900 70 T1200 70 V120 H0 Z" fill="rgba(74,222,128,0.16)" />
-        </svg>
-        <svg viewBox="0 0 2400 120" preserveAspectRatio="none" className="absolute bottom-0 left-0 h-[70%] w-[200%]" style={{ animation: "waveShift 6s linear infinite" }}>
-          <path d="M0 70 Q150 30 300 70 T600 70 T900 70 T1200 70 V120 H0 Z" fill="rgba(134,239,172,0.22)" />
-        </svg>
+      <strong className="relative mt-3 block text-[28px] font-extrabold tabular-nums tracking-tight">{value}</strong>
+      <p className="relative mt-1 text-xs text-brand-200/60">{sub}</p>
+    </article>
+  ) : (
+    <article className="card p-5 transition hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(15,61,36,0.1)]">
+      <div className="flex items-start justify-between">
+        <span className="text-xs font-medium text-muted">{label}</span>
+        {trend && <Trend up={up ?? true}>{trend}</Trend>}
       </div>
-    </section>
+      <strong className="mt-3 block text-[26px] font-extrabold tabular-nums tracking-tight text-ink">{value}</strong>
+      <p className="mt-1 text-xs text-muted">{sub}</p>
+    </article>
   );
 }
 
 export default function DashboardPage() {
-  const toast = useToast();
+  const load = useCallback(async (): Promise<DashboardPayload> => {
+    const [orders, transactions] = await Promise.all([
+      getOrders(1000).catch(() => ({ data: [] as ApiOrder[] })),
+      getTransactions().catch(() => ({ data: [] as ApiSepayTransactionFull[] })),
+    ]);
+    return { orders: orders.data, transactions: transactions.data };
+  }, []);
+
+  const { data, loading, error, reload } = useApiData<DashboardPayload>(load, {
+    orders: [] as ApiOrder[],
+    transactions: [] as ApiSepayTransactionFull[],
+  });
+
+  const stats = useMemo(() => {
+    const paid = data.orders.filter((o) => o.paymentStatus === "PAID");
+    const revenue = paid.reduce((s, o) => s + Number(o.totalAmount), 0);
+    const pendingPayment = data.orders.filter((o) => o.paymentStatus === "UNPAID" || o.paymentStatus === "PENDING").length;
+    const queued = data.orders.filter((o) => o.fulfillmentStatus === "QUEUED").length;
+    const avgOrder = paid.length > 0 ? Math.round(revenue / paid.length) : 0;
+    return { revenue, avgOrder, pendingPayment, queued, paidCount: paid.length, totalOrders: data.orders.length };
+  }, [data.orders]);
+
+  const chartPoints = useMemo(() => {
+    const days: { label: string; revenueVnd: number; orderCount: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = new Date();
+      day.setHours(0, 0, 0, 0);
+      day.setDate(day.getDate() - i);
+      const next = new Date(day);
+      next.setDate(day.getDate() + 1);
+      const dayOrders = data.orders.filter((o) => {
+        if (o.paymentStatus !== "PAID") return false;
+        const at = new Date(o.paidAt ?? o.createdAt);
+        return at >= day && at < next;
+      });
+      days.push({
+        label: day.toLocaleDateString("vi-VN", { weekday: "short" }).replace(",", ""),
+        revenueVnd: dayOrders.reduce((s, o) => s + Number(o.totalAmount), 0),
+        orderCount: dayOrders.length,
+      });
+    }
+    return days;
+  }, [data.orders]);
+
+  const recent = useMemo(() => [...data.orders].slice(0, 8), [data.orders]);
+
+  if (loading && data.orders.length === 0) {
+    return <PageLoading label="Đang tải dữ liệu tổng quan..." subText="Đang lấy danh sách đơn hàng và giao dịch mới nhất..." />;
+  }
 
   return (
     <div className="animate-[fadeUp_.35s_ease-out]">
-      {/* Title */}
-      <PageHeader title="Tổng quan" description="Lên kế hoạch, ưu tiên và quản lý hoạt động kinh doanh.">
-        <button
-          type="button"
-          className="btn"
-          onClick={() => toast.push("Đã xuất file Excel báo cáo tổng quan thành công.", "success")}
-        >
-          Xuất Excel
+      <PageHeader title="Tổng quan" description="Theo dõi doanh thu, đơn hàng và giao dịch cần xử lý theo thời gian thực.">
+        <button type="button" className="btn" onClick={() => void reload()} disabled={loading}>
+          {loading ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Spinner size="sm" /> Đang tải...
+            </span>
+          ) : (
+            "Làm mới"
+          )}
         </button>
       </PageHeader>
 
-      {/* KPI row */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {KPIS.map((kpi) =>
-          kpi.dark ? (
-            <article
-              key={kpi.label}
-              className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-forest-700 to-forest-950 p-5 text-white shadow-lg shadow-forest-900/30 transition hover:-translate-y-0.5 hover:shadow-xl"
-            >
-              <div className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-brand-400/15 blur-2xl" aria-hidden />
-              <div className="pointer-events-none absolute -bottom-4 -left-4 h-20 w-20 rounded-full bg-brand-300/10 blur-xl" aria-hidden />
-              <div className="relative flex items-start justify-between">
-                <span className="text-xs font-medium text-brand-200/80">{kpi.label}</span>
-                <Trend up>{kpi.trend}</Trend>
-              </div>
-              <strong className="relative mt-3 block text-[28px] font-extrabold tabular-nums tracking-tight">{kpi.value}</strong>
-              <p className="relative mt-1 text-xs text-brand-200/60">{kpi.sub}</p>
-            </article>
-          ) : (
-            <article
-              key={kpi.label}
-              className="card p-5 transition hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(15,61,36,0.1)]"
-            >
-              <div className="flex items-start justify-between">
-                <span className="text-xs font-medium text-muted">{kpi.label}</span>
-                <Trend up={kpi.up}>{kpi.trend}</Trend>
-              </div>
-              <strong className="mt-3 block text-[26px] font-extrabold tabular-nums tracking-tight text-ink">{kpi.value}</strong>
-              <p className="mt-1 text-xs text-muted">{kpi.sub}</p>
-            </article>
-          )
-        )}
-      </div>
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {/* KPI row */}
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard
+              dark
+              label="Doanh thu đã thu"
+              value={formatVnd(stats.revenue)}
+              sub={`${stats.paidCount} đơn đã thanh toán`}
+            />
+            <KpiCard label="TB / đơn" value={formatVnd(stats.avgOrder)} sub="trung bình trên đơn đã thu" />
+            <KpiCard label="Chờ thanh toán" value={String(stats.pendingPayment)} sub="đơn chưa thanh toán" />
+            <KpiCard label="Đang chờ pha chế" value={String(stats.queued)} sub="đơn trong hàng đợi barista" />
+          </div>
 
-      {/* Row 2: chart + recent orders */}
-      <div className="mb-6 grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
-        <div className="flex flex-col xl:col-span-2">
-          <RevenueChart />
-        </div>
-        <RecentOrders />
-      </div>
+          {/* Row 2: chart + recent orders */}
+          <div className="mb-6 grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
+            <div className="flex flex-col xl:col-span-2">
+              <RevenueChart points={chartPoints} />
+            </div>
+            <RecentOrders orders={recent} />
+          </div>
 
-      {/* Row 3: donut + uptime */}
-      <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
-        <div className="flex flex-col xl:col-span-2">
-          <DonutChart />
-        </div>
-        <UptimeCard />
-      </div>
+          {/* Row 3: attention panel + stats */}
+          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
+            <div className="flex flex-col xl:col-span-2">
+              <AttentionPanel transactions={data.transactions} />
+            </div>
+            <section className="card flex h-full flex-col justify-between p-6">
+              <h2 className="text-[15px] font-bold text-ink">Tổng quan nhanh</h2>
+              <dl className="mt-4 space-y-3">
+                {[
+                  { label: "Tổng đơn hàng", value: stats.totalOrders },
+                  { label: "Đơn đã thanh toán", value: stats.paidCount },
+                  { label: "Đang pha chế (PREPARING)", value: data.orders.filter((o) => o.fulfillmentStatus === "PREPARING").length },
+                  { label: "Sẵn sàng giao (READY)", value: data.orders.filter((o) => o.fulfillmentStatus === "READY").length },
+                  { label: "Đã giao (DELIVERED)", value: data.orders.filter((o) => o.fulfillmentStatus === "DELIVERED").length },
+                  { label: "Đã hủy (CANCELLED)", value: data.orders.filter((o) => o.fulfillmentStatus === "CANCELLED").length },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-2.5">
+                    <span className="text-sm text-muted">{row.label}</span>
+                    <strong className="font-bold tabular-nums text-ink">{row.value}</strong>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          </div>
     </div>
   );
 }

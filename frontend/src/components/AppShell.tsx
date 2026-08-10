@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider, useToast } from "./Toast";
+import { ApiError, getCurrentUser, type ApiUser } from "@/lib/api";
 
 /* ── Icon set (stroke SVG nhẹ nhàng, đồng bộ kiểu Donezo) ── */
 const stroke = {
@@ -190,12 +191,24 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 /* ── Menu dưới cùng ── */
 function SidebarFooter() {
   const toast = useToast();
+  const router = useRouter();
   const pathname = usePathname();
+  const [loggingOut, setLoggingOut] = useState(false);
   const isActive = (href: string) => pathname === href;
-  const footerItems: { href?: string; label: string; icon: string; onClick?: () => void }[] = [
-    { href: "/settings", label: "Cài đặt", icon: "settings" },
+
+  const logout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST", cache: "no-store" });
+    } catch {
+      // Luôn về login kể cả khi backend không phản hồi.
+    }
+    router.replace("/login");
+  };
+
+  const footerItems: { href?: string; label: string; icon: string; onClick?: () => void; disabled?: boolean }[] = [
     { label: "Trợ giúp", icon: "help", onClick: () => toast.push("Tài liệu hướng dẫn sẽ sớm được cập nhật.", "warning") },
-    { href: "/login", label: "Đăng xuất", icon: "logout" },
+    { label: "Đăng xuất", icon: "logout", onClick: logout, disabled: loggingOut },
   ];
   return (
     <div>
@@ -221,7 +234,8 @@ function SidebarFooter() {
               <button
                 type="button"
                 onClick={item.onClick}
-                className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-800"
+                disabled={item.disabled}
+                className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-800 disabled:cursor-default disabled:opacity-60"
               >
                 <span className="text-slate-400">{ICONS[item.icon]}</span>
                 {item.label}
@@ -251,7 +265,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 }
 
 /* ── Header phía trên (Donezo: search + bell + message + avatar) ── */
-function TopHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
+function TopHeader({ onOpenDrawer, me }: { onOpenDrawer: () => void; me: ApiUser | null }) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-white px-4 shadow-xs lg:px-6">
       <div className="flex items-center gap-3">
@@ -314,11 +328,11 @@ function TopHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         {/* Avatar + name/email */}
         <div className="flex items-center gap-2.5 cursor-pointer rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-forest-600 to-forest-900 text-sm font-bold text-white shadow-sm">
-            A
+            {me?.fullName?.charAt(0)?.toUpperCase() ?? "A"}
           </span>
           <div className="hidden leading-tight md:block">
-            <strong className="block text-[13px] font-bold text-ink">admin</strong>
-            <small className="block text-[11px] text-muted">admin@bottele.vn</small>
+            <strong className="block text-[13px] font-bold text-ink">{me?.fullName ?? "Admin"}</strong>
+            <small className="block text-[11px] text-muted">{me?.username ? `@${me.username}` : "Quản trị viên"}</small>
           </div>
         </div>
       </div>
@@ -328,7 +342,28 @@ function TopHeader({ onOpenDrawer }: { onOpenDrawer: () => void }) {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const [me, setMe] = useState<ApiUser | null>(null);
+
+  // Kiểm tra phiên đăng nhập: nếu chưa đăng nhập / token hết hạn → đưa về trang login.
+  useEffect(() => {
+    let alive = true;
+    getCurrentUser()
+      .then((payload) => {
+        if (!alive) return;
+        setMe(payload.data);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        if (err instanceof ApiError && err.status === 401) {
+          router.replace("/login");
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -375,7 +410,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         {/* Workspace */}
         <div className="lg:pl-64">
-          <TopHeader onOpenDrawer={openDrawer} />
+          <TopHeader onOpenDrawer={openDrawer} me={me} />
           <main className="mx-auto max-w-[1400px] px-4 pt-6 pb-10 lg:px-8 lg:pt-6 lg:pb-10">{children}</main>
         </div>
       </div>

@@ -6,8 +6,7 @@ import {
   ResolutionAction,
   TransactionMatchStatus,
 } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 export interface ResolveReconciliationInput {
   resolvedByUserId: string;

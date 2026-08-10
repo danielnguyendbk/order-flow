@@ -345,3 +345,54 @@ export function FulfillmentBadge({ type }: { type: string }) {
     </span>
   );
 }
+
+/* ── Spinner icon ── */
+export function Spinner({ size = "md", className = "" }: { size?: "sm" | "md" | "lg"; className?: string }) {
+  const sizeMap = {
+    sm: "h-4 w-4 stroke-[2.5]",
+    md: "h-6 w-6 stroke-[2]",
+    lg: "h-10 w-10 stroke-[2]",
+  };
+  return (
+    <svg
+      className={`animate-spin text-emerald-600 ${sizeMap[size]} ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-90"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  );
+}
+
+/* ── Component hiển thị màn hình Đang tải toàn trang/tính năng ── */
+export function PageLoading({
+  label = "Đang tải dữ liệu...",
+  subText = "Vui lòng chờ trong giây lát",
+}: {
+  label?: string;
+  subText?: string;
+}) {
+  return (
+    <div className="flex min-h-[calc(100vh-10rem)] w-full flex-col items-center justify-center py-8 text-center animate-[fadeUp_.3s_ease-out]">
+      <div className="relative flex items-center justify-center">
+        <div className="absolute h-20 w-20 rounded-full bg-emerald-500/15 animate-ping" />
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100/80 shadow-inner ring-1 ring-emerald-500/20">
+          <Spinner size="lg" />
+        </div>
+      </div>
+      <h3 className="mt-6 text-lg font-extrabold text-slate-800 tracking-tight">{label}</h3>
+      {subText && <p className="mt-2 text-sm font-medium text-slate-400">{subText}</p>}
+    </div>
+  );
+}
+
+/* ── Skeleton Loader ── */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-xl bg-slate-200/70 ${className}`} />;
+}

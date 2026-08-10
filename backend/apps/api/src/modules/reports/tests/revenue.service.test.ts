@@ -56,6 +56,8 @@ describe("RevenueReportService", () => {
       netRevenue: BigInt(120000),
       paidOrderCount: 2,
       refundCount: 1,
+      totalDays: 1,
+      avgDailyNetRevenue: BigInt(120000),
     });
     expect(report.byMethod).toEqual({
       CASH: { amount: BigInt(100000), count: 1 },

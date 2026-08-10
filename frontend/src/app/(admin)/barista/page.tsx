@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageHeader, Panel, Badge, EmptyState, type Tone } from "@/components/ui";
+import { PageHeader, Panel, Badge, EmptyState, PageLoading, type Tone } from "@/components/ui";
 import { useToast } from "@/components/Toast";
 import { formatVnd, formatTime } from "@/lib/format";
 import {
@@ -150,6 +150,10 @@ export default function BaristaPage() {
     void act(order, () => deliverOrder(order.id, { requesterId: data.me!.id }), `Đã giao đơn ${order.orderCode}.`);
   };
 
+  if (loading && data.queue.length === 0 && data.mine.length === 0) {
+    return <PageLoading label="Đang tải hàng đợi pha chế..." subText="Đang kiểm tra danh sách đơn cần làm của Barista..." />;
+  }
+
   return (
     <div>
       <PageHeader title="Pha chế" description="Hàng đợi món đã thanh toán và các đơn đang làm của bạn.">
@@ -157,9 +161,7 @@ export default function BaristaPage() {
       </PageHeader>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải hàng đợi pha chế...</div>}
-
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="card p-4">
           <span className="block text-xs font-medium text-muted">Chờ nhận đơn</span>
           <strong className="mt-1 block text-2xl font-extrabold tabular-nums text-amber-600">{stats.queue}</strong>

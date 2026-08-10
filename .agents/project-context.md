@@ -17,9 +17,9 @@ Service Staff
 
 ## Thành phần
 
-- `apps/api`: Express.js REST API
+- `apps/api`: Express.js REST API (port 3001 local)
 - `apps/telegram-bot`: Telegram Bot bằng Telegraf.js
-- `apps/admin-web`: Next.js Admin Dashboard
+- `frontend/`: Next.js Admin Dashboard (port 3000 local, proxy qua `/api/backend/*`)
 - `prisma`: Database schema và migrations
 - `packages/shared-types`: Shared TypeScript types
 - `packages/shared-constants`: Enum và constants
@@ -41,6 +41,7 @@ Service Staff
 
 ## Role nghiệp vụ
 
+- `OWNER` (admin, truy cập Dashboard Web)
 - `SERVICE_STAFF`
 - `BARISTA`
 - `MANAGER`
@@ -53,3 +54,5 @@ Service Staff
 - Telegram Bot và Frontend chỉ gọi Backend API.
 - Business rule phải nằm tại Backend.
 - Redis chỉ dùng cho queue, cache và session tạm thời.
+- Auth session của API là in-memory (`MemoryAuthSessionStore`); restart backend sẽ xóa toàn bộ session, người dùng phải đăng nhập lại.
+- Frontend tự động redirect về `/login` khi nhận 401 và refresh token không còn hiệu lực.

@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { Order, FulfillmentStatus } from "../orders/order.types";
-
-const prisma = new PrismaClient();
 
 /**
  * Service providing barista-specific order views.
