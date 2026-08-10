@@ -7,15 +7,16 @@ KHOA-006 uses a transactional PostgreSQL outbox plus BullMQ. Business transactio
 enqueues jobs whose payload contains only `notificationId`. The worker records delivery as
 `SENT`, retries Telegram failures up to five times, and records the final state as `FAILED`.
 
-Local startup:
+Local PostgreSQL startup:
 
 ```powershell
-docker compose up -d postgres redis
+docker compose up -d postgres
 npm.cmd run generate:prisma
-npm.cmd run dev:notification-worker
 ```
 
-The worker environment requires only `TELEGRAM_BOT_TOKEN`, `REDIS_URL`, and `DATABASE_URL`.
+Docker Compose no longer provisions Redis. The optional notification worker still
+requires an external `REDIS_URL` together with `TELEGRAM_BOT_TOKEN` and
+`DATABASE_URL`; auth sessions themselves use the process-local memory cache.
 To retry a `FAILED` notification after correcting an operational problem:
 
 ```powershell
@@ -173,3 +174,27 @@ npm run db:seed
 The seed is idempotent for an existing `OWNER`: it refreshes the configured
 name, bcrypt password hash, and active status. It refuses to promote an
 existing non-owner account that happens to use the same username.
+
+## Local visualization seed
+
+For a large, reproducible dashboard/reporting dataset in the local Docker
+database, use the separate visualization seed command. It deliberately ignores
+the normal Supabase `DATABASE_URL`/`DIRECT_URL`, connects through the dedicated
+local `SEED_VISUALIZATION_DATABASE_URL`, refuses production/remote database
+targets, and never creates or updates a user.
+
+See [docs/visualization-seed.md](docs/visualization-seed.md) for prerequisites,
+commands, data volume, safety rules, customization, and verification queries.
+
+## API with local Docker PostgreSQL
+
+Keep the normal `.env.local` Supabase configuration and run the API with the
+Docker PostgreSQL override using:
+
+```bash
+docker compose up -d postgres
+npm run dev:api:docker
+```
+
+The command changes `DATABASE_URL` and `DIRECT_URL` only for that API process.
+JWT and Telegram configuration still come from the repository `.env.local`.

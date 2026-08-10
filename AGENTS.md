@@ -47,7 +47,9 @@ order-flow/
     │   └── eslint-config/             # Shared ESLint configuration
     └── prisma/
         ├── schema.prisma              # PostgreSQL Prisma schema
-        └── seed.ts                    # Idempotent initial OWNER seed entry point
+        ├── seed.ts                    # Idempotent initial OWNER seed entry point
+        ├── seed-visualization.ts      # Large local-Docker dataset; reuses existing users
+        └── sync-users-to-docker.ts    # Safe Supabase users → local Docker upsert
 ```
 
 ## API domain modules
@@ -78,8 +80,16 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
 - Inline draft keyboards use compact revisioned callback data from `backend/apps/telegram-bot/src/callbacks/`; stale keyboards are cleared and refreshed from backend state, and duplicate mutations are guarded in both the Bot and API.
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
-- Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
+- Notification delivery code uses a PostgreSQL transactional outbox and an optional BullMQ/Redis Telegram worker; Docker Compose no longer provisions Redis. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
+
+## Progress log — 2026-08-10
+
+- Added a deterministic, rerunnable visualization seed that targets only the PostgreSQL database exposed by local Docker, covering menu, orders, order items, payments, status history and historical notifications across a configurable time range.
+- The visualization seed uses a dedicated localhost Docker PostgreSQL URL instead of the normal Supabase environment URL, never writes `users`, requires existing active SERVICE_STAFF and BARISTA records, and refuses production/remote database targets.
+- Removed the local Redis service from Docker Compose; auth session caching remains process-local, while the optional BullMQ notification worker requires an externally supplied Redis service if used.
+- Added a guarded, non-destructive users-only sync from Supabase into local Docker PostgreSQL; it preserves UUIDs and refuses unique identity conflicts.
+- Usage and verification queries are documented in `backend/docs/visualization-seed.md`.
 
 ## Progress log — 2026-08-07
 
