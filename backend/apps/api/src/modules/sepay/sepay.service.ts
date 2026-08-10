@@ -1,11 +1,15 @@
 import createHttpError from "http-errors";
-import { Prisma, PrismaClient, TransactionMatchStatus } from "@prisma/client";
+import { AuditEntityType, Prisma, PrismaClient, TransactionMatchStatus } from "@prisma/client";
 import {
   FulfillmentStatus,
   OrderStatusDomain,
   PaymentMethod,
   PaymentStatus,
 } from "../orders/order.types";
+import {
+  recordOrderNotification,
+  recordPaymentReviewNotifications,
+} from "../notifications/notification-outbox.service";
 
 const prisma = new PrismaClient();
 
@@ -124,6 +128,39 @@ export class SepayService {
           await tx.orderStatusHistory.createMany({ data: historyRows });
         }
       }
+
+      if (classification.matched && candidate) {
+        await recordOrderNotification(tx, "ORDER_PAID", candidate.orderId);
+      }
+
+      if (!classification.matched) {
+        await recordPaymentReviewNotifications(tx, {
+          sourceKey: `sepay:${transaction.id}`,
+          orderId: candidate?.orderId,
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: null,
+          action: classification.matched
+            ? "SEPAY_WEBHOOK_MATCHED"
+            : "SEPAY_WEBHOOK_REVIEW_REQUIRED",
+          entityType: AuditEntityType.SEPAY_TRANSACTION,
+          entityId: transaction.id,
+          details: {
+            sepayTransactionId: normalized.sepayTransactionId.toString(),
+            paymentId: transaction.paymentId,
+            orderId: candidate?.orderId ?? null,
+            amountIn: normalized.amountIn.toString(),
+            matchStatus: transaction.matchStatus,
+            paymentStatus: classification.paymentStatus,
+            fulfillmentStatus: classification.fulfillmentStatus,
+            differenceAmount: classification.differenceAmount?.toString() ?? null,
+            reason: classification.reason,
+          },
+        },
+      });
 
       return {
         duplicate: false,

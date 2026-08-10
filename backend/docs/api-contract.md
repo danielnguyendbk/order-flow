@@ -125,6 +125,42 @@ Status: **implemented**
 - QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
 - CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
 - CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
+- CASH confirmation and QR initialization write financial audit logs.
+
+## SePay webhook and reconciliation
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/webhooks/sepay` | Receive and reconcile a SePay transaction webhook |
+| `GET` | `/api/v1/admin/transactions` | List received SePay transactions |
+| `GET` | `/api/v1/admin/transactions/:transactionId` | Get a received SePay transaction |
+| `GET` | `/api/v1/admin/reconciliations` | List transactions needing reconciliation review |
+| `GET` | `/api/v1/admin/reconciliations/:reconciliationId` | Get a reconciliation review transaction |
+| `POST` | `/api/v1/admin/reconciliations/:reconciliationId/resolve` | Resolve a reconciliation review transaction |
+
+- SePay accepts `sepayTransactionId`, `sepay_transaction_id`, `transactionId`, `transaction_id`, or `id` as the external unique transaction ID.
+- SePay accepts `amountIn`, `amount_in`, `transferAmount`, or `amount` as the received amount.
+- Duplicate SePay webhooks are idempotent and still return HTTP success without reprocessing payments, notifications, or audit logs.
+- Exact QR matches transition the payment to `PAID`, queue the order, write payment history, and enqueue `ORDER_PAID`.
+- Underpaid, overpaid, wrong-code, and cancelled-order arrivals move the payment/order into review where applicable and enqueue `PAYMENT_REVIEW`.
+- Reconciliation resolution requires an owner actor and writes a financial audit log with the resolution action and note.
+
+## Refunds, revenue, and audit
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/orders/:orderId/refund` | Record a manual refund for a paid order |
+| `GET` | `/api/v1/admin/reports/revenue` | Return revenue totals by date range and payment method |
+| `GET` | `/api/v1/admin/audit-logs` | List audit logs |
+
+- Refund body: `{ "refundedByUserId": "...", "reason": "...", "amount": 50000 }`; `amount` is optional and defaults to the received payment amount.
+- Refunds require an owner actor, reject duplicate refund records for the same payment, and write `MANUAL_REFUND_RECORDED` audit logs.
+- Revenue accepts `from` and `to` query parameters as ISO date-time strings or `YYYY-MM-DD`; date-only values are expanded to the Asia/Bangkok day boundary.
+- Revenue separates `CASH`, `QR`, and `REFUNDED`; refunded amounts are excluded from net revenue.
 
 ## Barista queue
 
