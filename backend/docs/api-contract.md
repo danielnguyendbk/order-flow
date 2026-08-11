@@ -258,6 +258,19 @@ Status: **implemented**
 | `PATCH` | `/api/v1/admin/menu-items/:itemId` | Partially update a menu item |
 | `DELETE` | `/api/v1/admin/menu-items/:itemId` | Delete a menu item |
 
+## Admin dashboard
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/dashboard` | Get live owner dashboard metrics, status counts, revenue series, recent orders, and payment alerts |
+
+- Requires a valid `Authorization: Bearer <OWNER_JWT>` session; service staff and Baristas receive `403`.
+- Optional `days` query controls the revenue range from 1 through 90 days and defaults to 7.
+- Revenue amounts are returned as decimal strings because PostgreSQL/Prisma stores VND amounts as `BigInt`.
+- Revenue buckets use the `Asia/Ho_Chi_Minh` timezone. With `days=1`, `revenueSeries` contains 24 hourly buckets; longer ranges use daily buckets.
+
 ## Admin orders
 
 Status: **implemented**
@@ -280,7 +293,7 @@ Status: **implemented**
 | Service orders, items and public ownership actions | `apps/api/src/modules/orders/` |
 | Payments and payment transitions | `apps/api/src/modules/payments/` plus order status updates in `apps/api/src/modules/orders/` |
 | Barista queue and public claim view | `apps/api/src/modules/barista/` plus claim handling in `apps/api/src/modules/orders/` |
-| Admin orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
+| Admin dashboard and orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
 | Telegram service-staff orders and payments | `apps/api/src/modules/orders/` |
 | Telegram Barista queue and processing | `apps/api/src/modules/barista/` |

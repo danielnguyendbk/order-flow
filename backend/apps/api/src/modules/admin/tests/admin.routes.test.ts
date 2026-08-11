@@ -108,6 +108,28 @@ function fakeOrderService(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function fakeDashboardService() {
+  return {
+    getDashboard: vi.fn().mockResolvedValue({
+      generatedAt: new Date("2026-08-10T05:00:00.000Z"),
+      timeZone: "Asia/Ho_Chi_Minh",
+      range: {
+        from: new Date("2026-08-03T17:00:00.000Z"),
+        to: new Date("2026-08-10T05:00:00.000Z"),
+        days: 7,
+      },
+      summary: {
+        totalOrderCount: 100,
+        rangeOrderCount: 50,
+        paidOrderCount: 40,
+        grossRevenue: 4_000_000n,
+        todayRevenue: 500_000n,
+        averagePaidOrderValue: 100_000n,
+      },
+    }),
+  };
+}
+
 async function startApi() {
   const app = express();
   app.set("json replacer", (_key: string, value: unknown) =>
@@ -119,6 +141,7 @@ async function startApi() {
     createAdminRouter(fakeAuthService(), {
       adminRepository: fakeAdminRepository() as any,
       orderService: fakeOrderService() as any,
+      dashboardService: fakeDashboardService(),
     }),
   );
   server = createServer(app);
@@ -193,5 +216,45 @@ describe("Admin order routes", () => {
     const baseUrl = await startApi();
     const response = await request(baseUrl, "/orders", "GET", baristaToken);
     expect(response.status).toBe(403);
+  });
+});
+
+describe("Admin dashboard route", () => {
+  it("returns dashboard data to an owner and defaults to seven days", async () => {
+    const baseUrl = await startApi();
+    const response = await request(baseUrl, "/dashboard");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: {
+        timeZone: "Asia/Ho_Chi_Minh",
+        range: { days: 7 },
+        summary: {
+          totalOrderCount: 100,
+          grossRevenue: "4000000",
+        },
+      },
+    });
+  });
+
+  it("requires an owner JWT and validates the requested range", async () => {
+    const baseUrl = await startApi();
+    const staffResponse = await request(
+      baseUrl,
+      "/dashboard",
+      "GET",
+      staffToken,
+    );
+    const baristaResponse = await request(
+      baseUrl,
+      "/dashboard",
+      "GET",
+      baristaToken,
+    );
+    const invalidRangeResponse = await request(baseUrl, "/dashboard?days=91");
+
+    expect(staffResponse.status).toBe(403);
+    expect(baristaResponse.status).toBe(403);
+    expect(invalidRangeResponse.status).toBe(400);
   });
 });

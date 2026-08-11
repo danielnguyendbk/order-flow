@@ -71,6 +71,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 ## Current implementation state
 
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
 - Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.
@@ -89,6 +90,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - Removed the deprecated `backend/apps/admin-web` placeholder and its unused browser Supabase client; the active Next.js admin application remains in the repository-level `frontend/` workspace.
 - Added the optional experimental Telegram voice-order bridge on `test/dashboard-with-voice`; normal button-based ordering remains available when the bridge is disabled or fails.
+- Ported the dashboard aggregate API from `bc00f75` without its retired simulator or older admin-route behavior; the service now reuses the shared Prisma singleton.
 
 ## Progress log — 2026-08-10
 
