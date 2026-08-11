@@ -1,18 +1,29 @@
 "use client";
 
-import { Suspense, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, orderFulfillmentTone, Field, Modal } from "@/components/ui";
+import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, Field, Modal, PageLoading } from "@/components/ui";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import { useToast } from "@/components/Toast";
-import { formatVnd, formatDateTime, formatDate, formatTime } from "@/lib/format";
-import { 
-  orders as allOrders, 
-  ORDER_PAYMENT_STATUS_LABEL, 
-  ORDER_FULFILLMENT_STATUS_LABEL, 
-  type Order, 
-  type OrderPaymentStatus, 
-  type OrderFulfillmentStatus 
+import { formatVnd, formatDate, formatTime } from "@/lib/format";
+import { inPeriod, type Period } from "@/lib/period";
+import {
+  getOrders,
+  getCurrentUser,
+  cancelOrder,
+  overrideOrderStatus,
+  type ApiOrder,
+  type ApiUser,
+} from "@/lib/api";
+import { useApiData } from "@/lib/use-api-data";
+import { toOrder } from "@/lib/view-models";
+import {
+  ORDER_PAYMENT_STATUS_LABEL,
+  ORDER_FULFILLMENT_STATUS_LABEL,
+  type Order,
+  type OrderPaymentStatus,
+  type OrderFulfillmentStatus,
 } from "@/lib/data";
 
 const PAYMENT_STATUS_OPTIONS = Object.keys(ORDER_PAYMENT_STATUS_LABEL) as OrderPaymentStatus[];
@@ -25,10 +36,26 @@ function OrdersPageInner() {
   const [q, setQ] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [fulfillmentStatus, setFulfillmentStatus] = useState("");
+  const [period, setPeriod] = useState<Period | "">("");
   const [needsAction, setNeedsAction] = useState(searchParams.get("needsAction") === "1");
-  const [rows, setRows] = useState<Order[]>(allOrders);
-  const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
-  const [reviewReason, setReviewReason] = useState("");
+  const [me, setMe] = useState<ApiUser | null>(null);
+
+  const load = useCallback(async () => {
+    const [ordersPayload, mePayload] = await Promise.all([
+      getOrders(500),
+      getCurrentUser().catch(() => null),
+    ]);
+    setMe(mePayload?.data ?? null);
+    return ordersPayload.data;
+  }, []);
+
+  const { data: apiRows, loading, error, reload } = useApiData<ApiOrder[]>(load, []);
+
+  const rows: Order[] = useMemo(() => apiRows.map(toOrder), [apiRows]);
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelOrderItem, setCancelOrderItem] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [completeOrder, setCompleteOrder] = useState<Order | null>(null);
   const [completeNote, setCompleteNote] = useState("");
 
@@ -38,64 +65,95 @@ function OrdersPageInner() {
       if (paymentStatus && o.paymentStatus !== paymentStatus) return false;
       if (fulfillmentStatus && o.fulfillmentStatus !== fulfillmentStatus) return false;
       if (needsAction && o.paymentStatus !== "PAYMENT_REVIEW" && o.fulfillmentStatus !== "QUEUED") return false;
+      if (period && !inPeriod(o.createdAt, period)) return false;
       if (term) {
         const hay = `${o.code} ${o.user.username} ${o.user.telegramId} ${o.productName} ${o.user.firstName} ${o.user.lastName}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
     });
-  }, [rows, q, paymentStatus, fulfillmentStatus, needsAction]);
+  }, [rows, q, paymentStatus, fulfillmentStatus, needsAction, period]);
 
   const stats = useMemo(() => {
     const revenue = filtered.filter((o) => o.fulfillmentStatus !== "CANCELLED").reduce((s, o) => s + o.amountVnd, 0);
-    const costOfGoods = filtered.filter((o) => o.fulfillmentStatus === "DELIVERED").reduce((s, o) => s + o.costVnd, 0);
     return {
       total: filtered.length,
       pendingPayment: filtered.filter((o) => o.paymentStatus === "UNPAID" || o.paymentStatus === "PENDING").length,
       needsReview: filtered.filter((o) => o.paymentStatus === "PAYMENT_REVIEW" || o.fulfillmentStatus === "QUEUED").length,
       delivered: filtered.filter((o) => o.fulfillmentStatus === "DELIVERED").length,
       revenue,
-      costOfGoods,
-      grossProfit: revenue - costOfGoods,
     };
   }, [filtered]);
 
-  const hasFilters = Boolean(q || paymentStatus || fulfillmentStatus || needsAction);
+  const hasFilters = Boolean(q || paymentStatus || fulfillmentStatus || needsAction || period);
 
-  const cancelOrder = (o: Order) => {
-    setRows((prev) => prev.map((r) => (r.id === o.id ? { ...r, fulfillmentStatus: "CANCELLED", paymentStatus: "REFUNDED" } : r)));
-    toast.push(`Đã hủy đơn ${o.code}.`, "success");
+  const act = async (orderId: string, action: () => Promise<unknown>, success: string) => {
+    setBusyId(orderId);
+    try {
+      await action();
+      await reload();
+      toast.push(success, "success");
+    } catch (actionError) {
+      toast.push(actionError instanceof Error ? actionError.message : "Không thể thực hiện thao tác.", "error");
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const resolveReview = (o: Order) => {
-    setRows((prev) => prev.map((r) => (r.id === o.id ? { ...r, reviewReason: undefined, paymentStatus: "PAID" } : r)));
-    toast.push(`Đã bỏ kiểm tra đơn ${o.code}.`, "success");
+  /* Bỏ kiểm tra: PAYMENT_REVIEW → PAID (admin override) */
+  const clearReview = (order: Order) => {
+    void act(
+      order.id,
+      () => overrideOrderStatus(order.id, { domain: "PAYMENT", status: "PAID", reason: "Admin bỏ kiểm tra từ Web Admin" }),
+      `Đã bỏ kiểm tra đơn ${order.code}.`,
+    );
   };
 
-  const saveReview = (e: FormEvent) => {
-    e.preventDefault();
-    if (!reviewOrder) return;
-    setRows((prev) => prev.map((r) => (r.id === reviewOrder.id ? { ...r, reviewReason, paymentStatus: "PAYMENT_REVIEW" } : r)));
-    toast.push(`Đã gắn cờ kiểm tra cho đơn ${reviewOrder.code}.`, "success");
-    setReviewOrder(null);
-    setReviewReason("");
-  };
-
+  /* Xử lý xong: QUEUED → DELIVERED (admin override, kèm ghi chú) */
   const completeService = (e: FormEvent) => {
     e.preventDefault();
     if (!completeOrder) return;
-    setRows((prev) => prev.map((r) => (r.id === completeOrder.id ? { ...r, fulfillmentStatus: "DELIVERED", adminNote: completeNote } : r)));
-    toast.push(`Đã hoàn tất xử lý/giao hàng đơn ${completeOrder.code}.`, "success");
+    const note = completeNote.trim() || "Admin xác nhận đã xử lý xong";
+    void act(
+      completeOrder.id,
+      () => overrideOrderStatus(completeOrder.id, { domain: "FULFILLMENT", status: "DELIVERED", reason: note }),
+      `Đã hoàn tất xử lý đơn ${completeOrder.code}.`,
+    );
     setCompleteOrder(null);
     setCompleteNote("");
   };
 
+  /* Hủy đơn: UNPAID / PENDING_PAYMENT → CANCELLED */
+  const submitCancel = (e: FormEvent) => {
+    e.preventDefault();
+    if (!cancelOrderItem) return;
+    if (!cancelReason.trim()) {
+      toast.push("Vui lòng nhập lý do hủy đơn.", "error");
+      return;
+    }
+    const requesterId = me?.id;
+    void act(
+      cancelOrderItem.id,
+      () => cancelOrder(cancelOrderItem!.id, { reason: cancelReason.trim(), requesterId }),
+      `Đã hủy đơn ${cancelOrderItem.code}.`,
+    );
+    setCancelOrderItem(null);
+    setCancelReason("");
+  };
+
+  if (loading && rows.length === 0) {
+    return <PageLoading label="Đang tải danh sách đơn hàng..." subText="Đang lấy thông tin đơn hàng và trạng thái pha chế..." />;
+  }
+
   return (
     <div>
-      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt." />
+      <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt.">
+        <Link href="/orders/new" className="btn">+ Tạo đơn</Link>
+      </PageHeader>
 
-      {/* Tóm tắt */}
-      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {/* Tóm tắt */}
+          <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel>
           <div className="flex items-baseline justify-between">
             <strong className="font-bold text-ink">Luồng đơn</strong>
@@ -117,70 +175,81 @@ function OrdersPageInner() {
           </div>
         </Panel>
         <Panel>
-          <dl className="grid grid-cols-3 gap-3">
-            <div>
-              <dt className="text-xs font-medium text-muted">Doanh thu</dt>
+          <div className="flex items-baseline justify-between">
+            <strong className="font-bold text-ink">Tài chính đơn hàng</strong>
+            <span className="text-xs text-muted">Tính trên đơn hiển thị</span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-slate-50 p-3">
+              <dt className="text-xs font-medium text-slate-600">Doanh thu</dt>
               <dd className="mt-1 text-lg font-extrabold tabular-nums text-ink">{formatVnd(stats.revenue)}</dd>
             </div>
-            <div>
-              <dt className="text-xs font-medium text-muted">Giá vốn</dt>
-              <dd className="mt-1 text-lg font-extrabold tabular-nums text-ink">{formatVnd(stats.costOfGoods)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-muted">Lợi nhuận gộp</dt>
-              <dd className={`mt-1 text-lg font-extrabold tabular-nums ${stats.grossProfit < 0 ? "text-red-600" : "text-emerald-600"}`}>
-                {formatVnd(stats.grossProfit)}
+            <div className="rounded-xl bg-emerald-50/70 p-3">
+              <dt className="text-xs font-medium text-emerald-800">Đơn cần xử lý</dt>
+              <dd className={`mt-1 text-lg font-extrabold tabular-nums ${stats.needsReview > 0 ? "text-red-600" : "text-emerald-700"}`}>
+                {stats.needsReview}
               </dd>
             </div>
-          </dl>
+          </div>
         </Panel>
       </div>
 
       {/* Bộ lọc */}
-      <Panel
-        title="Tra cứu đơn hàng"
-        subtitle="Tìm nhanh theo mã đơn, khách hàng hoặc trạng thái kép."
-        className="mb-6"
-        right={hasFilters ? <Badge tone="teal">Đang áp dụng bộ lọc</Badge> : undefined}
-      >
-        <form onSubmit={(e) => e.preventDefault()} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Tìm kiếm">
-            <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm..." />
-          </Field>
-          <Field label="TT Thanh toán">
-            <select className="input" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option value="">Tất cả</option>
-              {PAYMENT_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{ORDER_PAYMENT_STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="TT Thực hiện">
-            <select className="input" value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)}>
-              <option value="">Tất cả</option>
-              {FULFILLMENT_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{ORDER_FULFILLMENT_STATUS_LABEL[s]}</option>
-              ))}
-            </select>
-          </Field>
-          <div className="flex flex-col gap-2 justify-end pb-2">
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} className="h-4 w-4 rounded border-line accent-brand-600" />
-              Chỉ đơn cần xử lý
-            </label>
-            <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => { setQ(""); setPaymentStatus(""); setFulfillmentStatus(""); setNeedsAction(false); }}>
-                Xóa lọc
-              </button>
-            </div>
+      <Panel className="mb-6">
+        <form onSubmit={(e) => e.preventDefault()} className="flex flex-wrap items-end gap-3.5">
+          <div className="flex-1 min-w-[240px]">
+            <Field label="Tìm kiếm">
+              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm, khách hàng..." />
+            </Field>
           </div>
+          <div className="w-full sm:w-48">
+            <Field label="TT Thanh toán">
+              <select className="input" value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
+                <option value="">Tất cả thanh toán</option>
+                {PAYMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{ORDER_PAYMENT_STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="w-full sm:w-48">
+            <Field label="TT Thực hiện">
+              <select className="input" value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)}>
+                <option value="">Tất cả thực hiện</option>
+                {FULFILLMENT_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{ORDER_FULFILLMENT_STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="w-full sm:w-72">
+            <Field label="Thời gian">
+              <PeriodFilter value={period} onChange={setPeriod} />
+            </Field>
+          </div>
+          <div className="flex items-center gap-2 h-10 px-3.5 rounded-xl border border-line bg-slate-50/80">
+            <input type="checkbox" id="needsActionOrders" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} className="h-4 w-4 rounded border-line accent-forest-800 cursor-pointer" />
+            <label htmlFor="needsActionOrders" className="text-xs font-semibold text-slate-700 cursor-pointer whitespace-nowrap">Chỉ đơn cần xử lý</label>
+          </div>
+          {hasFilters && (
+            <button type="button" className="btn-ghost h-10 px-3.5" onClick={() => { setQ(""); setPaymentStatus(""); setFulfillmentStatus(""); setNeedsAction(false); setPeriod(""); }}>
+              Xóa lọc
+            </button>
+          )}
         </form>
       </Panel>
 
       {/* Bảng đơn */}
       <Panel
         title="Danh sách đơn"
-        right={<span className="text-sm text-muted"><strong className="text-ink">{filtered.length}</strong> đơn gần nhất</span>}
+        right={
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted"><strong className="text-ink">{filtered.length}</strong> đơn</span>
+            <button type="button" className="btn-ghost text-xs" onClick={() => void reload()} disabled={loading}>
+              Làm mới
+            </button>
+          </div>
+        }
       >
         <div className="-mx-5 overflow-x-auto px-5">
           <table className="w-full min-w-[1000px]">
@@ -202,14 +271,23 @@ function OrdersPageInner() {
                 <tr><td colSpan={9}><EmptyState>Không có đơn phù hợp bộ lọc hiện tại.</EmptyState></td></tr>
               )}
               {filtered.map((order) => {
-                const attention = order.paymentStatus === "PAYMENT_REVIEW" || order.fulfillmentStatus === "QUEUED";
+                const attention = order.paymentStatus === "PAYMENT_REVIEW";
                 return (
                   <tr key={order.id} className={attention ? "bg-red-50/50" : "hover:bg-surface-soft transition-colors"}>
-                    <td className="td font-bold text-ink whitespace-nowrap">
-                      {order.code}
+                    <td className="td whitespace-nowrap">
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="font-bold text-ink transition hover:text-brand-700 hover:underline"
+                        title="Xem chi tiết đơn"
+                      >
+                        {order.code}
+                      </Link>
                     </td>
                     <td className="td whitespace-nowrap">
-                      <span className="inline-flex whitespace-nowrap rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200/60">
+                      <span
+                        className="inline-flex max-w-[140px] truncate rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200/60"
+                        title={order.customerInput || "Bàn tự do"}
+                      >
                         {order.customerInput || "Bàn tự do"}
                       </span>
                     </td>
@@ -234,23 +312,10 @@ function OrdersPageInner() {
                       <span className="block font-medium text-slate-700">{formatDate(order.createdAt)}</span>
                       <span className="block text-[11px] text-slate-400">{formatTime(order.createdAt)}</span>
                     </td>
-                    <td className="td">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {order.paymentStatus === "PAYMENT_REVIEW" && (
-                          <button type="button" className="btn-ghost text-xs px-2.5 py-1" onClick={() => resolveReview(order)}>Bỏ kiểm tra</button>
-                        )}
-                        {order.fulfillmentStatus === "QUEUED" && (
-                          <button type="button" className="btn text-xs px-2.5 py-1" onClick={() => { setCompleteOrder(order); setCompleteNote(order.adminNote ?? ""); }}>
-                            Xử lý xong
-                          </button>
-                        )}
-                        {(order.paymentStatus === "PENDING" || order.paymentStatus === "UNPAID") && (
-                          <button type="button" className="btn-danger text-xs px-2.5 py-1" onClick={() => cancelOrder(order)}>Hủy đơn</button>
-                        )}
-                        {order.paymentStatus !== "PAYMENT_REVIEW" && order.fulfillmentStatus !== "QUEUED" && order.paymentStatus !== "PENDING" && order.paymentStatus !== "UNPAID" && (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </div>
+                    <td className="td whitespace-nowrap">
+                      <Link href={`/orders/${order.id}`} className="btn-ghost text-xs px-3.5 py-1.5 rounded-full whitespace-nowrap">
+                        Chi tiết
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -260,21 +325,27 @@ function OrdersPageInner() {
         </div>
       </Panel>
 
-      {/* Modal gắn kiểm tra */}
+      {/* Modal hủy đơn */}
       <Modal
-        open={reviewOrder !== null}
-        onClose={() => setReviewOrder(null)}
-        eyebrow="KIỂM TRA ĐƠN"
-        title={`Gắn cờ cho ${reviewOrder?.code ?? ""}`}
-        subtitle="Đơn sẽ nổi bật trong danh sách cần xử lý."
+        open={cancelOrderItem !== null}
+        onClose={() => setCancelOrderItem(null)}
+        eyebrow="HỦY ĐƠN"
+        title={`Hủy đơn ${cancelOrderItem?.code ?? ""}`}
+        subtitle="Đơn sẽ chuyển sang trạng thái đã hủy và không thể tiếp tục."
       >
-        <form onSubmit={saveReview} className="space-y-4">
-          <Field label="Lý do cần xử lý">
-            <input className="input" value={reviewReason} onChange={(e) => setReviewReason(e.target.value)} placeholder="Ví dụ: khách chuyển khoản thiếu" required />
+        <form onSubmit={submitCancel} className="space-y-4">
+          <Field label="Lý do hủy đơn (bắt buộc)">
+            <textarea
+              className="input min-h-[90px] resize-y"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Ví dụ: khách hủy, hết nguyên liệu..."
+              required
+            />
           </Field>
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setReviewOrder(null)}>Hủy</button>
-            <button type="submit" className="btn">Lưu</button>
+            <button type="button" className="btn-ghost" onClick={() => setCancelOrderItem(null)}>Hủy</button>
+            <button type="submit" className="btn-danger">Xác nhận hủy</button>
           </div>
         </form>
       </Modal>

@@ -13,7 +13,7 @@ export default function GlobalError({ reset }: { error: Error; reset: () => void
           <button
             type="button"
             onClick={reset}
-            className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#00748b] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#066073]"
+            className="mt-6 inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#16a34a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#15803d]"
           >
             Thử lại
           </button>

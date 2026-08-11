@@ -108,7 +108,8 @@ describe("Complete Barista Telegram flow over HTTP", () => {
     await handleStart(base, client);
     expect(replies.at(-1)).toContain("Khoa");
     await showBaristaQueue(base, client);
-    expect(replies.at(-1)).toContain("chờ pha chế");
+    expect(replies.at(-1)).toContain("HÀNG ĐỢI · 1 đơn");
+    expect(replies.at(-1)).toContain("1× Cà phê sữa");
 
     const detail = context("barista:view:order-27");
     await handleBaristaCallback(detail.callback!, client);
@@ -125,11 +126,11 @@ describe("Complete Barista Telegram flow over HTTP", () => {
 
     const mine = context("barista:orders:mine");
     await handleBaristaCallback(mine.callback!, client);
-    expect(mine.replies.at(-1)).toContain("Các đơn pha chế của bạn");
+    expect(mine.replies.at(-1)).toContain("ĐƠN CỦA TÔI · 1 đơn");
 
     const history = context("barista:history:order-27");
     await handleBaristaCallback(history.callback!, client);
-    expect(history.replies.at(-1)).toContain("QUEUED → PREPARING");
-    expect(history.replies.at(-1)).toContain("PREPARING → READY");
+    expect(history.replies.at(-1)).toContain("Chờ pha → Đang pha chế");
+    expect(history.replies.at(-1)).toContain("Đang pha chế → Sẵn sàng giao");
   });
 });

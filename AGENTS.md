@@ -81,8 +81,17 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Bot tests cover authentication, role menus, Bot-to-API HTTP boundaries, complete CASH/QR flows, tracking, active-item checks, edit/delete, stale callbacks, duplicate callbacks, ownership, and non-editable orders.
 - Inline draft keyboards use compact revisioned callback data from `backend/apps/telegram-bot/src/callbacks/`; stale keyboards are cleared and refreshed from backend state, and duplicate mutations are guarded in both the Bot and API.
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
-- Notification delivery code uses a PostgreSQL transactional outbox and an optional BullMQ/Redis Telegram worker; Docker Compose no longer provisions Redis. ORDER_PAID and ORDER_READY target the order creator; PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
+- Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID targets the order creator plus every active Barista with an actionable claim button, ORDER_READY targets the order creator, and PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
+- The staff `Kiểm tra thanh toán` action actively queries the SePay transaction API as a webhook-recovery path, requiring an independent `SEPAY_API_TOKEN`; it only processes an incoming transaction after account, amount, payment code and payment creation time all match, then reuses the webhook transaction/idempotency pipeline.
+
+## Progress log — 2026-08-10
+
+- Fixed the Supabase schema gap that caused 500s on admin tabs: the remote DB was missing the `sepay_transactions` and `audit_logs` tables plus the `transaction_match_status`, `resolution_action` and `audit_entity_type` enum types. Added the idempotent migration `backend/prisma/sql/2026-08-10_sepay_audit_tables.sql` (safe to re-run) and a small runner at `backend/scripts/run-migration.cjs` (`node scripts/run-migration.cjs prisma/sql/<file>.sql`) for applying future SQL migrations against Supabase.
+- Switched `DATABASE_URL` in the root `.env.local` from the Supabase **session pooler (5432)** to the **transaction pooler (6543)** with `pgbouncer=true`. The API creates many separate `new PrismaClient()` instances (each holding its own connection pool), which exceeded the 15-connection cap of the session pooler and caused intermittent `max clients reached` 500s whenever the admin UI fired several requests in parallel (e.g. the dashboard). Transaction pooling releases connections after each transaction; `DIRECT_URL` (5432) is unchanged for migrations.
+- Fixed `Request validation failed` on the Thực đơn (catalog) and Danh mục (categories) pages: the admin menu-item and employee list schemas capped `limit` at 100 while the admin UI loads up to 500–1000 rows. Raised the cap to 1000 in `adminItemListQuerySchema` (`item.schemas.ts`) and `employeeListQuerySchema` (`employee.schemas.ts`).
+- Consolidated all backend services to consume the shared `PrismaClient` singleton (`src/db.ts`). Configured `connection_limit=5` in `src/db.ts` and `max: 3` in `src/config/database.ts` (node-postgres `pg.Pool`). This caps total active connections at 8, completely below Supabase Transaction Pooler's ceiling of 15 connections, eliminating `EMAXCONNSESSION` process crashes under concurrent admin UI navigation.
+- Verified after the fixes: all admin endpoints (orders, transactions, reconciliations, revenue, audit-logs, menu, employees, barista queue) return 200 both directly and through the FE `/api/backend` proxy, including 7 parallel calls × 3 rounds; API type-check and 57 API tests pass.
 
 ## Progress log — 2026-08-10
 
@@ -103,7 +112,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - `feat-tele` implements KHOA-006 notification outbox records, idempotent event keys, BullMQ dispatch, Telegram retry/failure persistence, Redis Docker infrastructure, and an internal failed-notification requeue command.
 - Fixed local Bot startup after token/secret rotation by replacing `tsx --env-file` with an override-aware development runner and regression coverage.
-- KHOA-006 exposes transaction-scoped hooks for SePay ORDER_PAID/PAYMENT_REVIEW; production call sites remain owned by the still-open webhook/reconciliation issues #18 and #24, with disposable-database replay coverage at the outbox boundary.
+- SePay webhook processing now calls the transaction-scoped notification outbox hooks: exact matches enqueue `ORDER_PAID`, while review classifications enqueue `PAYMENT_REVIEW`. Duplicate webhooks return success without replaying payment, notification, or audit side effects.
 
 ## Progress log — 2026-08-05
 

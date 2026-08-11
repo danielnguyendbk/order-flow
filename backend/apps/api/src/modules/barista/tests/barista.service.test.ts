@@ -4,6 +4,9 @@ import { FulfillmentStatus, PaymentStatus } from "../../orders/order.types";
 
 vi.mock("@prisma/client", () => {
   const mPrisma = {
+    user: {
+      findMany: vi.fn(),
+    },
     order: {
       findMany: vi.fn(),
     },
@@ -44,6 +47,28 @@ describe("BaristaService", () => {
       },
       include: { items: true },
       orderBy: { createdAt: "asc" },
+    });
+  });
+
+  it("returns only active Barista employees as assignment targets", async () => {
+    prismaInstance.user.findMany.mockResolvedValue([{ id: "barista-1" }]);
+
+    await service.getActiveBaristas();
+
+    expect(prismaInstance.user.findMany).toHaveBeenCalledWith({
+      where: {
+        role: "BARISTA",
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        telegramUserId: true,
+        role: true,
+        status: true,
+      },
+      orderBy: { fullName: "asc" },
     });
   });
 

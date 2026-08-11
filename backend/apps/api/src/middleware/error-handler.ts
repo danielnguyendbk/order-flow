@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from "express";
+import { isHttpError } from "http-errors";
 import { ZodError } from "zod";
 
 import { AppError } from "../core/errors.js";
@@ -28,6 +29,17 @@ export const errorHandler: ErrorRequestHandler = (
     response.status(error.statusCode).json({
       error: {
         code: error.code,
+        message: error.message,
+        requestId: request.requestId,
+      },
+    });
+    return;
+  }
+
+  if (isHttpError(error)) {
+    response.status(error.statusCode).json({
+      error: {
+        code: error.statusCode === 401 ? "UNAUTHORIZED" : "HTTP_ERROR",
         message: error.message,
         requestId: request.requestId,
       },

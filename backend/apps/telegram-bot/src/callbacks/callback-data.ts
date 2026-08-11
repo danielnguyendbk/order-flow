@@ -9,11 +9,16 @@ export type DraftCallbackAction =
   | "addMore"
   | "backCategories"
   | "backReview"
+  | "quickQuantity"
   | "skipNote"
   | "payCash"
   | "payQr"
+  | "confirmPayment"
+  | "cancelPayment"
   | "edit"
   | "editQuantity"
+  | "decreaseQuantity"
+  | "increaseQuantity"
   | "editNote"
   | "delete";
 
@@ -24,11 +29,16 @@ const ACTION_CODES: Record<DraftCallbackAction, string> = {
   addMore: "a",
   backCategories: "b",
   backReview: "r",
+  quickQuantity: "v",
   skipNote: "s",
   payCash: "pc",
   payQr: "pq",
+  confirmPayment: "py",
+  cancelPayment: "px",
   edit: "e",
   editQuantity: "q",
+  decreaseQuantity: "m",
+  increaseQuantity: "p",
   editNote: "n",
   delete: "z",
 };
@@ -41,7 +51,10 @@ const ENTITY_ACTIONS = new Set<DraftCallbackAction>([
   "category",
   "item",
   "edit",
+  "quickQuantity",
   "editQuantity",
+  "decreaseQuantity",
+  "increaseQuantity",
   "editNote",
   "delete",
 ]);

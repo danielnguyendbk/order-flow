@@ -23,7 +23,7 @@ export function normalizeDatabaseUrl(connectionString: string): string {
 export function createDatabasePool(env: AppEnv) {
   return new Pool({
     connectionString: normalizeDatabaseUrl(env.DATABASE_URL),
-    max: 10,
+    max: 3,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
   });

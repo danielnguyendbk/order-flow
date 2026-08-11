@@ -4,7 +4,9 @@ import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { BaristaOrder, DraftOrder } from "../api/order-types.js";
 import type { EmployeeSession } from "../types.js";
 import {
+  formatBaristaOrder,
   handleBaristaCallback,
+  showActiveBaristaOrders,
   showBaristaQueue,
   type BaristaCallbackContext,
   type BaristaOrderContext,
@@ -88,7 +90,9 @@ describe("Barista Telegram order flow", () => {
     const ctx = context();
     await showBaristaQueue(ctx as BaristaOrderContext, backend);
     expect(backend.listBaristaQueue).toHaveBeenCalledWith(employee.telegramUserId);
-    expect(ctx.replies[0].message).toContain("chờ pha chế");
+    expect(ctx.replies[0].message).toContain("HÀNG ĐỢI · 1 đơn");
+    expect(ctx.replies[0].message).toContain("1× Trà đào");
+    expect(callbackData(ctx.replies[0].extra)).toContain("barista:view:order-1");
   });
 
   it("opens detail and claims using the authenticated Telegram identity", async () => {
@@ -102,7 +106,7 @@ describe("Barista Telegram order flow", () => {
     const claim = context("barista:claim:order-1");
     await handleBaristaCallback(claim, backend);
     expect(backend.claimBaristaOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(claim.replies[0].message).toContain("PREPARING");
+    expect(claim.replies[0].message).toContain("Trạng thái: Đang pha");
     expect(callbackData(claim.replies[0].extra)).toContain("barista:ready:order-1");
   });
 
@@ -111,14 +115,37 @@ describe("Barista Telegram order flow", () => {
     const ready = context("barista:ready:order-1");
     await handleBaristaCallback(ready, backend);
     expect(backend.markBaristaOrderReady).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(ready.replies[0].message).toContain("READY");
+    expect(ready.replies[0].message).toContain("Trạng thái: Sẵn sàng giao");
     expect(callbackData(ready.replies[0].extra)).toContain("barista:history:order-1");
     expect(callbackData(ready.replies[0].extra)).not.toContain("barista:ready:order-1");
 
     const history = context("barista:history:order-1");
     await handleBaristaCallback(history, backend);
     expect(backend.getBaristaOrderHistory).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(history.replies[0].message).toContain("QUEUED → PREPARING");
+    expect(history.replies[0].message).toContain("Pha chế: Chờ pha → Đang pha chế");
+  });
+
+  it("shows only PREPARING orders in the active-work shortcut", async () => {
+    const preparing = { ...baristaOrder, id: "order-preparing", code: "ORD-P", fulfillmentStatus: "PREPARING", assignedBaristaId: "barista-1" };
+    const ready = { ...baristaOrder, id: "order-ready", code: "ORD-R", fulfillmentStatus: "READY", assignedBaristaId: "barista-1" };
+    const backend = api({ listBaristaOrders: vi.fn().mockResolvedValue([preparing, ready]) });
+    const ctx = context();
+
+    await showActiveBaristaOrders(ctx, backend);
+
+    expect(ctx.replies[0].message).toContain("ĐANG PHA · 1 đơn");
+    expect(ctx.replies[0].message).toContain("ORD-P");
+    expect(ctx.replies[0].message).not.toContain("ORD-R");
+  });
+
+  it("makes item notes prominent in the preparation ticket", () => {
+    const ticket = formatBaristaOrder({
+      ...baristaOrder,
+      items: [{ ...baristaOrder.items[0], quantity: 2, note: "Không đường" }],
+    });
+
+    expect(ticket).toContain("2 × Trà đào");
+    expect(ticket).toContain("LƯU Ý: Không đường");
   });
 
   it("handles a stale claim conflict without pretending it succeeded", async () => {

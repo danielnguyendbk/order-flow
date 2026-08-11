@@ -1,5 +1,5 @@
 import createHttpError from "http-errors";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../../db";
 import { OrderRepository } from "./order.repository";
 import { HistoryRepository } from "../order-status-history/history.repository";
 import { PaymentRepository } from "../payments/payment.repository";
@@ -20,8 +20,6 @@ import {
   isFulfillmentTerminal,
   isValidPaymentTransition,
 } from "./state-machine";
-
-const prisma = new PrismaClient();
 
 function isRecordNotFoundError(error: unknown): boolean {
   return (error as { code?: string }).code === "P2025";
@@ -341,6 +339,19 @@ export class OrderService {
    * @throws 409 if order cannot be claimed (already assigned, unpaid, or not queued).
    */
   public async claimOrder(orderId: string, baristaId: string): Promise<Order> {
+    const activeBarista = await prisma.user.findFirst({
+      where: {
+        id: baristaId,
+        role: "BARISTA",
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+
+    if (!activeBarista) {
+      throw createHttpError(400, "Orders can only be assigned to an active BARISTA user.");
+    }
+
     try {
       const updated = await prisma.order.update({
         where: {

@@ -10,17 +10,28 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    window.setTimeout(() => {
-      if (username.trim() === "admin" && password === "admin12345") {
-        router.push("/dashboard");
-      } else {
-        setError("Tài khoản hoặc mật khẩu không đúng.");
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null) as { message?: string; user?: unknown } | null;
+      if (!response.ok) {
+        setError(payload?.message ?? "Tài khoản hoặc mật khẩu không đúng.");
         setBusy(false);
+        return;
       }
-    }, 500);
+      router.replace("/dashboard");
+    } catch {
+      setError("Không thể kết nối máy chủ. Vui lòng kiểm tra backend và thử lại.");
+      setBusy(false);
+    }
   };
 
   return (
@@ -45,12 +56,12 @@ export default function LoginPage() {
         </div>
 
         {/* Form Container with Light Glassmorphism */}
-        <form 
-          onSubmit={submit} 
+        <form
+          onSubmit={submit}
           className="relative overflow-hidden rounded-3xl border border-white/60 bg-white/70 p-8 shadow-2xl shadow-slate-200/50 backdrop-blur-xl"
         >
           <div className="absolute inset-0 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
-          
+
           <div className="relative z-10">
             <h2 className="text-xl font-bold text-slate-800">Đăng nhập Admin</h2>
             <p className="mt-1.5 text-sm text-slate-500">Vui lòng nhập thông tin quản trị viên để vào hệ thống quán.</p>
@@ -65,33 +76,33 @@ export default function LoginPage() {
             <div className="mt-6 space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-sm font-semibold text-slate-700">Tài khoản</label>
-                <input 
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10" 
-                  value={username} 
-                  onChange={(e) => setUsername(e.target.value)} 
-                  placeholder="Nhập tên đăng nhập" 
-                  autoComplete="username" 
-                  autoFocus 
-                  required 
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Nhập tên đăng nhập"
+                  autoComplete="username"
+                  autoFocus
+                  required
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="block text-sm font-semibold text-slate-700">Mật khẩu</label>
-                <input 
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10" 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  placeholder="••••••••" 
-                  autoComplete="current-password" 
-                  required 
+                <input
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-900 placeholder-slate-400 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/10"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
                 />
               </div>
             </div>
 
-            <button 
-              type="submit" 
-              disabled={busy} 
+            <button
+              type="submit"
+              disabled={busy}
               className="mt-8 flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-bold text-white shadow-md shadow-slate-900/10 transition-all hover:bg-slate-800 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-slate-900/20 disabled:opacity-70 disabled:hover:bg-slate-900"
             >
               {busy ? (

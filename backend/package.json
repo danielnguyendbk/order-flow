@@ -5,8 +5,10 @@
     "node": ">=20.6"
   },
   "scripts": {
+    "dev": "npm run dev:api",
     "dev:api": "npm --prefix apps/api run dev",
     "dev:api:docker": "DATABASE_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow DIRECT_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow npm --prefix apps/api run dev",
+    "dev:sepay-tunnel-proxy": "tsx apps/api/src/modules/sepay/sepay-tunnel-proxy.main.ts",
     "check:api": "npm --prefix apps/api run check",
     "test:api": "npm --prefix apps/api run test",
     "check:api:auth": "npm --prefix apps/api run check:auth",
@@ -25,6 +27,8 @@
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "seed:be004": "tsx prisma/seed.ts be004",
+    "seed:menu": "tsx --env-file=../.env.local prisma/seed.ts menu",
     "seed:thai": "tsx prisma/seed.ts thai",
     "seed:thai001": "tsx prisma/seed.ts thai001",
     "seed:thai002": "tsx prisma/seed.ts thai002",

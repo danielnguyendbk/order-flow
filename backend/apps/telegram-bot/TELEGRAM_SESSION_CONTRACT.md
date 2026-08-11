@@ -50,6 +50,23 @@ Error bodies have the shape:
 The bot calls this endpoint again for every callback; a Telegram session must
 never be used as the authorization source.
 
+## BE004 local fixtures
+
+Run `npm run seed:be004` from `backend/` to create stable identities for local
+integration and Bot smoke tests.
+
+| Purpose | Telegram user ID | DB role | Status | Bot result |
+| --- | --- | --- | --- | --- |
+| Owner/admin-manager | `94004001` | `OWNER` | `ACTIVE` | `MANAGER` |
+| Service staff | `94004002` | `SERVICE_STAFF` | `ACTIVE` | `SERVICE_STAFF` |
+| Barista | `94004003` | `BARISTA` | `ACTIVE` | `BARISTA` |
+| Inactive staff | `94004004` | `SERVICE_STAFF` | `INACTIVE` | `403 EMPLOYEE_INACTIVE` |
+
+The owner username is `be004_owner` and the dev-only password is
+`be004-dev-password`. Bot requests require `x-bot-internal-secret`; operational
+routes also require `x-telegram-user-id`. The database role stays `OWNER`; the
+Bot contract maps it to `MANAGER` without adding a `MANAGER` database enum.
+
 ## Draft order contract
 
 The Bot uses these endpoints for the service-staff draft flow. Every request

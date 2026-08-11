@@ -29,4 +29,20 @@ describe("notification dispatcher", () => {
       { jobId: "notification-1" },
     );
   });
+
+  it("applies a local cutoff without changing pending historical rows", async () => {
+    const database: any = { notification: { findMany: vi.fn().mockResolvedValue([]) } };
+    const queue: any = { add: vi.fn() };
+    const notBefore = new Date("2026-08-10T14:30:00.000Z");
+
+    await dispatchPendingNotifications(database as PrismaClient, queue as Queue<NotificationJob>, notBefore);
+
+    expect(database.notification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        status: { in: ["PENDING", "RETRYING"] },
+        createdAt: { gte: notBefore },
+      },
+    }));
+    expect(queue.add).not.toHaveBeenCalled();
+  });
 });

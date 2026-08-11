@@ -1,13 +1,17 @@
 import createHttpError from "http-errors";
-import { Prisma, PrismaClient, TransactionMatchStatus } from "@prisma/client";
+import { AuditEntityType, Prisma, PrismaClient, TransactionMatchStatus } from "@prisma/client";
+import { timingSafeEqual } from "node:crypto";
 import {
   FulfillmentStatus,
   OrderStatusDomain,
   PaymentMethod,
   PaymentStatus,
 } from "../orders/order.types";
-
-const prisma = new PrismaClient();
+import {
+  recordOrderNotification,
+  recordPaymentReviewNotifications,
+} from "../notifications/notification-outbox.service";
+import { prisma } from "../../db";
 
 export interface SepayWebhookResult {
   duplicate: boolean;
@@ -22,6 +26,11 @@ export class SepayService {
 
   public async handleWebhook(payload: any, headers: Record<string, any>): Promise<SepayWebhookResult> {
     this.verifyWebhook(headers);
+
+    return this.handleTrustedTransaction(payload);
+  }
+
+  public async handleTrustedTransaction(payload: any): Promise<SepayWebhookResult> {
 
     const normalized = this.normalizePayload(payload);
 
@@ -125,6 +134,39 @@ export class SepayService {
         }
       }
 
+      if (classification.matched && candidate) {
+        await recordOrderNotification(tx, "ORDER_PAID", candidate.orderId);
+      }
+
+      if (!classification.matched) {
+        await recordPaymentReviewNotifications(tx, {
+          sourceKey: `sepay:${transaction.id}`,
+          orderId: candidate?.orderId,
+        });
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: null,
+          action: classification.matched
+            ? "SEPAY_WEBHOOK_MATCHED"
+            : "SEPAY_WEBHOOK_REVIEW_REQUIRED",
+          entityType: AuditEntityType.SEPAY_TRANSACTION,
+          entityId: transaction.id,
+          details: {
+            sepayTransactionId: normalized.sepayTransactionId.toString(),
+            paymentId: transaction.paymentId,
+            orderId: candidate?.orderId ?? null,
+            amountIn: normalized.amountIn.toString(),
+            matchStatus: transaction.matchStatus,
+            paymentStatus: classification.paymentStatus,
+            fulfillmentStatus: classification.fulfillmentStatus,
+            differenceAmount: classification.differenceAmount?.toString() ?? null,
+            reason: classification.reason,
+          },
+        },
+      });
+
       return {
         duplicate: false,
         matched: classification.matched,
@@ -136,20 +178,29 @@ export class SepayService {
   }
 
   private verifyWebhook(headers: Record<string, any>) {
-    const secret = process.env.SEPAY_WEBHOOK_SECRET;
-    if (!secret) return;
+    const secret = process.env.SEPAY_WEBHOOK_API_KEY?.trim()
+      || process.env.SEPAY_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+      if (process.env.NODE_ENV === "production") {
+        throw createHttpError(503, "SePay webhook API key is not configured");
+      }
+      return;
+    }
 
-    const provided =
+    const rawProvided =
       headers["x-sepay-webhook-secret"] ??
       headers["x-webhook-secret"] ??
       headers["authorization"];
+    const provided = Array.isArray(rawProvided) ? rawProvided[0] : rawProvided;
+    const normalized = typeof provided === "string"
+      ? provided.replace(/^(?:Apikey|Bearer)\s+/i, "").trim()
+      : "";
+    const expectedBuffer = Buffer.from(secret);
+    const providedBuffer = Buffer.from(normalized);
+    const matches = expectedBuffer.length === providedBuffer.length
+      && timingSafeEqual(expectedBuffer, providedBuffer);
 
-    const normalized =
-      typeof provided === "string" && provided.startsWith("Bearer ")
-        ? provided.slice("Bearer ".length)
-        : provided;
-
-    if (normalized !== secret) {
+    if (!matches) {
       throw createHttpError(401, "Invalid SePay webhook secret");
     }
   }

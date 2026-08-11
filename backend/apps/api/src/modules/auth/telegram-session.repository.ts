@@ -1,5 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
+import { prisma } from "../../db";
 import type { TelegramEmployeeRecord, TelegramEmployeeRepository } from "./telegram-session.types";
 
 type RawEmployeeRow = {
@@ -15,7 +14,7 @@ export interface RawQueryClient {
 }
 
 export class PrismaTelegramEmployeeRepository implements TelegramEmployeeRepository {
-  public constructor(private readonly database: RawQueryClient = new PrismaClient()) {}
+  public constructor(private readonly database: RawQueryClient = prisma) {}
 
   public async findByTelegramUserId(telegramUserId: number): Promise<TelegramEmployeeRecord | null> {
     const rows = await this.database.$queryRaw<RawEmployeeRow[]>`

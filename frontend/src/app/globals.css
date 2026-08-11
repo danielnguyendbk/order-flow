@@ -77,30 +77,44 @@
   src: url("/fonts/be-vietnam-pro-latin-800-normal.woff2") format("woff2");
 }
 
-/* ── Design tokens ── */
+/* ── Design tokens (Donezo-style: forest green, clean light sidebar) ── */
 @theme {
-  --color-canvas: #f5f7fa;
+  /* Canvas / Surface */
+  --color-canvas: #f2f4f3;
   --color-surface: #ffffff;
-  --color-surface-soft: #fafbfd;
-  --color-ink: #1c2733;
-  --color-muted: #64748b;
-  --color-line: #e4e9f0;
-  --color-line-soft: #eef1f6;
+  --color-surface-soft: #f8faf9;
 
-  --color-brand-50: #eef9fb;
-  --color-brand-100: #d8f1f6;
-  --color-brand-200: #b3e3ec;
-  --color-brand-300: #7ccfdd;
-  --color-brand-400: #3fb4c8;
-  --color-brand-500: #1597ad;
-  --color-brand-600: #00748b;
-  --color-brand-700: #066073;
-  --color-brand-800: #0a4d5e;
-  --color-brand-900: #0e4050;
+  /* Text */
+  --color-ink: #1a2421;
+  --color-muted: #6b7a75;
 
-  --color-sidebar: #0b1526;
-  --color-sidebar-soft: #101d33;
-  --color-sidebar-line: #1b2a45;
+  /* Borders */
+  --color-line: #e8eceb;
+  --color-line-soft: #f0f3f2;
+
+  /* Brand green (mint / emerald) */
+  --color-brand-50: #f0fdf4;
+  --color-brand-100: #dcfce7;
+  --color-brand-200: #bbf7d0;
+  --color-brand-300: #86efac;
+  --color-brand-400: #4ade80;
+  --color-brand-500: #22c55e;
+  --color-brand-600: #16a34a;
+  --color-brand-700: #15803d;
+  --color-brand-800: #166534;
+  --color-brand-900: #14532d;
+
+  /* Deep forest (dark cards: KPI revenue, uptime, active nav) */
+  --color-forest-600: #1a4731;
+  --color-forest-700: #14532d;
+  --color-forest-800: #0f3d24;
+  --color-forest-900: #0b2b1c;
+  --color-forest-950: #071f14;
+
+  /* Sidebar */
+  --color-sidebar: #ffffff;
+  --color-sidebar-soft: #f7faf8;
+  --color-sidebar-line: #e8eceb;
 
   --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -172,25 +186,49 @@ aside::-webkit-scrollbar {
   }
 }
 
+@keyframes waveShift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ── Reusable component classes ── */
 @layer components {
+  /* Card — borderless, shadow-only như Donezo */
   .card {
-    @apply rounded-2xl border border-line bg-surface shadow-[0_1px_2px_rgba(28,39,51,0.04),0_8px_24px_rgba(28,39,51,0.04)];
+    @apply rounded-2xl bg-surface shadow-[0_2px_12px_rgba(15,61,36,0.07),0_1px_3px_rgba(15,61,36,0.04)];
   }
+
   .input {
-    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15;
+    @apply w-full rounded-xl border border-line bg-white px-3 py-2 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15;
   }
   .label {
     @apply mb-1.5 block text-[13px] font-medium text-ink/80;
   }
+
+  /* Buttons — Donezo style (forest green, rounded-xl) */
   .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-forest-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-forest-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-forest-700/40 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-ghost {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-brand-300 hover:text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30;
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm font-medium text-ink transition hover:border-brand-300 hover:text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30;
   }
   .btn-danger {
-    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:opacity-50;
   }
   .btn-link {
     @apply inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium text-brand-700 transition hover:bg-brand-50;
@@ -201,8 +239,24 @@ aside::-webkit-scrollbar {
   .empty-state {
     @apply py-10 text-center text-sm text-muted;
   }
+
+  /* Bar chart — cột dạng pill striped (Donezo: rounded-full + diagonal stripes) */
+  .bar-striped {
+    border-radius: 999px;
+    background-color: var(--color-brand-100);
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.6) 0 5px,
+      transparent 5px 10px
+    );
+  }
+  .group:hover .bar-striped {
+    background-color: var(--color-brand-200);
+  }
+
+  /* Table */
   .th {
-    @apply px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500;
+    @apply px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-400;
   }
   .td {
     @apply px-4 py-3 align-top text-sm;

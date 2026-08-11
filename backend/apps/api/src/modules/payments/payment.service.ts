@@ -1,5 +1,5 @@
 import createHttpError from "http-errors";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { AuditEntityType, Prisma } from "@prisma/client";
 import {
   FulfillmentStatus,
   OrderStatusDomain,
@@ -9,8 +9,7 @@ import {
 } from "../orders/order.types";
 import { PaymentRepository } from "./payment.repository";
 import { generatePaymentCode } from "../orders/order-code";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../db";
 
 export interface ConfirmCashInput {
   confirmedByUserId: string;
@@ -143,6 +142,24 @@ export class PaymentService {
         where: { id: order.payment.id },
       });
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: confirmedByUserId,
+          action: "CASH_PAYMENT_CONFIRMED",
+          entityType: AuditEntityType.PAYMENT,
+          entityId: order.payment.id,
+          details: {
+            orderId,
+            orderCode: order.orderCode,
+            amount: receivedAmount.toString(),
+            previousPaymentStatus: order.paymentStatus,
+            newPaymentStatus: PaymentStatus.PAID,
+            previousFulfillmentStatus: order.fulfillmentStatus,
+            newFulfillmentStatus: FulfillmentStatus.QUEUED,
+          },
+        },
+      });
+
       return payment as unknown as Payment;
     });
   }
@@ -240,6 +257,23 @@ export class PaymentService {
           newStatus: PaymentStatus.PENDING,
           changedByUserId: requestedByUserId,
           reason: "QR payment initialized",
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: requestedByUserId,
+          action: "QR_PAYMENT_INITIALIZED",
+          entityType: AuditEntityType.PAYMENT,
+          entityId: payment.id,
+          details: {
+            orderId,
+            orderCode: order.orderCode,
+            paymentCode,
+            expectedAmount: payment.expectedAmount.toString(),
+            previousPaymentStatus: order.paymentStatus,
+            newPaymentStatus: PaymentStatus.PENDING,
+          },
         },
       });
 

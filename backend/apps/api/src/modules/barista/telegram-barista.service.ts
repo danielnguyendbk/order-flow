@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-
+import { prisma } from "../../db";
 import { TelegramOrderError } from "../orders/telegram-order.service";
 import { recordOrderNotification } from "../notifications/notification-outbox.service";
 
@@ -60,7 +60,7 @@ function toOrderDto(order: OrderWithItems): TelegramBaristaOrderDto {
 }
 
 export class TelegramBaristaService implements TelegramBaristaServiceContract {
-  public constructor(private readonly database: PrismaClient = new PrismaClient()) {}
+  public constructor(private readonly database: PrismaClient = prisma) {}
 
   public async listQueue(): Promise<TelegramBaristaOrderDto[]> {
     const orders = await this.database.order.findMany({

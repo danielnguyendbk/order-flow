@@ -2,7 +2,7 @@ import type { Telegraf } from "telegraf";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import { authenticateEmployee, type EmployeeAuthenticationApi, MissingTelegramIdentityError } from "../auth/employee-auth.js";
-import { roleMenu } from "../keyboards/role-menu.js";
+import { baristaQuickKeyboard, roleMenu, serviceStaffQuickKeyboard } from "../keyboards/role-menu.js";
 import type { BotContext, BotSession } from "../types.js";
 
 const ACCESS_DENIED_MESSAGE = "Tài khoản Telegram của bạn chưa được đăng ký hoặc đã bị vô hiệu hóa.";
@@ -12,7 +12,7 @@ const SERVICE_UNAVAILABLE_MESSAGE = "Không thể kết nối hệ thống. Hãy
 export interface StartHandlerContext {
   from?: { id: number };
   session: BotSession;
-  reply(message: string, extra?: ReturnType<typeof roleMenu>): Promise<unknown>;
+  reply(message: string, extra?: object): Promise<unknown>;
 }
 
 export function isAccessDenied(error: unknown): boolean {
@@ -22,6 +22,20 @@ export function isAccessDenied(error: unknown): boolean {
 export async function handleStart(ctx: StartHandlerContext, api: EmployeeAuthenticationApi): Promise<void> {
   try {
     const employee = await authenticateEmployee(ctx, api);
+    if (employee.role === "SERVICE_STAFF") {
+      await ctx.reply(
+        `👋 Chào ${employee.displayName}.\n\nChọn thao tác bên dưới để bắt đầu order:`,
+        serviceStaffQuickKeyboard(),
+      );
+      return;
+    }
+    if (employee.role === "BARISTA") {
+      await ctx.reply(
+        `Chào ${employee.displayName}. Chọn thao tác pha chế:`,
+        baristaQuickKeyboard(),
+      );
+      return;
+    }
     await ctx.reply(`Chào ${employee.displayName}.`, roleMenu(employee.role));
   } catch (error) {
     if (error instanceof MissingTelegramIdentityError) {

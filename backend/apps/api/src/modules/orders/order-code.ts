@@ -15,5 +15,8 @@ export function generateOrderCode(): string {
  * SePay will match incoming transfers that reference this code.
  */
 export function generatePaymentCode(orderCode: string): string {
-  return `PAY${orderCode.replace(/[^A-Z0-9]/g, "")}`;
+  const normalizedOrderCode = orderCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const suffix = normalizedOrderCode.slice(-10);
+  if (!suffix) throw new Error("Cannot generate a payment code from an empty order code");
+  return `PAY${suffix}`;
 }

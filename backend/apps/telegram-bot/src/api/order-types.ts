@@ -37,6 +37,11 @@ export interface QrPaymentResult {
   qrImageUrl: string;
 }
 
+export interface QrReconciliationResult {
+  order: DraftOrder;
+  matched: boolean;
+}
+
 export interface BaristaOrderItem {
   id: string;
   name: string;

@@ -5,6 +5,28 @@ Base path: `/api/v1`
 Status: **mixed** — routes remain planned unless their section explicitly marks them implemented.
 Routes explicitly marked **implemented** have handlers, validation, authorization, and tests. All other route groups remain planned.
 
+## Integration fixtures
+
+Status: **implemented**
+
+BE-004 shared fixtures live in `backend/docs/integration-fixtures.md` and are
+seeded with:
+
+```bash
+npm run seed:be004
+```
+
+The fixture namespace is `BE004`. It provides one active owner/admin-manager,
+one active service staff employee, one active barista, one inactive service
+staff employee, active/inactive menu data, and a `PAID + QUEUED` order for
+barista smoke testing. Bot and Telegram-owned operational requests use:
+
+- `x-bot-internal-secret`
+- `x-telegram-user-id`
+
+Database `OWNER` remains the persisted manager role and is exposed to the
+Telegram Bot as `MANAGER`.
+
 ## Telegram session
 
 Status: **implemented**
@@ -103,6 +125,42 @@ Status: **implemented**
 - QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
 - CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
 - CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
+- CASH confirmation and QR initialization write financial audit logs.
+
+## SePay webhook and reconciliation
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/webhooks/sepay` | Receive and reconcile a SePay transaction webhook |
+| `GET` | `/api/v1/admin/transactions` | List received SePay transactions |
+| `GET` | `/api/v1/admin/transactions/:transactionId` | Get a received SePay transaction |
+| `GET` | `/api/v1/admin/reconciliations` | List transactions needing reconciliation review |
+| `GET` | `/api/v1/admin/reconciliations/:reconciliationId` | Get a reconciliation review transaction |
+| `POST` | `/api/v1/admin/reconciliations/:reconciliationId/resolve` | Resolve a reconciliation review transaction |
+
+- SePay accepts `sepayTransactionId`, `sepay_transaction_id`, `transactionId`, `transaction_id`, or `id` as the external unique transaction ID.
+- SePay accepts `amountIn`, `amount_in`, `transferAmount`, or `amount` as the received amount.
+- Duplicate SePay webhooks are idempotent and still return HTTP success without reprocessing payments, notifications, or audit logs.
+- Exact QR matches transition the payment to `PAID`, queue the order, write payment history, and enqueue `ORDER_PAID`.
+- Underpaid, overpaid, wrong-code, and cancelled-order arrivals move the payment/order into review where applicable and enqueue `PAYMENT_REVIEW`.
+- Reconciliation resolution requires an owner actor and writes a financial audit log with the resolution action and note.
+
+## Refunds, revenue, and audit
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/orders/:orderId/refund` | Record a manual refund for a paid order |
+| `GET` | `/api/v1/admin/reports/revenue` | Return revenue totals by date range and payment method |
+| `GET` | `/api/v1/admin/audit-logs` | List audit logs |
+
+- Refund body: `{ "refundedByUserId": "...", "reason": "...", "amount": 50000 }`; `amount` is optional and defaults to the received payment amount.
+- Refunds require an owner actor, reject duplicate refund records for the same payment, and write `MANUAL_REFUND_RECORDED` audit logs.
+- Revenue accepts `from` and `to` query parameters as ISO date-time strings or `YYYY-MM-DD`; date-only values are expanded to the Asia/Bangkok day boundary.
+- Revenue separates `CASH`, `QR`, and `REFUNDED`; refunded amounts are excluded from net revenue.
 
 ## Barista queue
 
@@ -110,12 +168,14 @@ Status: **implemented**
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/v1/barista/employees` | List active Barista employees eligible for assignment |
 | `GET` | `/api/v1/barista/queue` | List queued paid orders for barista processing |
 | `GET` | `/api/v1/barista/orders?baristaId=...` | List preparing or ready orders assigned to a barista |
 | `POST` | `/api/v1/orders/:orderId/claim` | Atomically claim a queued order |
 
 - Queue only shows orders with `fulfillmentStatus = QUEUED` and `paymentStatus = PAID`.
 - Claim is atomic at the database layer: only one barista can win a concurrent claim.
+- Claim rejects a target user unless their current role is `BARISTA` and status is `ACTIVE`.
 - `GET /barista/orders` requires `baristaId`.
 
 ## Public menu
@@ -127,14 +187,7 @@ Status: **implemented**
 | `GET` | `/api/v1/menu/categories` | List public menu categories |
 | `GET` | `/api/v1/menu/items` | List public menu items |
 
-## Telegram service-staff menu
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/menu/categories` | List active categories for authenticated service staff |
-| `GET` | `/api/v1/menu/items?categoryId=...` | List active items for a category |
-
-Implementation status: **implemented**. Both routes require the Bot secret and an active `SERVICE_STAFF` Telegram identity.
+Implementation status: **implemented for authenticated Telegram service staff**. Both routes re-check the employee identity and active state.
 
 ## Telegram service-staff orders
 
