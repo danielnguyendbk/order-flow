@@ -79,19 +79,21 @@ READY --> DELIVERED
 
 # 📁 Project Structure
 
-``` text
-acis-flow/
-├── apps/
-│   ├── api/
-│   ├── telegram-bot/
-│   └── admin-web/
-├── packages/
-│   ├── shared-types/
-│   └── shared-utils/
-├── prisma/
-├── docker/
-├── docs/
-├── docker-compose.yml
+```text
+order-flow/
+├── frontend/                     # Next.js admin dashboard
+│   ├── src/app/                  # App Router pages
+│   ├── src/components/           # Reusable UI components
+│   └── public/                   # Static assets
+├── backend/
+│   ├── apps/
+│   │   ├── api/                  # Express HTTP API
+│   │   └── telegram-bot/         # Telegraf Telegram Bot
+│   ├── packages/                 # Shared types, constants and lint config
+│   ├── prisma/                   # Schema and seed scripts
+│   ├── docs/                     # API and local-data documentation
+│   └── docker-compose.yml        # Local PostgreSQL
+├── AGENTS.md                     # Repository map
 └── README.md
 ```
 
@@ -210,7 +212,6 @@ Các trường hợp cần kiểm thử:
 -   Revenue
 -   Telegram Notification
 -   Atomic Claim
-
 
 
 

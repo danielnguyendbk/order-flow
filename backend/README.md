@@ -105,30 +105,20 @@ unique key makes replayed sources idempotent.
 
 - `apps/api` - HTTP API service
 - `apps/telegram-bot` - Telegram bot service
-- `apps/admin-web` - Admin web application
 - `packages/shared-types` - Shared TypeScript types
 - `packages/shared-constants` - Shared constants
 - `packages/eslint-config` - Shared ESLint configuration
 - `prisma` - Database schema and seed script
 
-## Supabase environment
+## Database environment
 
 Copy the repository-level `.env.example` to `.env.local` and provide the
-Supabase values there. The admin web client reads
-`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+PostgreSQL connection values there.
 
 Prisma uses `DATABASE_URL` for application traffic and `DIRECT_URL` for
 migrations. Keep both server-only and never prefix them with `NEXT_PUBLIC_`.
-
-Install the admin web dependency from its directory:
-
-```bash
-cd apps/admin-web
-npm install
-```
-
-Row Level Security must be enabled for every table exposed through the
-browser Supabase client. Never use a Supabase service-role key in admin-web.
+The active Next.js admin application is maintained in the repository-level
+`frontend/` workspace and reads application data through the HTTP API.
 
 ## API service
 

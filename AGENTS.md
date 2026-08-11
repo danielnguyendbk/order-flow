@@ -31,7 +31,7 @@ order-flow/
     │   │       ├── middleware/       # HTTP middleware
     │   │       ├── routes/           # Route registration
     │   │       └── modules/          # Domain modules (listed below); auth is implemented
-    │   ├── telegram-bot/             # Telegram bot service
+    │   └── telegram-bot/             # Telegram bot service
     │   │   └── src/
     │   │       ├── bot.ts            # Bot factory placeholder (`createBot`)
     │   │       ├── commands/          # Bot commands
@@ -40,7 +40,6 @@ order-flow/
     │   │       ├── middleware/        # Bot middleware
     │   │       ├── scenes/            # Multi-step conversation flows
     │   │       └── services/          # Bot-facing integrations/services
-    │   └── admin-web/                # (Deprecated placeholder)
     ├── packages/
     │   ├── shared-types/              # Types shared across applications
     │   ├── shared-constants/          # Constants shared across applications
@@ -84,6 +83,10 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID targets the order creator plus every active Barista with an actionable claim button, ORDER_READY targets the order creator, and PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
 - The staff `Kiểm tra thanh toán` action actively queries the SePay transaction API as a webhook-recovery path, requiring an independent `SEPAY_API_TOKEN`; it only processes an incoming transaction after account, amount, payment code and payment creation time all match, then reuses the webhook transaction/idempotency pipeline.
+
+## Progress log — 2026-08-11
+
+- Removed the deprecated `backend/apps/admin-web` placeholder and its unused browser Supabase client; the active Next.js admin application remains in the repository-level `frontend/` workspace.
 
 ## Progress log — 2026-08-10
 
@@ -148,7 +151,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - API work: start at `backend/apps/api/src/` and the relevant `modules/<domain>/` folder.
 - Telegram work: start at `backend/apps/telegram-bot/src/`.
 - Telegram callback protocol and replay guards: start at `backend/apps/telegram-bot/src/callbacks/`.
-- Admin UI work: start at `backend/apps/admin-web/src/`.
+- Admin UI work: start at `frontend/src/app/`.
 - Database work: start at `backend/prisma/schema.prisma` and `backend/prisma/seed.ts`.
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
@@ -157,7 +160,6 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Swift mobile work: start at `SWIFT_MOBILE_APP_SPEC.md`; the MVP is an OWNER-only, read-only manager dashboard and explicitly excludes service-staff/Barista actions.
 - Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Telegram authentication: Web App JWT flow is registered in `backend/apps/api/src/modules/auth/auth.routes.ts`; internal Bot employee resolution is implemented in `telegram-session.routes.ts` and mounted at `/api/v1/telegram/bot/session` from `apps/api/src/app.ts`.
-- Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 
 ## Installed GitHub skills
