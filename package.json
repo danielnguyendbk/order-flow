@@ -1,0 +1,10 @@
+{
+  "name": "order-flow",
+  "private": true,
+  "scripts": {
+    "live": "concurrently --kill-others-on-fail --names api,web,bot,worker --prefix-colors blue,magenta,green,yellow \"npm --prefix backend run dev:api\" \"npm --prefix frontend run dev\" \"npm --prefix backend run dev:bot\" \"npm --prefix backend run dev:notification-worker\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

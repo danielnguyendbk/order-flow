@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { BackendApi } from "../api/backend-client.js";
-import type { DraftOrder } from "../api/order-types.js";
+import type { DraftOrder, MenuItem } from "../api/order-types.js";
 import { SERVICE_STAFF_QUICK_ACTIONS } from "../keyboards/role-menu.js";
 import type { EmployeeSession } from "../types.js";
 import { handleServiceQuickAction, handleUnknownText, type ServiceMenuContext } from "./service-menu.handler.js";
@@ -22,7 +22,7 @@ const draft: DraftOrder = {
   items: [],
 };
 
-function api(): BackendApi {
+function api(overrides: Partial<BackendApi> = {}): BackendApi {
   return {
     createTelegramSession: vi.fn().mockResolvedValue(employee),
     createDraftOrder: vi.fn().mockResolvedValue(draft),
@@ -43,6 +43,7 @@ function api(): BackendApi {
     getBaristaOrderHistory: vi.fn(),
     claimBaristaOrder: vi.fn(),
     markBaristaOrderReady: vi.fn(),
+    ...overrides,
   };
 }
 
@@ -84,12 +85,38 @@ describe("service-staff quick menu", () => {
     expect(ctx.replies.at(-1)?.[0]).toBe("Bạn chưa có đơn nào.");
   });
 
-  it("keeps the compact keyboard visible for menu and unknown text", async () => {
+  it("lists every available menu item grouped by category and keeps the compact keyboard visible", async () => {
     const menu = context();
-    await handleServiceQuickAction(menu, api(), "menu");
+    const teaItems: MenuItem[] = [
+      { id: "peach-tea", categoryId: "tea", name: "Trà đào", price: 30_000, isActive: true },
+      { id: "old-tea", categoryId: "tea", name: "Trà ngừng bán", price: 20_000, isActive: false },
+    ];
+    const coffeeItems: MenuItem[] = [
+      { id: "milk-coffee", categoryId: "coffee", name: "Cà phê sữa", price: 25_000, isActive: true },
+    ];
+    const backend = api({
+      getMenuCategories: vi.fn().mockResolvedValue([
+        { id: "tea", name: "Trà" },
+        { id: "coffee", name: "Cà phê" },
+      ]),
+      getMenuItems: vi.fn().mockImplementation((_telegramUserId: number, categoryId: string) =>
+        Promise.resolve(categoryId === "tea" ? teaItems : coffeeItems)),
+    });
+
+    await handleServiceQuickAction(menu, backend, "menu");
+
+    expect(backend.getMenuCategories).toHaveBeenCalledWith(employee.telegramUserId);
+    expect(backend.getMenuItems).toHaveBeenCalledWith(employee.telegramUserId, "tea");
+    expect(backend.getMenuItems).toHaveBeenCalledWith(employee.telegramUserId, "coffee");
+    expect(menu.replies.at(-1)?.[0]).toContain("📋 DANH SÁCH MÓN");
+    expect(menu.replies.at(-1)?.[0]).toContain("• Trà đào — 30.000 đ");
+    expect(menu.replies.at(-1)?.[0]).toContain("• Cà phê sữa — 25.000 đ");
+    expect(menu.replies.at(-1)?.[0]).not.toContain("Trà ngừng bán");
     expect(keyboardLabels(menu.replies.at(-1)?.[1])).toEqual(Object.values(SERVICE_STAFF_QUICK_ACTIONS));
     expect(menu.replies.at(-1)?.[1]).toMatchObject({ reply_markup: { is_persistent: true, resize_keyboard: true } });
+  });
 
+  it("keeps the compact keyboard visible for unknown text", async () => {
     const unknown = context();
     await handleUnknownText(unknown, api());
     expect(unknown.replies.at(-1)?.[0]).toContain("Lệnh chưa được hỗ trợ");
