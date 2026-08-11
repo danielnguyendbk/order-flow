@@ -83,10 +83,12 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID targets the order creator plus every active Barista with an actionable claim button, ORDER_READY targets the order creator, and PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
 - The staff `Kiểm tra thanh toán` action actively queries the SePay transaction API as a webhook-recovery path, requiring an independent `SEPAY_API_TOKEN`; it only processes an incoming transaction after account, amount, payment code and payment creation time all match, then reuses the webhook transaction/idempotency pipeline.
+- The experimental voice-order handler can download a Telegram voice message and invoke a configured Hermes-compatible command bridge; it is disabled unless `VOICE_ORDER_SCRIPT` is configured.
 
 ## Progress log — 2026-08-11
 
 - Removed the deprecated `backend/apps/admin-web` placeholder and its unused browser Supabase client; the active Next.js admin application remains in the repository-level `frontend/` workspace.
+- Added the optional experimental Telegram voice-order bridge on `test/dashboard-with-voice`; normal button-based ordering remains available when the bridge is disabled or fails.
 
 ## Progress log — 2026-08-10
 
@@ -103,6 +105,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Removed the local Redis service from Docker Compose; auth session caching remains process-local, while the optional BullMQ notification worker requires an externally supplied Redis service if used.
 - Added a guarded, non-destructive users-only sync from Supabase into local Docker PostgreSQL; it preserves UUIDs and refuses unique identity conflicts.
 - Usage and verification queries are documented in `backend/docs/visualization-seed.md`.
+- Removed the local realtime Order Simulator and its dedicated API scripts; test data remains available through the Docker-only visualization seed.
 
 ## Progress log — 2026-08-07
 
