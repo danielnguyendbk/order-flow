@@ -7,6 +7,8 @@ import { getRevenueReport, type ApiRevenueReport, type ApiDailyRevenueItem } fro
 import { useApiData } from "@/lib/use-api-data";
 import { toDateInput } from "@/lib/period";
 
+import { useToast } from "@/components/Toast";
+
 function thirtyDaysAgo(): string {
   const d = new Date();
   d.setDate(d.getDate() - 29);
@@ -16,10 +18,40 @@ function thirtyDaysAgo(): string {
 type MethodFilter = "ALL" | "CASH" | "QR";
 
 export default function RevenueReportPage() {
+  const toast = useToast();
   const today = toDateInput(new Date());
   const [from, setFrom] = useState(thirtyDaysAgo());
   const [to, setTo] = useState(today);
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("ALL");
+
+  const handleExportExcel = () => {
+    if (!byDate || byDate.length === 0) {
+      toast.push("Không có dữ liệu doanh thu để xuất file", "error");
+      return;
+    }
+
+    const headers = ["Ngày", "Tiền mặt (CASH)", "Chuyển khoản (QR)", "Đã hoàn (REFUNDED)", "Doanh thu thuần", "Số đơn"];
+    const rows = byDate.map((item) => [
+      item.date,
+      item.cashAmount,
+      item.qrAmount,
+      item.refundedAmount,
+      item.netRevenue,
+      item.orderCount,
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Bao_cao_doanh_thu_${from}_den_${to}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.push("Đã xuất báo cáo doanh thu ra file Excel (.csv)", "success");
+  };
 
   const load = useCallback(async () => {
     const payload = await getRevenueReport(from, to);
@@ -99,7 +131,18 @@ export default function RevenueReportPage() {
       <PageHeader
         title="Báo cáo doanh thu"
         description="Doanh thu theo ngày theo phương thức thanh toán. Số tiền hoàn (REFUNDED) không tính vào doanh thu thuần."
-      />
+      >
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          className="btn text-xs"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Xuất Excel
+        </button>
+      </PageHeader>
 
       {/* Bộ lọc */}
       <Panel>
