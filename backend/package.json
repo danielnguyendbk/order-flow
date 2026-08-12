@@ -20,6 +20,7 @@
     "start:bot": "node apps/telegram-bot/dist/index.js",
     "start:notification-worker": "node apps/telegram-bot/dist/worker.js",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate:sepay-v2:docker": "DATABASE_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow DIRECT_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow node scripts/run-migration.cjs prisma/sql/2026-08-12_sepay_v2_transaction_ids.sql && npm run db:generate",
     "db:seed": "prisma db seed --schema prisma/schema.prisma",
     "db:seed:visualization": "tsx prisma/seed-visualization.ts",
     "db:sync:users:docker": "tsx prisma/sync-users-to-docker.ts",

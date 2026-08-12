@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import type { EmployeeSession } from "../types.js";
+import { orderStatusKeyboard } from "../keyboards/order-status.js";
 import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
@@ -74,6 +75,22 @@ function callbackContext(data: string): OrderStatusCallbackContext & { replies: 
 }
 
 describe("Telegram order tracking", () => {
+  it("shows active reconciliation on every pending QR order status", () => {
+    const buttons = orderStatusKeyboard(order()).reply_markup.inline_keyboard.flat();
+
+    expect(buttons).toContainEqual(expect.objectContaining({
+      text: "Kiểm tra thanh toán",
+      callback_data: "order:reconcile:order-1",
+    }));
+  });
+
+  it("hides reconciliation after a QR order is paid", () => {
+    const buttons = orderStatusKeyboard(order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }))
+      .reply_markup.inline_keyboard.flat();
+
+    expect(buttons).not.toContainEqual(expect.objectContaining({ text: "Kiểm tra thanh toán" }));
+  });
+
   it("lists only the authenticated employee's orders", async () => {
     const backend = api();
     const ctx = context();

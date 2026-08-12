@@ -16,8 +16,8 @@ export function validateSepayWebhook(data: any): ValidationResult {
 
   if (transactionId === undefined || transactionId === null || transactionId === "") {
     errors.push("sepayTransactionId, transactionId, or id is required");
-  } else if (!isBigIntLike(transactionId)) {
-    errors.push("transaction id must be an integer-compatible value");
+  } else if (!isTransactionIdLike(transactionId)) {
+    errors.push("transaction id must be a numeric or UUID value");
   }
 
   const amount = data.amountIn ?? data.amount_in ?? data.transferAmount ?? data.amount;
@@ -39,3 +39,8 @@ function isBigIntLike(value: unknown): boolean {
   }
 }
 
+function isTransactionIdLike(value: unknown): boolean {
+  const normalized = String(value).trim();
+  return /^\d+$/.test(normalized)
+    || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized);
+}

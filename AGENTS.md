@@ -83,8 +83,15 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID targets the order creator plus every active Barista with an actionable claim button, ORDER_READY targets the order creator, and PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
-- The staff `Kiểm tra thanh toán` action actively queries the SePay transaction API as a webhook-recovery path, requiring an independent `SEPAY_API_TOKEN`; it only processes an incoming transaction after account, amount, payment code and payment creation time all match, then reuses the webhook transaction/idempotency pipeline.
+- The staff `Kiểm tra thanh toán` action actively queries SePay API v2 as a webhook-recovery path, requiring `SEPAY_API_TOKEN` and an environment-specific `SEPAY_API_BASE_URL`; Live and Test Mode/Sandbox tokens are isolated. Numeric API v1 and UUID API v2 transaction IDs share the same string idempotency column.
 - The experimental voice-order handler can download a Telegram voice message and invoke a configured Hermes-compatible command bridge; it is disabled unless `VOICE_ORDER_SCRIPT` is configured.
+
+## Progress log — 2026-08-12
+
+- Added SePay API v2 active transaction lookup with explicit Live/Sandbox endpoints so Telegram payment checks can use isolated Test Mode API tokens.
+- Migrated SePay external transaction identifiers from `bigint` to `varchar(64)`, preserving legacy numeric IDs while accepting v2 UUIDs.
+- Added a 60-second SePay lookup tolerance for bank timestamp rounding/clock skew while retaining exact account, incoming amount and payment-code validation.
+- Pending QR status messages now expose `Kiểm tra thanh toán` directly, so active SePay reconciliation is not limited to the original QR message.
 
 ## Progress log — 2026-08-11
 

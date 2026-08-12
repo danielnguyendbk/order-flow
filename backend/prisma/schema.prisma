@@ -221,7 +221,7 @@ model Payment {
 
 model SepayTransaction {
   id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sepayTransactionId BigInt                 @unique @map("sepay_transaction_id")
+  sepayTransactionId String                 @unique @map("sepay_transaction_id") @db.VarChar(64)
   paymentId          String?                @map("payment_id") @db.Uuid
   transactionDate    DateTime               @map("transaction_date") @db.Timestamptz(6)
   code               String?                @db.VarChar(100)
