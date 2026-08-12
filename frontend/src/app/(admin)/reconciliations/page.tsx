@@ -183,7 +183,7 @@ export default function ReconciliationsPage() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader
         title="Đối soát giao dịch"
         description="Đối chiếu giao dịch SePay với đơn hàng — nhận diện thiếu/thừa tiền, sai mã, trùng lặp webhook."

@@ -145,7 +145,7 @@ export default function LoginPage() {
         const s = spots[i];
 
         // Quick dry so piled splashes vanish fast, reducing the layered look
-        s.life += 0.03 * (s.decay ?? 1); // Controls fade out duration
+        s.life += 0.024 * (s.decay ?? 1); // Controls fade out duration
         s.alpha = 1 - Math.pow(s.life, 2.5); // Stays opaque longer (ink drying)
 
         if (s.life >= 1 || s.alpha <= 0.005) {

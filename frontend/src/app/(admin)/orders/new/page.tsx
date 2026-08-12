@@ -118,7 +118,7 @@ export default function NewOrderPage() {
   };
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Tạo đơn mới" description="Đặt món thủ công từ web cho khách gọi điện hoặc đặt trước.">
         <Link href="/orders" className="btn-ghost">← Quay lại danh sách</Link>
       </PageHeader>

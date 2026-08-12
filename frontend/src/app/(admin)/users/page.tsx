@@ -150,7 +150,7 @@ export default function StaffPage() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader
         title="Quản lý Nhân viên Quán"
         description="Quản lý danh sách nhân viên phục vụ và pha chế. Tích hợp Telegram ID để nhận diện qua Bot Telegram."
