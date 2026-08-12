@@ -21,6 +21,58 @@ export interface ServiceMenuContext {
   reply(message: string, extra?: object): Promise<unknown>;
 }
 
+const TELEGRAM_MENU_MESSAGE_LIMIT = 3_500;
+
+function formatMoney(amount: number): string {
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(amount);
+}
+
+function splitMenuMessages(lines: string[]): string[] {
+  const messages: string[] = [];
+  let current = "";
+
+  for (const line of lines) {
+    const next = current ? `${current}\n${line}` : line;
+    if (next.length <= TELEGRAM_MENU_MESSAGE_LIMIT) {
+      current = next;
+      continue;
+    }
+    if (current) messages.push(current);
+    current = line;
+  }
+
+  if (current) messages.push(current);
+  return messages;
+}
+
+async function showFullMenu(ctx: ServiceMenuContext, api: BackendApi, employee: EmployeeSession): Promise<void> {
+  const categories = await api.getMenuCategories(employee.telegramUserId);
+  const categoryItems = await Promise.all(
+    categories.map(async (category) => ({
+      category,
+      items: (await api.getMenuItems(employee.telegramUserId, category.id)).filter((item) => item.isActive),
+    })),
+  );
+  const availableCategories = categoryItems.filter(({ items }) => items.length > 0);
+
+  if (availableCategories.length === 0) {
+    await ctx.reply("Menu hiện chưa có món đang bán.", serviceStaffQuickKeyboard());
+    return;
+  }
+
+  const lines = ["📋 DANH SÁCH MÓN", ""];
+  availableCategories.forEach(({ category, items }, categoryIndex) => {
+    lines.push(`☕ ${category.name.toUpperCase()}`);
+    items.forEach((item) => lines.push(`• ${item.name} — ${formatMoney(item.price)} đ`));
+    if (categoryIndex < availableCategories.length - 1) lines.push("");
+  });
+
+  const messages = splitMenuMessages(lines);
+  for (const [index, message] of messages.entries()) {
+    await ctx.reply(message, index === messages.length - 1 ? serviceStaffQuickKeyboard() : undefined);
+  }
+}
+
 async function showRoleMenu(ctx: ServiceMenuContext, employee: EmployeeSession, unknownCommand = false): Promise<void> {
   if (employee.role === "SERVICE_STAFF") {
     await ctx.reply(
@@ -59,7 +111,7 @@ export async function handleServiceQuickAction(
       await showMyOrders(ctx, api, employee);
       return;
     }
-    await showRoleMenu(ctx, employee);
+    await showFullMenu(ctx, api, employee);
   } catch (error) {
     await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể tải menu. Hãy thử lại.");
   }
