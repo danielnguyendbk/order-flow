@@ -108,7 +108,7 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Danh mục thực đơn" description="Tách riêng danh mục khỏi trang sản phẩm để dễ sắp xếp và bật/tắt hiển thị.">
         <button type="button" className="btn" onClick={openCreate}>Thêm danh mục</button>
       </PageHeader>

@@ -21,11 +21,18 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { message?: string; error?: { message?: string } } | null;
+    const payload = await response.json().catch(() => null) as any;
     if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
-    throw new ApiError(payload?.error?.message ?? payload?.message ?? "Không thể tải dữ liệu từ máy chủ.", response.status);
+    
+    let errorMessage = payload?.error?.message ?? payload?.message ?? "Không thể tải dữ liệu từ máy chủ.";
+    if (payload?.error?.details && Array.isArray(payload.error.details)) {
+      const issues = payload.error.details.map((d: any) => `${d.path}: ${d.message}`).join(", ");
+      if (issues) errorMessage += ` (${issues})`;
+    }
+    
+    throw new ApiError(errorMessage, response.status);
   }
 
   if (response.status === 204) return undefined as T;
@@ -125,8 +132,8 @@ export interface ApiSepayTransactionFull {
   resolvedBy: { id: string; fullName: string; username: string | null } | null;
 }
 
-export interface ApiDailyRevenueItem {
-  date: string;
+export interface ApiTimeRevenueItem {
+  time: string;
   cashAmount: string;
   qrAmount: string;
   grossRevenue: string;
@@ -152,7 +159,7 @@ export interface ApiRevenueReport {
     QR: { amount: string; count: number };
     REFUNDED: { amount: string; count: number };
   };
-  byDate?: ApiDailyRevenueItem[];
+  byTime?: ApiTimeRevenueItem[];
 }
 
 export interface ApiCategory {
@@ -319,9 +326,9 @@ export function getReconciliation(reconciliationId: string) {
   return apiRequest<ApiSepayTransactionFull>(`admin/reconciliations/${reconciliationId}`);
 }
 
-export function getRevenueReport(from: string, to: string) {
+export function getRevenueReport(from: string, to: string, groupBy: string = "day") {
   return apiRequest<{ data: ApiRevenueReport }>(
-    `admin/reports/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    `admin/reports/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&groupBy=${encodeURIComponent(groupBy)}`,
   );
 }
 

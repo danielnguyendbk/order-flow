@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useCallback, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { PageHeader, Panel, Badge, EmptyState, orderPaymentTone, Field, Modal, PageLoading } from "@/components/ui";
 import { PeriodFilter } from "@/components/PeriodFilter";
 import { useToast } from "@/components/Toast";
@@ -29,16 +29,40 @@ import {
 const PAYMENT_STATUS_OPTIONS = Object.keys(ORDER_PAYMENT_STATUS_LABEL) as OrderPaymentStatus[];
 const FULFILLMENT_STATUS_OPTIONS = Object.keys(ORDER_FULFILLMENT_STATUS_LABEL) as OrderFulfillmentStatus[];
 
+function formatLocation(input: string | null) {
+  if (!input) return "Bàn tự do";
+  const lower = input.trim().toLowerCase();
+  if (lower === "mang đi") return "Mang đi";
+  
+  const match = lower.match(/^(?:bàn|ban)\s*(\d+)$/);
+  if (match) {
+    return `Bàn ${match[1].padStart(2, '0')}`;
+  }
+  return "Bàn tự do";
+}
+
 function OrdersPageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const toast = useToast();
 
-  const [q, setQ] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("");
-  const [fulfillmentStatus, setFulfillmentStatus] = useState("");
-  const [period, setPeriod] = useState<Period | "">("");
+  const [q, setQ] = useState(searchParams.get("q") ?? "");
+  const [paymentStatus, setPaymentStatus] = useState(searchParams.get("paymentStatus") ?? "");
+  const [fulfillmentStatus, setFulfillmentStatus] = useState(searchParams.get("fulfillmentStatus") ?? "");
+  const [period, setPeriod] = useState<Period | "">((searchParams.get("period") as Period) ?? "");
   const [needsAction, setNeedsAction] = useState(searchParams.get("needsAction") === "1");
   const [me, setMe] = useState<ApiUser | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (paymentStatus) params.set("paymentStatus", paymentStatus);
+    if (fulfillmentStatus) params.set("fulfillmentStatus", fulfillmentStatus);
+    if (period) params.set("period", period);
+    if (needsAction) params.set("needsAction", "1");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [q, paymentStatus, fulfillmentStatus, period, needsAction, pathname, router]);
 
   const load = useCallback(async () => {
     const [ordersPayload, mePayload] = await Promise.all([
@@ -54,10 +78,6 @@ function OrdersPageInner() {
   const rows: Order[] = useMemo(() => apiRows.map(toOrder), [apiRows]);
 
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [cancelOrderItem, setCancelOrderItem] = useState<Order | null>(null);
-  const [cancelReason, setCancelReason] = useState("");
-  const [completeOrder, setCompleteOrder] = useState<Order | null>(null);
-  const [completeNote, setCompleteNote] = useState("");
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -100,53 +120,14 @@ function OrdersPageInner() {
     }
   };
 
-  /* Bỏ kiểm tra: PAYMENT_REVIEW → PAID (admin override) */
-  const clearReview = (order: Order) => {
-    void act(
-      order.id,
-      () => overrideOrderStatus(order.id, { domain: "PAYMENT", status: "PAID", reason: "Admin bỏ kiểm tra từ Web Admin" }),
-      `Đã bỏ kiểm tra đơn ${order.code}.`,
-    );
-  };
 
-  /* Xử lý xong: QUEUED → DELIVERED (admin override, kèm ghi chú) */
-  const completeService = (e: FormEvent) => {
-    e.preventDefault();
-    if (!completeOrder) return;
-    const note = completeNote.trim() || "Admin xác nhận đã xử lý xong";
-    void act(
-      completeOrder.id,
-      () => overrideOrderStatus(completeOrder.id, { domain: "FULFILLMENT", status: "DELIVERED", reason: note }),
-      `Đã hoàn tất xử lý đơn ${completeOrder.code}.`,
-    );
-    setCompleteOrder(null);
-    setCompleteNote("");
-  };
-
-  /* Hủy đơn: UNPAID / PENDING_PAYMENT → CANCELLED */
-  const submitCancel = (e: FormEvent) => {
-    e.preventDefault();
-    if (!cancelOrderItem) return;
-    if (!cancelReason.trim()) {
-      toast.push("Vui lòng nhập lý do hủy đơn.", "error");
-      return;
-    }
-    const requesterId = me?.id;
-    void act(
-      cancelOrderItem.id,
-      () => cancelOrder(cancelOrderItem!.id, { reason: cancelReason.trim(), requesterId }),
-      `Đã hủy đơn ${cancelOrderItem.code}.`,
-    );
-    setCancelOrderItem(null);
-    setCancelReason("");
-  };
 
   if (loading && rows.length === 0) {
     return <PageLoading label="Đang tải danh sách đơn hàng..." subText="Đang lấy thông tin đơn hàng và trạng thái pha chế..." />;
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Đơn hàng" description="Theo dõi trạng thái thanh toán và quy trình thực hiện (xử lý/giao hàng) chuyên biệt.">
         <Link href="/orders/new" className="btn">+ Tạo đơn</Link>
       </PageHeader>
@@ -197,9 +178,9 @@ function OrdersPageInner() {
       {/* Bộ lọc */}
       <Panel className="mb-6">
         <form onSubmit={(e) => e.preventDefault()} className="flex flex-wrap items-end gap-3.5">
-          <div className="flex-1 min-w-[240px]">
+          <div className="w-full sm:w-[260px]">
             <Field label="Tìm kiếm">
-              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm, khách hàng..." />
+              <input className="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mã đơn, sản phẩm..." />
             </Field>
           </div>
           <div className="w-full sm:w-48">
@@ -286,9 +267,9 @@ function OrdersPageInner() {
                     <td className="td whitespace-nowrap">
                       <span
                         className="inline-flex max-w-[140px] truncate rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200/60"
-                        title={order.customerInput || "Bàn tự do"}
+                        title={formatLocation(order.customerInput)}
                       >
-                        {order.customerInput || "Bàn tự do"}
+                        {formatLocation(order.customerInput)}
                       </span>
                     </td>
                     <td className="td">
@@ -325,49 +306,7 @@ function OrdersPageInner() {
         </div>
       </Panel>
 
-      {/* Modal hủy đơn */}
-      <Modal
-        open={cancelOrderItem !== null}
-        onClose={() => setCancelOrderItem(null)}
-        eyebrow="HỦY ĐƠN"
-        title={`Hủy đơn ${cancelOrderItem?.code ?? ""}`}
-        subtitle="Đơn sẽ chuyển sang trạng thái đã hủy và không thể tiếp tục."
-      >
-        <form onSubmit={submitCancel} className="space-y-4">
-          <Field label="Lý do hủy đơn (bắt buộc)">
-            <textarea
-              className="input min-h-[90px] resize-y"
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              placeholder="Ví dụ: khách hủy, hết nguyên liệu..."
-              required
-            />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setCancelOrderItem(null)}>Hủy</button>
-            <button type="submit" className="btn-danger">Xác nhận hủy</button>
-          </div>
-        </form>
-      </Modal>
 
-      {/* Modal hoàn tất dịch vụ */}
-      <Modal
-        open={completeOrder !== null}
-        onClose={() => setCompleteOrder(null)}
-        eyebrow="XỬ LÝ ĐƠN"
-        title={`Hoàn tất đơn ${completeOrder?.code ?? ""}`}
-        subtitle="Xác nhận đã xử lý xong và chuyển trạng thái giao hàng."
-      >
-        <form onSubmit={completeService} className="space-y-4">
-          <Field label="Ghi chú (tuỳ chọn)">
-            <input className="input" value={completeNote} onChange={(e) => setCompleteNote(e.target.value)} placeholder="Ví dụ: Đã đóng gói cẩn thận" />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => setCompleteOrder(null)}>Hủy</button>
-            <button type="submit" className="btn">Hoàn tất</button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

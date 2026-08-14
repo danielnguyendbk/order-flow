@@ -127,7 +127,7 @@ export default function CatalogPage() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Quản lý Thực đơn" description="Quản lý các danh mục và món ăn / đồ uống phục vụ khách hàng trên Telegram Bot.">
         <button type="button" className="btn" onClick={openAdd}>+ Thêm món</button>
       </PageHeader>

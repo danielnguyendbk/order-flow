@@ -98,7 +98,7 @@ function RecentOrders({ orders }: { orders: ApiOrder[] }) {
       <div className="mb-2 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-bold text-ink">Đơn hàng gần đây</h2>
-          <p className="mt-0.5 text-sm text-muted">8 đơn mới nhất</p>
+          <p className="mt-0.5 text-sm text-muted">5 đơn mới nhất</p>
         </div>
         <Link href="/orders" className="text-xs font-semibold text-brand-700 hover:text-brand-800">
           Xem tất cả →
@@ -248,8 +248,8 @@ function KpiCard({
 export default function DashboardPage() {
   const load = useCallback(async (): Promise<DashboardPayload> => {
     const [orders, transactions] = await Promise.all([
-      getOrders(1000).catch(() => ({ data: [] as ApiOrder[] })),
-      getTransactions().catch(() => ({ data: [] as ApiSepayTransactionFull[] })),
+      getOrders(1000),
+      getTransactions(),
     ]);
     return { orders: orders.data, transactions: transactions.data };
   }, []);
@@ -290,7 +290,7 @@ export default function DashboardPage() {
     return days;
   }, [data.orders]);
 
-  const recent = useMemo(() => [...data.orders].slice(0, 8), [data.orders]);
+  const recent = useMemo(() => [...data.orders].slice(0, 5), [data.orders]);
 
   if (loading && data.orders.length === 0) {
     return <PageLoading label="Đang tải dữ liệu tổng quan..." subText="Đang lấy danh sách đơn hàng và giao dịch mới nhất..." />;
