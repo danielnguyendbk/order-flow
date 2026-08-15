@@ -17,8 +17,8 @@ const report = {
     QR: { amount: 700_000n, count: 1 },
     REFUNDED: { amount: 200_000n, count: 1 },
   },
-  byDate: [{
-    date: "2026-08-01", cashAmount: 500_000n, qrAmount: 700_000n,
+  byTime: [{
+    time: "2026-08-01", cashAmount: 500_000n, qrAmount: 700_000n,
     grossRevenue: 1_200_000n, refundedAmount: 200_000n, netRevenue: 1_000_000n,
     orderCount: 2, refundCount: 1,
   }],

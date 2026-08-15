@@ -4,10 +4,11 @@ import { prisma } from "../../db";
 export interface RevenueReportInput {
   from: Date;
   to: Date;
+  groupBy?: "hour" | "day" | "week" | "month";
 }
 
-export interface DailyRevenueItem {
-  date: string;
+export interface TimeRevenueItem {
+  time: string;
   cashAmount: bigint;
   qrAmount: bigint;
   grossRevenue: bigint;
@@ -46,19 +47,18 @@ export class RevenueReportService {
       }),
     ]);
 
-    const startDateStr = toLocalDateString(input.from);
-    const endDateStr = toLocalDateString(input.to);
+    const groupBy = input.groupBy || "day";
+    const timeMap = new Map<string, TimeRevenueItem>();
 
-    const dailyMap = new Map<string, DailyRevenueItem>();
+    const startMs = input.from.getTime();
+    const endMs = input.to.getTime();
 
-    const startMs = new Date(`${startDateStr}T00:00:00+07:00`).getTime();
-    const endMs = new Date(`${endDateStr}T00:00:00+07:00`).getTime();
-
-    for (let ms = startMs; ms <= endMs + 3600000; ms += 86400000) {
-      const dStr = toLocalDateString(new Date(ms));
-      if (!dailyMap.has(dStr)) {
-        dailyMap.set(dStr, {
-          date: dStr,
+    // Iterate hour by hour to ensure no missing buckets due to daylight saving/timezone shifts
+    for (let ms = startMs; ms <= endMs; ms += 3600000) {
+      const bucketStr = getLocalTimeBucket(new Date(ms), groupBy);
+      if (!timeMap.has(bucketStr)) {
+        timeMap.set(bucketStr, {
+          time: bucketStr,
           cashAmount: BigInt(0),
           qrAmount: BigInt(0),
           grossRevenue: BigInt(0),
@@ -76,8 +76,8 @@ export class RevenueReportService {
     for (const order of paidOrders) {
       const receivedAmount = order.payment?.receivedAmount ?? order.totalAmount;
       const orderDate = order.paidAt ?? order.createdAt;
-      const dStr = toLocalDateString(orderDate);
-      const item = dailyMap.get(dStr);
+      const bucketStr = getLocalTimeBucket(orderDate, groupBy);
+      const item = timeMap.get(bucketStr);
 
       if (order.paymentMethod === PaymentMethod.CASH) {
         cash.amount += receivedAmount;
@@ -103,8 +103,8 @@ export class RevenueReportService {
     for (const log of refundLogs) {
       const details = log.details as Record<string, unknown>;
       const amount = parseBigInt(details.refundAmount);
-      const dStr = toLocalDateString(log.createdAt);
-      const item = dailyMap.get(dStr);
+      const bucketStr = getLocalTimeBucket(log.createdAt, groupBy);
+      const item = timeMap.get(bucketStr);
 
       refunded.amount += amount;
       refunded.count += 1;
@@ -115,7 +115,7 @@ export class RevenueReportService {
       }
     }
 
-    const byDate = Array.from(dailyMap.values()).map((item) => {
+    const byTime = Array.from(timeMap.values()).map((item) => {
       const grossRevenue = item.cashAmount + item.qrAmount;
       const netRevenue = grossRevenue - item.refundedAmount;
       return {
@@ -127,8 +127,8 @@ export class RevenueReportService {
 
     const grossRevenue = cash.amount + qr.amount;
     const netRevenue = grossRevenue - refunded.amount;
-    const totalDays = byDate.length;
-    const avgDailyNetRevenue = totalDays > 0 ? netRevenue / BigInt(totalDays) : BigInt(0);
+    const totalBuckets = byTime.length;
+    const avgDailyNetRevenue = totalBuckets > 0 ? netRevenue / BigInt(totalBuckets) : BigInt(0);
 
     return {
       range: {
@@ -141,7 +141,7 @@ export class RevenueReportService {
         netRevenue,
         paidOrderCount: paidOrders.length,
         refundCount: refunded.count,
-        totalDays,
+        totalDays: totalBuckets,
         avgDailyNetRevenue,
       },
       byMethod: {
@@ -149,13 +149,39 @@ export class RevenueReportService {
         QR: qr,
         REFUNDED: refunded,
       },
-      byDate,
+      byTime,
     };
   }
 }
 
+const hcmFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hour12: false
+});
+
+function getLocalTimeBucket(date: Date, groupBy: string): string {
+  const parts = hcmFormatter.formatToParts(date);
+  const map = {} as Record<string, string>;
+  for (const p of parts) map[p.type] = p.value;
+
+  if (groupBy === "hour") return `${map.year}-${map.month}-${map.day} ${map.hour}:00`;
+  if (groupBy === "month") return `${map.year}-${map.month}`;
+  if (groupBy === "week") {
+    // get monday of this week in local time
+    const d = new Date(`${map.year}-${map.month}-${map.day}T12:00:00Z`);
+    const day = d.getUTCDay();
+    const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+    d.setUTCDate(diff);
+    return d.toISOString().substring(0, 10);
+  }
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+const hcmDateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+
 function toLocalDateString(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(date);
+  return hcmDateFormatter.format(date);
 }
 
 function parseBigInt(value: unknown): bigint {

@@ -9,6 +9,7 @@ The repository currently contains two main workspaces: `backend/` and `frontend/
 ```text
 order-flow/
 ├── AGENTS.md                         # This persistent project map
+├── package.json                      # Root process runner (`npm run live`)
 ├── SWIFT_MOBILE_APP_SPEC.md          # OWNER-only, read-only Swift manager dashboard contract
 ├── frontend/                         # Next.js Admin Web Application
 │   ├── src/
@@ -72,6 +73,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
+- The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
 - Service staff can complete an API-owned Telegram order flow: category → item → quantity → note → review → CASH or QR. They can edit/cancel drafts, list their orders and refresh payment/fulfillment status. Price, total, ownership and payment transitions are always supplied or enforced by the API.

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ToastProvider, useToast } from "./Toast";
+import { PageHeaderProvider, usePageHeaderState } from "@/components/ui";
 import { ApiError, getCurrentUser, type ApiUser } from "@/lib/api";
 
 /* ── Icon set (stroke SVG nhẹ nhàng, đồng bộ kiểu Donezo) ── */
@@ -266,65 +267,32 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 
 /* ── Header phía trên (Donezo: search + bell + message + avatar) ── */
 function TopHeader({ onOpenDrawer, me }: { onOpenDrawer: () => void; me: ApiUser | null }) {
+  const header = usePageHeaderState();
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-white px-4 shadow-xs lg:px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-line bg-white px-4 shadow-xs lg:px-6">
+      <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           data-drawer-open
           onClick={onOpenDrawer}
           aria-label="Mở menu điều hướng"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 lg:hidden"
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 lg:hidden"
         >
           <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
             <path d="M3 5h14M3 10h14M3 15h14" />
           </svg>
         </button>
-
-        {/* Search */}
-        <label className="hidden items-center gap-2.5 rounded-xl border border-line bg-slate-50/80 px-4 py-2.5 text-sm text-slate-400 transition focus-within:border-brand-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-500/15 sm:flex sm:w-64 md:w-80">
-          <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0" {...stroke} aria-hidden>
-            <circle cx="9" cy="9" r="5.5" />
-            <path d="M13.5 13.5L17 17" />
-          </svg>
-          <input
-            type="search"
-            placeholder="Tìm kiếm đơn hàng, khách hàng…"
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-slate-400"
-          />
-        </label>
+        {header && (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="h-6 w-1.5 shrink-0 rounded-full bg-gradient-to-b from-brand-400 to-forest-700" aria-hidden />
+            <h1 className="truncate text-lg font-extrabold tracking-tight text-ink lg:text-xl">{header.title}</h1>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-1.5">
-        {/* Bell */}
-        <button
-          type="button"
-          aria-label="Thông báo"
-          className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-        >
-          <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
-            <path d="M10 2.5a5 5 0 0 1 5 5c0 3.5 1.5 5 2 5.5H3c.5-.5 2-2 2-5.5a5 5 0 0 1 5-5Z" />
-            <path d="M8.5 16a1.8 1.8 0 0 0 3 0" />
-          </svg>
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-        </button>
-        {/* Message */}
-        <button
-          type="button"
-          aria-label="Tin nhắn"
-          className="relative hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 sm:flex"
-        >
-          <svg viewBox="0 0 20 20" className="h-5 w-5" {...stroke} aria-hidden>
-            <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4h11A1.5 1.5 0 0 1 17 5.5v8A1.5 1.5 0 0 1 15.5 15h-7L5 17.5V15H4.5A1.5 1.5 0 0 1 3 13.5v-8Z" />
-            <path d="M6.5 8.5h7M6.5 11h4.5" />
-          </svg>
-          <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-forest-800 px-1 text-[9px] font-bold text-white ring-2 ring-white">
-            3
-          </span>
-        </button>
-
-        <span className="mx-1 hidden h-5 w-px bg-line sm:block" aria-hidden />
-
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {header?.actions}
+        {header && header.title && <span className="hidden h-5 w-px bg-line sm:block" aria-hidden />}
         {/* Avatar + name/email */}
         <div className="flex items-center gap-2.5 cursor-pointer rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-forest-600 to-forest-900 text-sm font-bold text-white shadow-sm">
@@ -386,6 +354,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ToastProvider>
+      <PageHeaderProvider>
       <div className="min-h-screen">
         {/* Sidebar desktop */}
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-line bg-sidebar overscroll-contain lg:block">
@@ -410,10 +379,15 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         {/* Workspace */}
         <div className="lg:pl-64">
-          <TopHeader onOpenDrawer={openDrawer} me={me} />
-          <main className="mx-auto max-w-[1400px] px-4 pt-6 pb-10 lg:px-8 lg:pt-6 lg:pb-10">{children}</main>
+          <div className="flex h-dvh flex-col">
+            <TopHeader onOpenDrawer={openDrawer} me={me} />
+            <main className="mx-auto w-full max-w-[1400px] flex-1 overflow-y-auto px-4 pt-6 pb-10 lg:px-8 lg:pt-6 lg:pb-10 overscroll-contain">
+              <div key={pathname} className="animate-[fadeUp_.35s_ease-out]">{children}</div>
+            </main>
+          </div>
         </div>
       </div>
+      </PageHeaderProvider>
     </ToastProvider>
   );
 }

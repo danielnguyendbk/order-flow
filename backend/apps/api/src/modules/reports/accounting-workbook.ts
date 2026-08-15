@@ -603,10 +603,10 @@ function buildDailySheet(workbook: ExcelJS.Workbook, report: RevenueReport): Exc
   const sheet = createDataSheet(workbook, "Tổng hợp ngày", "BẢNG TỔNG HỢP DOANH THU THEO NGÀY", [
     "STT", "Ngày", "Tiền mặt", "QR/Ngân hàng", "Doanh thu gộp", "Hoàn tiền", "Doanh thu thuần", "Số đơn", "Số hoàn",
   ], `Từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} - Đơn vị: VND`);
-  report.byDate.forEach((item, index) => {
+  report.byTime.forEach((item, index) => {
     const excelRow = sheet.rowCount + 1;
     sheet.addRow([
-      index + 1, new Date(`${item.date}T00:00:00+07:00`), Number(item.cashAmount), Number(item.qrAmount),
+      index + 1, new Date(`${item.time}T00:00:00+07:00`), Number(item.cashAmount), Number(item.qrAmount),
       formula(`C${excelRow}+D${excelRow}`, item.grossRevenue), Number(item.refundedAmount),
       formula(`E${excelRow}-F${excelRow}`, item.netRevenue), item.orderCount, item.refundCount,
     ]);

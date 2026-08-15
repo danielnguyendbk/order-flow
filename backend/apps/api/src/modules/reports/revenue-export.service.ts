@@ -161,10 +161,10 @@ export async function createLegacyAccountingWorkbook(
   daily.mergeCells("A2:H2");
   daily.getCell("A2").value = `Từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} - Đơn vị: VND`;
   daily.addRow(["STT", "Ngày", "Tiền mặt", "QR/Ngân hàng", "Doanh thu gộp", "Hoàn tiền", "Doanh thu thuần", "Số đơn"]);
-  report.byDate.forEach((item, index) => {
+  report.byTime.forEach((item, index) => {
     daily.addRow([
       index + 1,
-      new Date(`${item.date}T00:00:00+07:00`),
+      new Date(`${item.time}T00:00:00+07:00`),
       Number(item.cashAmount),
       Number(item.qrAmount),
       Number(item.grossRevenue),

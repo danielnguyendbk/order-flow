@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader, Panel, EmptyState, Field, Modal, PageLoading } from "@/components/ui";
 import { formatVnd, formatDate } from "@/lib/format";
 import {
@@ -13,13 +13,10 @@ import {
 import { useApiData } from "@/lib/use-api-data";
 import { toDateInput } from "@/lib/period";
 
-function thirtyDaysAgo(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 29);
-  return toDateInput(d);
-}
+import { useToast } from "@/components/Toast";
 
 type MethodFilter = "ALL" | "CASH" | "QR";
+type ViewMode = "day" | "week" | "month" | "year";
 
 const emptyTaxForm = {
   taxpayerName: "",
@@ -38,25 +35,96 @@ const emptyTaxForm = {
 };
 
 export default function RevenueReportPage() {
-  const today = toDateInput(new Date());
-  const [from, setFrom] = useState(thirtyDaysAgo());
-  const [to, setTo] = useState(today);
+  const toast = useToast();
+
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
+  const [anchorDateStr, setAnchorDateStr] = useState(toDateInput(new Date()));
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("ALL");
   const [taxExportFormat, setTaxExportFormat] = useState<Exclude<RevenueExportFormat, "xlsx"> | null>(null);
   const [taxForm, setTaxForm] = useState(emptyTaxForm);
   const [exporting, setExporting] = useState<RevenueExportFormat | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [fromTime, setFromTime] = useState<string>("00:00");
+  const [toTime, setToTime] = useState<string>("23:59");
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("revenueFilters");
+    const frame = window.requestAnimationFrame(() => {
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.viewMode) setViewMode(parsed.viewMode);
+          if (parsed.anchorDateStr) setAnchorDateStr(parsed.anchorDateStr);
+          if (parsed.methodFilter) setMethodFilter(parsed.methodFilter);
+          if (parsed.fromTime) setFromTime(parsed.fromTime);
+          if (parsed.toTime) setToTime(parsed.toTime);
+        } catch {
+          sessionStorage.removeItem("revenueFilters");
+        }
+      }
+      setIsInitialized(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    sessionStorage.setItem("revenueFilters", JSON.stringify({
+      viewMode, anchorDateStr, methodFilter, fromTime, toTime
+    }));
+  }, [isInitialized, viewMode, anchorDateStr, methodFilter, fromTime, toTime]);
+
+  const { from, to, groupBy } = useMemo(() => {
+    const anchor = anchorDateStr ? new Date(anchorDateStr) : new Date();
+    if (isNaN(anchor.getTime())) return { from: toDateInput(new Date()), to: toDateInput(new Date()), groupBy: "hour" };
+
+    let fromDate = new Date(anchor);
+    let toDate = new Date(anchor);
+    let apiGroupBy: string = "day";
+
+    if (viewMode === "day") {
+      apiGroupBy = "hour";
+      let actualFromTime = fromTime;
+      let actualToTime = toTime;
+      if (actualFromTime > actualToTime) {
+        actualFromTime = toTime;
+        actualToTime = fromTime;
+      }
+      return {
+        from: `${toDateInput(fromDate)}T${actualFromTime}:00+07:00`,
+        to: `${toDateInput(toDate)}T${actualToTime}:59+07:00`,
+        groupBy: apiGroupBy,
+      };
+    } else if (viewMode === "week") {
+      apiGroupBy = "day";
+      const day = anchor.getDay();
+      const diff = anchor.getDate() - day + (day === 0 ? -6 : 1);
+      fromDate.setDate(diff);
+      toDate = new Date(fromDate);
+      toDate.setDate(toDate.getDate() + 6);
+    } else if (viewMode === "month") {
+      apiGroupBy = "week";
+      fromDate.setDate(1);
+      toDate = new Date(fromDate.getFullYear(), fromDate.getMonth() + 1, 0);
+    } else if (viewMode === "year") {
+      apiGroupBy = "month";
+      fromDate = new Date(anchor.getFullYear(), 0, 1);
+      toDate = new Date(anchor.getFullYear(), 11, 31);
+    }
+
+    return { from: toDateInput(fromDate), to: toDateInput(toDate), groupBy: apiGroupBy };
+  }, [anchorDateStr, viewMode, fromTime, toTime]);
 
   const load = useCallback(async () => {
-    const payload = await getRevenueReport(from, to);
+    const payload = await getRevenueReport(from, to, groupBy);
     return payload.data;
-  }, [from, to]);
+  }, [from, to, groupBy]);
 
   const { data: report, loading, error } = useApiData<ApiRevenueReport | null>(load, null);
-
   const summary = report?.summary;
   const byMethod = report?.byMethod;
-  const byDate = useMemo(() => report?.byDate ?? [], [report?.byDate]);
+  const byTime = report?.byTime;
 
   const totals = useMemo(() => {
     if (!summary) return null;
@@ -68,7 +136,7 @@ export default function RevenueReportPage() {
     const grossVnd = toNumber(summary.grossRevenue);
     const netVnd = toNumber(summary.netRevenue);
     const paidOrderCount = summary.paidOrderCount;
-    const totalDays = summary.totalDays || (byDate.length || 1);
+    const totalDays = summary.totalDays || (byTime?.length || 1);
     const avgDailyNetRevenue = summary.avgDailyNetRevenue
       ? toNumber(summary.avgDailyNetRevenue)
       : Math.round(netVnd / totalDays);
@@ -84,21 +152,16 @@ export default function RevenueReportPage() {
       totalDays,
       avgDailyNetRevenue,
     };
-  }, [summary, byMethod, byDate]);
+  }, [summary, byMethod, byTime]);
 
-  // Filtered daily items according to method filter
-  const filteredDailyItems = useMemo(() => {
-    return byDate.map((item) => {
+  const filteredItems = useMemo(() => {
+    if (!byTime) return [];
+    return byTime.map((item) => {
       const cash = Number(item.cashAmount) || 0;
       const qr = Number(item.qrAmount) || 0;
       const refunded = Number(item.refundedAmount) || 0;
       const gross = Number(item.grossRevenue) || cash + qr;
       const net = Number(item.netRevenue) || gross - refunded;
-
-      let displayAmount = net;
-      if (methodFilter === "CASH") displayAmount = cash;
-      if (methodFilter === "QR") displayAmount = qr;
-
       return {
         ...item,
         cashVal: cash,
@@ -106,21 +169,27 @@ export default function RevenueReportPage() {
         refundedVal: refunded,
         grossVal: gross,
         netVal: net,
-        displayAmount,
       };
-    }).filter(item => item.orderCount > 0 || item.refundCount > 0);
-  }, [byDate, methodFilter]);
+    });
+  }, [byTime]);
 
   const maxDailyAmount = useMemo(() => {
-    if (!filteredDailyItems.length) return 1;
-    return Math.max(...filteredDailyItems.map((d) => d.displayAmount), 1);
-  }, [filteredDailyItems]);
+    if (!filteredItems.length) return 1;
+    let max = 1;
+    filteredItems.forEach(d => {
+       if (methodFilter === "ALL") max = Math.max(max, d.netVal, d.cashVal, d.qrVal);
+       else if (methodFilter === "CASH") max = Math.max(max, d.cashVal);
+       else if (methodFilter === "QR") max = Math.max(max, d.qrVal);
+    });
+    return Math.max(max, 1);
+  }, [filteredItems, methodFilter]);
 
   const exportExcel = async () => {
     setExportError(null);
     setExporting("xlsx");
     try {
       await downloadRevenueExport(from, to, "xlsx");
+      toast.push("Đã tải báo cáo kế toán XLSX", "success");
     } catch (reason) {
       setExportError(reason instanceof Error ? reason.message : "Không thể xuất Excel.");
     } finally {
@@ -156,6 +225,7 @@ export default function RevenueReportPage() {
     try {
       await downloadRevenueExport(from, to, taxExportFormat, tax);
       setTaxExportFormat(null);
+      toast.push("Đã tải tờ khai DOCX", "success");
     } catch (reason) {
       setExportError(reason instanceof Error ? reason.message : "Không thể xuất tờ khai.");
     } finally {
@@ -163,17 +233,52 @@ export default function RevenueReportPage() {
     }
   };
 
-  if (loading) {
-    return <PageLoading label="Đang đối soát & tổng hợp doanh thu..." subText="Đang tính toán doanh thu thuần, hoàn tiền và sản lượng theo ngày..." />;
+  function getPathFor(key: "netVal" | "cashVal" | "qrVal") {
+    if (filteredItems.length === 0) return { pathD: "", polygonD: "" };
+    const points = filteredItems.map((item, i) => {
+      const x = filteredItems.length > 1 ? (i / (filteredItems.length - 1)) * 100 : 50;
+      const val = item[key];
+      const y = val > 0 ? 100 - (val / maxDailyAmount) * 90 : 100;
+      return { x, y };
+    });
+    let pathD = `M -2,${points[0].y} L ${points[0].x},${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const cpX = (prev.x + curr.x) / 2;
+      pathD += ` C ${cpX},${prev.y} ${cpX},${curr.y} ${curr.x},${curr.y}`;
+    }
+    pathD += ` L 102,${points[points.length - 1].y}`;
+    const polygonD = points.length > 1 ? `${pathD} L 102,110 L -2,110 Z` : "";
+    return { pathD, polygonD };
   }
 
+  const netPath = getPathFor("netVal");
+  const cashPath = getPathFor("cashVal");
+  const qrPath = getPathFor("qrVal");
+
+  if (loading && !report) {
+    return <PageLoading label="Đang tổng hợp báo cáo doanh thu..." subText="Đang nhóm dữ liệu theo thời gian..." />;
+  }
+
+  const formatShortTime = (timeStr: string) => {
+    if (timeStr.includes(" ")) {
+      const [, time] = timeStr.split(" ");
+      return time.substring(0,5);
+    }
+    const p = timeStr.split("-");
+    if (p.length === 2) return `Tháng ${p[1]}`;
+    if (groupBy === "week") return `Tuần ${p[2]}/${p[1]}`;
+    return `${p[2]}/${p[1]}`;
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-[fadeUp_.35s_ease-out]">
       <PageHeader
         title="Báo cáo doanh thu"
-        description="Doanh thu theo ngày theo phương thức thanh toán. Số tiền hoàn (REFUNDED) không tính vào doanh thu thuần."
+        description="Phân tích doanh thu và sản lượng theo thời gian và phương thức thanh toán."
       >
-        <button type="button" className="btn-ghost" onClick={() => void exportExcel()} disabled={!report || exporting !== null}>
+        <button type="button" className="btn" onClick={() => void exportExcel()} disabled={!report || exporting !== null}>
           {exporting === "xlsx" ? "Đang xuất..." : "Xuất Excel"}
         </button>
         <button type="button" className="btn-ghost" onClick={() => setTaxExportFormat("tax-revenue")} disabled={!report || exporting !== null}>
@@ -187,40 +292,81 @@ export default function RevenueReportPage() {
       {/* Bộ lọc */}
       <Panel>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-12 items-end">
-          <div className="md:col-span-3">
-            <Field label="Từ ngày">
-              <input className="input" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
-            </Field>
-          </div>
-          <div className="md:col-span-3">
-            <Field label="Đến ngày">
-              <input className="input" type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
-            </Field>
-          </div>
-          <div className="md:col-span-6">
-            <Field label="Phương thức">
+          <div className="md:col-span-4">
+            <Field label="Chế độ xem">
               <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200/80">
                 {(
                   [
-                    { id: "ALL", label: "Tất cả" },
-                    { id: "CASH", label: "Tiền mặt" },
-                    { id: "QR", label: "Chuyển khoản QR" },
+                    { id: "day", label: "Ngày" },
+                    { id: "week", label: "Tuần" },
+                    { id: "month", label: "Tháng" },
+                    { id: "year", label: "Năm" },
                   ] as const
-                ).map((m) => (
+                ).map((g) => (
                   <button
-                    key={m.id}
+                    key={g.id}
                     type="button"
-                    onClick={() => setMethodFilter(m.id)}
+                    onClick={() => setViewMode(g.id)}
                     className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all ${
-                      methodFilter === m.id
+                      viewMode === g.id
                         ? "bg-white text-slate-900 shadow-sm"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    {m.label}
+                    {g.label}
                   </button>
                 ))}
               </div>
+            </Field>
+          </div>
+          <div className="md:col-span-4">
+            <Field label="Thời gian">
+              {viewMode === "day" && (
+                <div className="flex items-center gap-1.5">
+                  <input className="input h-[34px] py-1 flex-1 min-w-[120px] text-sm" type="date" value={anchorDateStr} onChange={(e) => setAnchorDateStr(e.target.value)} />
+                  <input className="input h-[34px] py-1 w-[85px] px-1 text-center text-sm" type="time" value={fromTime} onChange={(e) => setFromTime(e.target.value)} title="Từ giờ" />
+                  <span className="text-slate-400 font-medium">-</span>
+                  <input className="input h-[34px] py-1 w-[85px] px-1 text-center text-sm" type="time" value={toTime} onChange={(e) => setToTime(e.target.value)} title="Đến giờ" />
+                </div>
+              )}
+              {viewMode === "week" && (
+                <input className="input" type="date" value={anchorDateStr} onChange={(e) => setAnchorDateStr(e.target.value)} title="Chọn 1 ngày bất kỳ trong tuần" />
+              )}
+              {viewMode === "month" && (
+                <select
+                  className="input h-[34px] py-1"
+                  value={anchorDateStr.substring(0, 7)}
+                  onChange={(e) => setAnchorDateStr(e.target.value + "-01")}
+                >
+                  {Array.from({ length: 60 }, (_, i) => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() - i);
+                    const m = (d.getMonth() + 1).toString().padStart(2, "0");
+                    const y = d.getFullYear();
+                    return (
+                      <option key={`${y}-${m}`} value={`${y}-${m}`}>
+                        Tháng {m}/{y}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+              {viewMode === "year" && (
+                <select className="input h-[34px] py-1" value={anchorDateStr.substring(0, 4)} onChange={(e) => setAnchorDateStr(e.target.value + "-01-01")}>
+                  {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                    <option key={y} value={y}>Năm {y}</option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          </div>
+          <div className="md:col-span-4">
+            <Field label="Phương thức hiển thị">
+              <select className="input text-sm h-[34px] py-1" value={methodFilter} onChange={(e) => setMethodFilter(e.target.value as MethodFilter)}>
+                <option value="ALL">Tất cả (Đa luồng)</option>
+                <option value="CASH">Chỉ Tiền mặt</option>
+                <option value="QR">Chỉ Chuyển khoản QR</option>
+              </select>
             </Field>
           </div>
         </div>
@@ -231,7 +377,7 @@ export default function RevenueReportPage() {
 
       {!report || !totals ? (
         <Panel>
-          <EmptyState>Chọn khoảng thời gian và nhấn “Xem báo cáo” để tải dữ liệu doanh thu.</EmptyState>
+          <EmptyState>Không có dữ liệu doanh thu trong khoảng thời gian này.</EmptyState>
         </Panel>
       ) : (
         <>
@@ -262,76 +408,155 @@ export default function RevenueReportPage() {
             </div>
 
             <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-              <span className="text-xs font-medium text-slate-500">Trung bình / ngày</span>
+              <span className="text-xs font-medium text-slate-500">Trung bình / mốc</span>
               <strong className="mt-1 block text-2xl font-black tabular-nums text-blue-600">
                 {formatVnd(totals.avgDailyNetRevenue)}
               </strong>
-              <span className="mt-1 block text-xs text-slate-400">Tính trên tổng số ngày trong kỳ</span>
+              <span className="mt-1 block text-xs text-slate-400">Tính trên tổng số mốc trong kỳ</span>
             </div>
           </div>
 
-          {/* Biểu đồ doanh thu theo ngày */}
+          {/* Biểu đồ doanh thu theo thời gian */}
           <Panel
-            title="Doanh thu theo ngày"
-            subtitle={`${formatDate(report.range.from)} → ${formatDate(report.range.to)} · ${totals.totalDays} ngày`}
+            title="Biểu đồ phân tích"
+            subtitle={`${formatDate(report.range.from)} → ${formatDate(report.range.to)} · ${totals.totalDays} mốc`}
             right={
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-                <span>
-                  {methodFilter === "ALL"
-                    ? "Tổng doanh thu thuần"
-                    : methodFilter === "CASH"
-                    ? "Tiền mặt (CASH)"
-                    : "Chuyển khoản QR"}
-                </span>
+              <div className="flex items-center gap-4 text-xs font-medium text-slate-600">
+                {(methodFilter === "ALL") && (
+                  <>
+                    <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-forest-800"></span><span>Tổng thuần</span></div>
+                    <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500"></span><span>Tiền mặt</span></div>
+                    <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-500"></span><span>Mã QR</span></div>
+                  </>
+                )}
+                {methodFilter === "CASH" && (
+                   <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blue-500"></span><span>Chỉ Tiền mặt</span></div>
+                )}
+                {methodFilter === "QR" && (
+                   <div className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-purple-500"></span><span>Chỉ Mã QR</span></div>
+                )}
               </div>
             }
           >
-            {filteredDailyItems.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <EmptyState>Không có dữ liệu trong khoảng thời gian này.</EmptyState>
             ) : (
               <div className="relative pt-6 pb-2">
-                {/* Bars Container */}
-                <div className="flex h-48 items-end gap-1.5 sm:gap-3 overflow-x-auto pb-6 px-1">
-                  {filteredDailyItems.map((item) => {
-                    const pct = item.displayAmount > 0 ? Math.max(2, Math.round((item.displayAmount / maxDailyAmount) * 100)) : 0;
-                    const dateParts = item.date.split("-");
-                    const shortDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}` : item.date;
+                <div className="overflow-x-auto pb-8 pt-6 px-8 scrollbar-none">
+                  <div className="relative h-64 w-full">
+                    <svg className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                      <defs>
+                        <linearGradient id="net-gradient" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stopColor="currentColor" stopOpacity="0.15" className="text-forest-800" />
+                          <stop offset="100%" stopColor="currentColor" stopOpacity="0" className="text-forest-800" />
+                        </linearGradient>
+                      </defs>
 
-                    return (
-                      <div
-                        key={item.date}
-                        className="group flex flex-1 min-w-[24px] flex-col items-center h-full justify-end"
-                      >
-                        <div className="w-full max-w-[40px] flex-1 flex items-end">
-                          {pct > 0 && (
-                            <div
-                              className="w-full rounded-t-lg transition-all duration-200 bg-gradient-to-t from-emerald-500 to-emerald-400 hover:from-emerald-600 hover:to-emerald-400"
-                              style={{ height: `${pct}%` }}
-                            />
+                      {methodFilter === "ALL" && netPath.polygonD && (
+                        <path d={netPath.polygonD} fill="url(#net-gradient)" className="text-forest-800" />
+                      )}
+
+                      {/* Cash Line */}
+                      {(methodFilter === "ALL" || methodFilter === "CASH") && cashPath.pathD && (
+                        <path
+                          d={cashPath.pathD}
+                          fill="none" stroke="currentColor" strokeWidth="2.5"
+                          vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+                          className="text-blue-500"
+                        />
+                      )}
+
+                      {/* QR Line */}
+                      {(methodFilter === "ALL" || methodFilter === "QR") && qrPath.pathD && (
+                        <path
+                          d={qrPath.pathD}
+                          fill="none" stroke="currentColor" strokeWidth="2.5"
+                          vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+                          className="text-purple-500"
+                        />
+                      )}
+
+                      {/* Net Line */}
+                      {methodFilter === "ALL" && netPath.pathD && (
+                        <path
+                          d={netPath.pathD}
+                          fill="none" stroke="currentColor" strokeWidth="3"
+                          vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+                          className="text-forest-800"
+                        />
+                      )}
+                    </svg>
+
+                    {filteredItems.map((item, i) => {
+                      const x = filteredItems.length > 1 ? (i / (filteredItems.length - 1)) * 100 : 50;
+                      const yNet = item.netVal > 0 ? 100 - (item.netVal / maxDailyAmount) * 90 : 100;
+                      const yCash = item.cashVal > 0 ? 100 - (item.cashVal / maxDailyAmount) * 90 : 100;
+                      const yQr = item.qrVal > 0 ? 100 - (item.qrVal / maxDailyAmount) * 90 : 100;
+
+                      const showNet = methodFilter === "ALL";
+                      const showCash = methodFilter === "ALL" || methodFilter === "CASH";
+                      const showQr = methodFilter === "ALL" || methodFilter === "QR";
+
+                      return (
+                        <div
+                          key={item.time}
+                          className="group absolute top-0 bottom-0 flex flex-col justify-end items-center"
+                          style={{ left: `${x}%`, width: '30px', transform: 'translateX(-50%)' }}
+                        >
+                          {/* Invisible hover column */}
+                          <div className="absolute inset-0 w-full hover:bg-slate-500/5 transition-colors z-0" />
+
+                          {/* Dots */}
+                          {showNet && (
+                            <div className="absolute h-2.5 w-2.5 rounded-full border-2 border-white bg-forest-800 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                 style={{ top: `${yNet}%`, transform: 'translateY(-50%)' }} />
                           )}
+                          {showCash && (
+                            <div className="absolute h-2 w-2 rounded-full border-2 border-white bg-blue-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                 style={{ top: `${yCash}%`, transform: 'translateY(-50%)' }} />
+                          )}
+                          {showQr && (
+                            <div className="absolute h-2 w-2 rounded-full border-2 border-white bg-purple-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                 style={{ top: `${yQr}%`, transform: 'translateY(-50%)' }} />
+                          )}
+
+                          {/* Tooltip */}
+                          <div
+                            className="pointer-events-none absolute z-20 whitespace-nowrap rounded-lg bg-slate-800 px-3 py-2.5 text-xs text-white opacity-0 shadow-xl transition-all group-hover:-translate-y-2 group-hover:opacity-100 border border-slate-700/50"
+                            style={{ top: `${Math.min(yNet, yCash, yQr)}%`, transform: 'translateY(-100%)', marginTop: '-12px' }}
+                          >
+                            <div className="text-[11px] text-slate-300 font-semibold mb-1 border-b border-slate-600 pb-1">{formatShortTime(item.time)} - {item.orderCount} đơn</div>
+                            <div className="space-y-1">
+                              {showNet && <div className="flex justify-between gap-4"><span className="text-forest-300">Tổng</span><strong className="text-white">{formatVnd(item.netVal)}</strong></div>}
+                              {showCash && <div className="flex justify-between gap-4"><span className="text-blue-300">Cash</span><strong className="text-white">{formatVnd(item.cashVal)}</strong></div>}
+                              {showQr && <div className="flex justify-between gap-4"><span className="text-purple-300">QR</span><strong className="text-white">{formatVnd(item.qrVal)}</strong></div>}
+                            </div>
+                            <div className="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[6px] border-x-transparent border-t-slate-800"></div>
+                          </div>
+
+                          {/* X-axis Label */}
+                          <span className="absolute -bottom-6 text-[10px] font-medium text-slate-400 group-hover:text-forest-800 transition-colors whitespace-nowrap">
+                            {formatShortTime(item.time)}
+                          </span>
                         </div>
-                        <span className="mt-2 text-[10px] sm:text-xs font-medium text-slate-400 group-hover:text-slate-700 transition-colors truncate">
-                          {shortDate}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
           </Panel>
 
-          {/* Chi tiết theo ngày */}
+          {/* Chi tiết theo mốc thời gian */}
           <Panel
-            title="Chi tiết theo ngày"
-            right={<span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{filteredDailyItems.length} ngày có giao dịch</span>}
+            title="Dữ liệu chi tiết"
+            right={<span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">{filteredItems.length} mốc thời gian</span>}
           >
-            <div className="-mx-5 overflow-x-auto px-5">
-              <table className="w-full min-w-[640px]">
+            <div className="-mx-5 overflow-x-auto px-5 scrollbar-none">
+              <table className="w-full">
                 <thead>
                   <tr className="border-b border-line text-xs font-bold uppercase tracking-wider text-slate-400">
-                    <th className="th text-left">NGÀY</th>
+                    <th className="th text-left">THỜI GIAN</th>
                     <th className="th text-right">TIỀN MẶT (CASH)</th>
                     <th className="th text-right">CHUYỂN KHOẢN (QR)</th>
                     <th className="th text-right">ĐÃ HOÀN (REFUNDED)</th>
@@ -340,9 +565,18 @@ export default function RevenueReportPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-soft">
-                  {filteredDailyItems.map((item) => (
-                    <tr key={item.date} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="td font-medium text-slate-800">{formatDate(item.date)}</td>
+                  {filteredItems.filter(item => item.grossVal !== 0 || item.refundedVal !== 0 || item.netVal !== 0).length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-6 text-sm text-slate-500 italic">
+                        Không có mốc thời gian nào phát sinh doanh thu.
+                      </td>
+                    </tr>
+                  )}
+                  {filteredItems
+                    .filter(item => item.grossVal !== 0 || item.refundedVal !== 0 || item.netVal !== 0)
+                    .map((item) => (
+                    <tr key={item.time} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="td font-medium text-slate-800">{formatShortTime(item.time)}</td>
                       <td className="td text-right tabular-nums text-slate-700">{formatVnd(item.cashVal)}</td>
                       <td className="td text-right tabular-nums text-slate-700">{formatVnd(item.qrVal)}</td>
                       <td className="td text-right tabular-nums">
