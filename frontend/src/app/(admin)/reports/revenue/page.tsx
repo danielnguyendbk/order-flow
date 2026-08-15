@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { PageHeader, Panel, EmptyState, Field, PageLoading } from "@/components/ui";
+import { PageHeader, Panel, EmptyState, Field, Modal, PageLoading } from "@/components/ui";
 import { formatVnd, formatDate } from "@/lib/format";
-import { getRevenueReport, type ApiRevenueReport, type ApiDailyRevenueItem } from "@/lib/api";
+import {
+  downloadRevenueExport,
+  getRevenueReport,
+  type ApiRevenueReport,
+  type RevenueExportFormat,
+  type TaxDeclarationExportInput,
+} from "@/lib/api";
 import { useApiData } from "@/lib/use-api-data";
 import { toDateInput } from "@/lib/period";
 
@@ -15,22 +21,42 @@ function thirtyDaysAgo(): string {
 
 type MethodFilter = "ALL" | "CASH" | "QR";
 
+const emptyTaxForm = {
+  taxpayerName: "",
+  taxCode: "",
+  activityName: "Dịch vụ ăn uống",
+  taxRatePercent: "",
+  deductibleExpenses: "0",
+  adjustmentsIncrease: "0",
+  adjustmentsDecrease: "0",
+  exemptIncome: "0",
+  carriedLoss: "0",
+  scienceFund: "0",
+  taxRelief: "0",
+  priorOverpayment: "0",
+  provisionalTaxPaid: "0",
+};
+
 export default function RevenueReportPage() {
   const today = toDateInput(new Date());
   const [from, setFrom] = useState(thirtyDaysAgo());
   const [to, setTo] = useState(today);
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("ALL");
+  const [taxExportFormat, setTaxExportFormat] = useState<Exclude<RevenueExportFormat, "xlsx"> | null>(null);
+  const [taxForm, setTaxForm] = useState(emptyTaxForm);
+  const [exporting, setExporting] = useState<RevenueExportFormat | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const payload = await getRevenueReport(from, to);
     return payload.data;
   }, [from, to]);
 
-  const { data: report, loading, error, reload } = useApiData<ApiRevenueReport | null>(load, null);
+  const { data: report, loading, error } = useApiData<ApiRevenueReport | null>(load, null);
 
   const summary = report?.summary;
   const byMethod = report?.byMethod;
-  const byDate = report?.byDate ?? [];
+  const byDate = useMemo(() => report?.byDate ?? [], [report?.byDate]);
 
   const totals = useMemo(() => {
     if (!summary) return null;
@@ -90,6 +116,53 @@ export default function RevenueReportPage() {
     return Math.max(...filteredDailyItems.map((d) => d.displayAmount), 1);
   }, [filteredDailyItems]);
 
+  const exportExcel = async () => {
+    setExportError(null);
+    setExporting("xlsx");
+    try {
+      await downloadRevenueExport(from, to, "xlsx");
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Không thể xuất Excel.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const updateTaxField = (field: keyof typeof emptyTaxForm, value: string) => {
+    setTaxForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitTaxExport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!taxExportFormat) return;
+    const toMoney = (value: string) => Math.max(0, Math.round(Number(value) || 0));
+    const tax: TaxDeclarationExportInput = {
+      taxpayerName: taxForm.taxpayerName.trim(),
+      taxCode: taxForm.taxCode.trim(),
+      activityName: taxForm.activityName.trim(),
+      taxRatePercent: Number(taxForm.taxRatePercent),
+      deductibleExpenses: toMoney(taxForm.deductibleExpenses),
+      adjustmentsIncrease: toMoney(taxForm.adjustmentsIncrease),
+      adjustmentsDecrease: toMoney(taxForm.adjustmentsDecrease),
+      exemptIncome: toMoney(taxForm.exemptIncome),
+      carriedLoss: toMoney(taxForm.carriedLoss),
+      scienceFund: toMoney(taxForm.scienceFund),
+      taxRelief: toMoney(taxForm.taxRelief),
+      priorOverpayment: toMoney(taxForm.priorOverpayment),
+      provisionalTaxPaid: toMoney(taxForm.provisionalTaxPaid),
+    };
+    setExportError(null);
+    setExporting(taxExportFormat);
+    try {
+      await downloadRevenueExport(from, to, taxExportFormat, tax);
+      setTaxExportFormat(null);
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Không thể xuất tờ khai.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   if (loading) {
     return <PageLoading label="Đang đối soát & tổng hợp doanh thu..." subText="Đang tính toán doanh thu thuần, hoàn tiền và sản lượng theo ngày..." />;
   }
@@ -99,7 +172,17 @@ export default function RevenueReportPage() {
       <PageHeader
         title="Báo cáo doanh thu"
         description="Doanh thu theo ngày theo phương thức thanh toán. Số tiền hoàn (REFUNDED) không tính vào doanh thu thuần."
-      />
+      >
+        <button type="button" className="btn-ghost" onClick={() => void exportExcel()} disabled={!report || exporting !== null}>
+          {exporting === "xlsx" ? "Đang xuất..." : "Xuất Excel"}
+        </button>
+        <button type="button" className="btn-ghost" onClick={() => setTaxExportFormat("tax-revenue")} disabled={!report || exporting !== null}>
+          Tờ khai theo doanh thu
+        </button>
+        <button type="button" className="btn" onClick={() => setTaxExportFormat("tax-revenue-expense")} disabled={!report || exporting !== null}>
+          Tờ khai doanh thu - chi phí
+        </button>
+      </PageHeader>
 
       {/* Bộ lọc */}
       <Panel>
@@ -144,6 +227,7 @@ export default function RevenueReportPage() {
       </Panel>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {exportError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{exportError}</div>}
 
       {!report || !totals ? (
         <Panel>
@@ -280,7 +364,77 @@ export default function RevenueReportPage() {
           </Panel>
         </>
       )}
+
+      <Modal
+        open={taxExportFormat !== null}
+        onClose={() => setTaxExportFormat(null)}
+        eyebrow="XUẤT TỜ KHAI DOCX"
+        title={taxExportFormat === "tax-revenue-expense" ? "Tờ khai theo doanh thu - chi phí" : "Tờ khai theo tỷ lệ trên doanh thu"}
+        subtitle="Mẫu DOCX được sao từ file gốc trong backend/docs. Hãy xác nhận các chỉ tiêu chưa có trong Order Flow."
+        wide
+      >
+        <form onSubmit={submitTaxExport} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Tên người nộp thuế">
+              <input className="input" value={taxForm.taxpayerName} onChange={(e) => updateTaxField("taxpayerName", e.target.value)} required maxLength={255} />
+            </Field>
+            <Field label="Mã số thuế">
+              <input className="input" value={taxForm.taxCode} onChange={(e) => updateTaxField("taxCode", e.target.value)} required maxLength={30} />
+            </Field>
+            <Field label="Ngành/hoạt động kinh doanh">
+              <input className="input" value={taxForm.activityName} onChange={(e) => updateTaxField("activityName", e.target.value)} required maxLength={255} />
+            </Field>
+            <Field label="Thuế suất / tỷ lệ thuế (%)" hint="Nhập theo hồ sơ thuế của đơn vị; hệ thống không tự suy đoán từ doanh thu.">
+              <input className="input" type="number" min="0" max="100" step="0.01" value={taxForm.taxRatePercent} onChange={(e) => updateTaxField("taxRatePercent", e.target.value)} required />
+            </Field>
+          </div>
+
+          {taxExportFormat === "tax-revenue-expense" && (
+            <div className="grid gap-3 rounded-xl border border-line bg-slate-50 p-4 sm:grid-cols-2">
+              <Field label="Chi phí được trừ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.deductibleExpenses} onChange={(e) => updateTaxField("deductibleExpenses", e.target.value)} required />
+              </Field>
+              <Field label="Điều chỉnh tăng lợi nhuận (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.adjustmentsIncrease} onChange={(e) => updateTaxField("adjustmentsIncrease", e.target.value)} />
+              </Field>
+              <Field label="Điều chỉnh giảm lợi nhuận (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.adjustmentsDecrease} onChange={(e) => updateTaxField("adjustmentsDecrease", e.target.value)} />
+              </Field>
+              <Field label="Thu nhập miễn thuế (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.exemptIncome} onChange={(e) => updateTaxField("exemptIncome", e.target.value)} />
+              </Field>
+              <Field label="Lỗ được chuyển trong kỳ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.carriedLoss} onChange={(e) => updateTaxField("carriedLoss", e.target.value)} />
+              </Field>
+              <Field label="Trích quỹ khoa học công nghệ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.scienceFund} onChange={(e) => updateTaxField("scienceFund", e.target.value)} />
+              </Field>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Thuế được miễn/giảm (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.taxRelief} onChange={(e) => updateTaxField("taxRelief", e.target.value)} />
+            </Field>
+            <Field label="Nộp thừa kỳ trước (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.priorOverpayment} onChange={(e) => updateTaxField("priorOverpayment", e.target.value)} />
+            </Field>
+            <Field label="Thuế đã tạm nộp (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.provisionalTaxPaid} onChange={(e) => updateTaxField("provisionalTaxPaid", e.target.value)} />
+            </Field>
+          </div>
+
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+            Order Flow chỉ tự điền doanh thu và hoàn tiền. Chi phí, thuế suất, ưu đãi, lỗ chuyển kỳ và số thuế đã nộp phải được đối chiếu với sổ kế toán/chứng từ trước khi nộp cơ quan thuế.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setTaxExportFormat(null)}>Hủy</button>
+            <button type="submit" className="btn" disabled={exporting !== null}>
+              {exporting ? "Đang tạo DOCX..." : "Tạo và tải DOCX"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
-

@@ -1236,6 +1236,97 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /api/v1/admin/reports/revenue/export:
+    post:
+      tags: [Admin Finance]
+      operationId: exportRevenueReport
+      summary: Export accounting XLSX or template-based TNDN DOCX
+      description: The XLSX includes related orders, Payments, SePay transactions, refunds, formula-driven accounting tie-outs and color-coded annotated exceptions. DOCX formats retain the supplied 03/04-TNDN templates.
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok start of day.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok end of day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format]
+              properties:
+                format:
+                  type: string
+                  enum: [xlsx, tax-revenue, tax-revenue-expense]
+                taxpayerName:
+                  type: string
+                taxCode:
+                  type: string
+                activityName:
+                  type: string
+                taxRatePercent:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                deductibleExpenses:
+                  type: integer
+                  minimum: 0
+                adjustmentsIncrease:
+                  type: integer
+                  minimum: 0
+                adjustmentsDecrease:
+                  type: integer
+                  minimum: 0
+                exemptIncome:
+                  type: integer
+                  minimum: 0
+                carriedLoss:
+                  type: integer
+                  minimum: 0
+                scienceFund:
+                  type: integer
+                  minimum: 0
+                taxRelief:
+                  type: integer
+                  minimum: 0
+                priorOverpayment:
+                  type: integer
+                  minimum: 0
+                provisionalTaxPaid:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Generated XLSX or DOCX attachment
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/v1/admin/audit-logs:
     get:
       tags: [Admin Finance]

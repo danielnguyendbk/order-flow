@@ -16,9 +16,11 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "5.2.1",
     "http-errors": "^2.0.0",
     "jose": "^6.2.8",
+    "jszip": "^3.10.1",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },

@@ -37,10 +37,13 @@ describe("RevenueReportService", () => {
     expect(db.order.findMany).toHaveBeenCalledWith({
       where: {
         paymentStatus: PaymentStatus.PAID,
-        paidAt: { gte: from, lte: to },
+        OR: [
+          { paidAt: { gte: from, lte: to } },
+          { paidAt: null, createdAt: { gte: from, lte: to } },
+        ],
       },
       include: { payment: true },
-      orderBy: { paidAt: "asc" },
+      orderBy: { createdAt: "asc" },
     });
     expect(db.auditLog.findMany).toHaveBeenCalledWith({
       where: {
