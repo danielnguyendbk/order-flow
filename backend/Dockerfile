@@ -28,7 +28,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package-lock.json ./apps/api/
 COPY prisma/schema.prisma ./prisma/schema.prisma
 COPY prisma/migrations ./prisma/migrations
-RUN npm ci --omit=dev && npm --prefix apps/api ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --omit=optional && npm --prefix apps/api ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/backend/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/backend/apps/api/dist ./apps/api/dist
