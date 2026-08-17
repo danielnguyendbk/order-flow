@@ -26,6 +26,7 @@ order-flow/
     ├── Dockerfile.postgres           # PostgreSQL image with baseline schema
     ├── docs/
     │   ├── api-contract.md           # Planned HTTP route inventory
+    │   ├── demo_ketoan_SME.xlsx      # Visual reference for the accounting XLSX export
     │   └── openapi.yaml              # Importable Postman/OpenAPI contract for all routes
     ├── apps/
     │   ├── api/                      # HTTP API service
@@ -78,6 +79,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - The complete application can run from published Docker images through root `compose.yaml`: PostgreSQL, Redis, one-shot OWNER initialization, API, Admin Web, Telegram Bot and notification worker. GHCR release automation builds both AMD64 and ARM64 images.
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
+- The OWNER revenue page exposes one accounting XLSX export styled after `backend/docs/demo_ketoan_SME.xlsx`; the former 03/04-TNDN DOCX export actions and API formats have been removed.
 - The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
@@ -92,6 +94,12 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
 - The staff `Kiểm tra thanh toán` action actively queries SePay API v2 as a webhook-recovery path, requiring `SEPAY_API_TOKEN` and an environment-specific `SEPAY_API_BASE_URL`; Live and Test Mode/Sandbox tokens are isolated. Numeric API v1 and UUID API v2 transaction IDs share the same string idempotency column.
 - The experimental voice-order handler can download a Telegram voice message and invoke a configured Hermes-compatible command bridge; it is disabled unless `VOICE_ORDER_SCRIPT` is configured.
+
+## Progress log — 2026-08-17
+
+- Reworked the accounting XLSX export to follow the supplied SME workbook's numbered-sheet structure, blue title/header palette, Arial typography, borders and print setup while retaining Order Flow's real control, transaction, journal and reconciliation data.
+- Added a ninth guidance sheet that documents scope and avoids fabricating opening balances, inventory, cost, VAT or expense data that Order Flow does not store.
+- Removed the 03/TNDN and 04/TNDN DOCX export actions, request formats, generation code and direct JSZip dependency from the OWNER revenue workflow.
 
 ## Progress log — 2026-08-16
 

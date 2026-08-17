@@ -240,20 +240,6 @@ aside::-webkit-scrollbar {
     @apply py-10 text-center text-sm text-muted;
   }
 
-  /* Bar chart — cột dạng pill striped (Donezo: rounded-full + diagonal stripes) */
-  .bar-striped {
-    border-radius: 999px;
-    background-color: var(--color-brand-100);
-    background-image: repeating-linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.6) 0 5px,
-      transparent 5px 10px
-    );
-  }
-  .group:hover .bar-striped {
-    background-color: var(--color-brand-200);
-  }
-
   /* Table */
   .th {
     @apply px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-400;

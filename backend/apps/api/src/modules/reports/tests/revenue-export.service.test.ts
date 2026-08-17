@@ -1,8 +1,7 @@
 import ExcelJS from "exceljs";
-import JSZip from "jszip";
-import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { RevenueExportService } from "../revenue-export.service";
+import { parseRevenueExportInput } from "../revenue-export.validation";
 
 const from = new Date("2026-08-01T00:00:00+07:00");
 const to = new Date("2026-08-31T23:59:59.999+07:00");
@@ -23,13 +22,6 @@ const report = {
     orderCount: 2, refundCount: 1,
   }],
 };
-const taxInput = {
-  taxpayerName: "Công ty TNHH Order Flow", taxCode: "0312345678", activityName: "Dịch vụ ăn uống",
-  taxRatePercent: 20, deductibleExpenses: 400_000, adjustmentsIncrease: 0, adjustmentsDecrease: 0,
-  exemptIncome: 0, carriedLoss: 0, scienceFund: 0, taxRelief: 0,
-  priorOverpayment: 10_000, provisionalTaxPaid: 20_000,
-};
-
 function createService() {
   const cashPayment = {
     id: "payment-1", orderId: "order-1", paymentCode: null,
@@ -93,7 +85,7 @@ function createService() {
     }]) },
   };
   const reportService = { getRevenueReport: vi.fn().mockResolvedValue(report) };
-  return new RevenueExportService(db as never, reportService as never, path.resolve(process.cwd(), "../../docs"));
+  return new RevenueExportService(db as never, reportService as never);
 }
 
 describe("RevenueExportService", () => {
@@ -102,58 +94,45 @@ describe("RevenueExportService", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ExcelJS.Buffer);
     expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
-      "Tổng quan", "Kiểm tra sai lệch", "Đơn hàng", "Payments", "SePay", "Hoàn tiền", "Nhật ký kế toán", "Tổng hợp ngày",
+      "1.Tổng quan", "2.Kiểm tra sai lệch", "3.Đơn hàng", "4.Payments", "5.SePay", "6.Hoàn tiền",
+      "7.Nhật ký kế toán", "8.Tổng hợp ngày", "9.Hướng dẫn",
     ]);
-    expect(workbook.getWorksheet("Tổng quan")?.getCell("B9").value).toMatchObject({
-      formula: "B7-B8", result: 1_000_000,
+    const summary = workbook.getWorksheet("1.Tổng quan");
+    expect(summary?.getCell("A1").value).toBe("ORDER FLOW");
+    expect(summary?.getCell("A1").fill).toMatchObject({ fgColor: { argb: "FF1F4E78" } });
+    expect(summary?.getCell("A2").font).toMatchObject({ name: "Arial", size: 11, bold: true });
+    expect(summary?.getCell("A5").fill).toMatchObject({ fgColor: { argb: "FF2E75B6" } });
+    expect(summary?.getCell("B10").value).toMatchObject({
+      formula: "B8-B9", result: 1_000_000,
     });
-    expect(workbook.getWorksheet("Tổng quan")?.getCell("E15").value).toBe("OK");
-    expect(workbook.getWorksheet("Nhật ký kế toán")?.getCell("J7").value).toMatchObject({
-      formula: "SUM(J4:J6)", result: 1_000_000,
+    expect(summary?.getCell("E16").value).toBe("OK");
+    expect(workbook.getWorksheet("7.Nhật ký kế toán")?.getCell("J9").value).toMatchObject({
+      formula: "SUM(J6:J8)", result: 1_000_000,
     });
-    const issueCodes = workbook.getWorksheet("Kiểm tra sai lệch")?.getColumn(3).values;
+    const issueCodes = workbook.getWorksheet("2.Kiểm tra sai lệch")?.getColumn(3).values;
     expect(issueCodes).toContain("SEPAY_PAYMENT_MISMATCH");
     expect(issueCodes).toContain("PAYMENT_EXPECTED_ORDER_MISMATCH");
     expect(issueCodes).toContain("SEPAY_UNMATCHED");
     expect(issueCodes).toContain("CASH_CONFIRMER_MISSING");
-    const paymentIssueCell = workbook.getWorksheet("Payments")?.getCell("V5");
+    const paymentIssueCell = workbook.getWorksheet("4.Payments")?.getCell("V7");
     expect(paymentIssueCell?.fill).toMatchObject({ fgColor: { argb: "FFFEE2E2" } });
     expect(paymentIssueCell?.note).toBeTruthy();
-    const expectedOrderDifference = workbook.getWorksheet("Payments")?.getCell("J5");
+    const expectedOrderDifference = workbook.getWorksheet("4.Payments")?.getCell("J7");
     expect(expectedOrderDifference?.fill).toMatchObject({ fgColor: { argb: "FFFEE2E2" } });
     expect(expectedOrderDifference?.font).toMatchObject({ bold: true });
     expect(expectedOrderDifference?.note).toBeTruthy();
-    const sepayDifference = workbook.getWorksheet("Payments")?.getCell("N5");
+    const sepayDifference = workbook.getWorksheet("4.Payments")?.getCell("N7");
     expect(sepayDifference?.fill).toMatchObject({ fgColor: { argb: "FFFFEDD5" } });
     expect(sepayDifference?.font).toMatchObject({ bold: true });
-    const sepayIssueCell = workbook.getWorksheet("SePay")?.getCell("S5");
+    const sepayIssueCell = workbook.getWorksheet("5.SePay")?.getCell("S7");
     expect(sepayIssueCell?.fill).toMatchObject({ fgColor: { argb: "FFFEF3C7" } });
     expect(sepayIssueCell?.note).toBeTruthy();
   });
 
-  it("fills the revenue-only declaration while retaining the 04/TNDN template", async () => {
-    const result = await createService().export({ format: "tax-revenue", from, to, ...taxInput });
-    const text = await documentText(result.buffer);
-    expect(text).toMatch(/Mẫu số:\s+04\/TNDN/);
-    expect(text).toContain("[04] Tên người nộp thuế: Công ty TNHH Order Flow");
-    expect(text).toContain("1.000.000");
-    expect(text).toContain("200.000");
-  });
-
-  it("fills the revenue-expense declaration and calculated taxable income", async () => {
-    const result = await createService().export({ format: "tax-revenue-expense", from, to, ...taxInput });
-    const text = await documentText(result.buffer);
-    expect(text).toMatch(/Mẫu số:\s+03\/TNDN/);
-    expect(text).toContain("[06] Tên người nộp thuế: Công ty TNHH Order Flow");
-    expect(text).toContain("600.000");
-    expect(text).toContain("120.000");
+  it("rejects the removed DOCX export formats", () => {
+    expect(() => parseRevenueExportInput(
+      { from: from.toISOString(), to: to.toISOString() },
+      { format: "tax-revenue" },
+    )).toThrow("Revenue export input is invalid");
   });
 });
-
-async function documentText(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
-  const xml = await zip.file("word/document.xml")!.async("string");
-  return [...xml.matchAll(/<w:t(?: [^>]*)?>([\s\S]*?)<\/w:t>/g)]
-    .map((match) => match[1].replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"))
-    .join(" ");
-}

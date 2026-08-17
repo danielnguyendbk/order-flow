@@ -135,6 +135,27 @@ const ISSUE_STYLE: Record<IssueSeverity, { fill: string; font: string; label: st
   INFO: { fill: "FFDBEAFE", font: "FF1D4ED8", label: "Thông tin" },
 };
 
+const SHEET_NAMES = {
+  summary: "1.Tổng quan",
+  issues: "2.Kiểm tra sai lệch",
+  orders: "3.Đơn hàng",
+  payments: "4.Payments",
+  sepay: "5.SePay",
+  refunds: "6.Hoàn tiền",
+  journal: "7.Nhật ký kế toán",
+  daily: "8.Tổng hợp ngày",
+  guide: "9.Hướng dẫn",
+} as const;
+
+const TEMPLATE_STYLE = {
+  banner: "FF1F4E78",
+  header: "FF2E75B6",
+  title: "FF1F4E78",
+  subtitle: "FF595959",
+  border: "FFBFBFBF",
+  labelFill: "FFF2F2F2",
+} as const;
+
 export async function loadAccountingExportData(
   db: PrismaClient,
   input: RevenueReportInput,
@@ -328,9 +349,18 @@ export async function createAccountingWorkbook(
   const refundsSheet = buildRefundsSheet(workbook, data, issues);
   const journalSheet = buildJournalSheet(workbook, report, data.entries);
   const dailySheet = buildDailySheet(workbook, report);
+  const guideSheet = buildGuideSheet(workbook, report);
 
-  for (const sheet of [summary, issuesSheet, ordersSheet, paymentsSheet, sepaySheet, refundsSheet, journalSheet, dailySheet]) {
-    sheet.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  for (const sheet of [summary, issuesSheet, ordersSheet, paymentsSheet, sepaySheet, refundsSheet, journalSheet, dailySheet, guideSheet]) {
+    sheet.pageSetup = {
+      orientation: "landscape",
+      paperSize: 9,
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+    };
+    sheet.headerFooter.oddFooter = "Trang &P / &N";
   }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -342,31 +372,32 @@ function buildSummarySheet(
   data: AccountingExportData,
   issues: AccountingIssue[],
 ): ExcelJS.Worksheet {
-  const sheet = workbook.addWorksheet("Tổng quan", { views: [{ state: "frozen", ySplit: 4, showGridLines: false }] });
+  const sheet = workbook.addWorksheet(SHEET_NAMES.summary, { views: [{ state: "frozen", ySplit: 5, showGridLines: false }] });
   sheet.mergeCells("A1:G1");
-  sheet.getCell("A1").value = "BÁO CÁO KIỂM SOÁT DOANH THU VÀ THANH TOÁN";
-  sheet.getCell("A2").value = "Kỳ báo cáo";
-  sheet.getCell("B2").value = `${formatDate(report.range.from)} - ${formatDate(report.range.to)}`;
-  sheet.getCell("D2").value = "Đơn vị";
-  sheet.getCell("E2").value = "VND";
+  sheet.getCell("A1").value = "ORDER FLOW";
+  sheet.mergeCells("A2:G2");
+  sheet.getCell("A2").value = "BÁO CÁO KIỂM SOÁT DOANH THU VÀ THANH TOÁN";
+  sheet.mergeCells("A3:G3");
+  sheet.getCell("A3").value = `Kỳ báo cáo: ${formatDate(report.range.from)} - ${formatDate(report.range.to)} | Đơn vị tiền: VND`;
 
   const criticalCount = issues.filter((issue) => issue.severity === "CRITICAL").length;
   const warningCount = issues.filter((issue) => issue.severity !== "CRITICAL" && issue.severity !== "INFO").length;
   const infoCount = issues.filter((issue) => issue.severity === "INFO").length;
-  sheet.getCell("A4").value = "TRẠNG THÁI KIỂM SOÁT";
-  sheet.getCell("B4").value = criticalCount > 0 ? "FAIL" : warningCount > 0 ? "WARNING" : "OK";
-  sheet.getCell("D4").value = "Lỗi nghiêm trọng";
-  sheet.getCell("E4").value = criticalCount;
-  sheet.getCell("F4").value = "Cảnh báo / thông tin";
-  sheet.getCell("G4").value = `${warningCount} / ${infoCount}`;
-  applyStatusCell(sheet.getCell("B4"), criticalCount > 0 ? "CRITICAL" : warningCount > 0 ? "REVIEW" : null);
+  sheet.getCell("A5").value = "TRẠNG THÁI KIỂM SOÁT";
+  sheet.getCell("B5").value = criticalCount > 0 ? "FAIL" : warningCount > 0 ? "WARNING" : "OK";
+  sheet.getCell("D5").value = "Lỗi nghiêm trọng";
+  sheet.getCell("E5").value = criticalCount;
+  sheet.getCell("F5").value = "Cảnh báo / thông tin";
+  sheet.getCell("G5").value = `${warningCount} / ${infoCount}`;
+  styleHeader(sheet.getRow(5));
+  applyStatusCell(sheet.getCell("B5"), criticalCount > 0 ? "CRITICAL" : warningCount > 0 ? "REVIEW" : null);
 
   sheet.addRow([]);
   sheet.addRow(["Chỉ tiêu", "Giá trị", "Chứng từ", "Nguồn đối chiếu", "Ghi chú"]);
   const summaryRows = [
     ["Doanh thu gộp", Number(report.summary.grossRevenue), report.summary.paidOrderCount, "Đơn PAID / Payment", "Trước hoàn tiền"],
     ["Hoàn tiền", Number(report.summary.refundedAmount), report.summary.refundCount, "Audit hoàn tiền", "Điều chỉnh giảm doanh thu"],
-    ["Doanh thu thuần", formula("B7-B8", report.summary.netRevenue), report.summary.paidOrderCount, "Nhật ký kế toán", "Doanh thu gộp - hoàn tiền"],
+    ["Doanh thu thuần", formula("B8-B9", report.summary.netRevenue), report.summary.paidOrderCount, SHEET_NAMES.journal, "Doanh thu gộp - hoàn tiền"],
     ["Tổng Payment trong phạm vi", Number(data.payments.reduce((sum, payment) => sum + payment.receivedAmount, 0n)), data.payments.length, "Payments", "Kể cả trạng thái cần rà soát"],
     ["Tổng giao dịch SePay", Number(data.sepayTransactions.reduce((sum, transaction) => sum + transaction.amountIn, 0n)), data.sepayTransactions.length, "SePay", "Matched / unmatched / reviewed"],
     ["Đơn hàng trong phạm vi", data.orders.length, data.orders.length, "Đơn hàng", "Kể cả chưa thanh toán / đã hủy"],
@@ -400,7 +431,7 @@ function buildSummarySheet(
       expected === actual ? "OK" : "FAIL",
       expected === actual ? "Khớp báo cáo doanh thu" : `Xem mã ${code} trong sheet Kiểm tra sai lệch`,
     ]);
-    row.height = 28;
+    row.height = 42;
     row.alignment = { vertical: "middle", wrapText: true };
     applyStatusCell(row.getCell(5), expected === actual ? null : "CRITICAL");
     if (expected !== actual) emphasizeCell(row.getCell(4), "CRITICAL", `${code}: số liệu báo cáo không khớp sổ chi tiết.`);
@@ -432,18 +463,17 @@ function buildSummarySheet(
   note.note = "Các quy tắc được mô tả chi tiết trong sheet 'Kiểm tra sai lệch'.";
   note.alignment = { vertical: "middle", wrapText: true };
   sheet.getRow(noteRow).height = 38;
-  styleTitle(sheet, 8);
-  styleHeader(sheet.getRow(6));
+  styleTitle(sheet);
+  styleHeader(sheet.getRow(7));
   styleHeader(checkHeaderRow);
   styleHeader(legendHeaderRow);
-  sheet.getRow(4).height = 28;
-  sheet.getRow(4).alignment = { vertical: "middle", wrapText: true };
-  setWidths(sheet, [21, 18, 14, 25, 36, 20, 16]);
+  applyBodyStyle(sheet, 6);
+  setWidths(sheet, [22, 18, 15, 26, 36, 46, 18]);
   return sheet;
 }
 
 function buildIssuesSheet(workbook: ExcelJS.Workbook, issues: AccountingIssue[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Kiểm tra sai lệch", "DANH SÁCH LỖI VÀ SAI KHÁC", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.issues, "DANH SÁCH LỖI VÀ SAI KHÁC", [
     "STT", "Mức độ", "Mã lỗi", "Nguồn", "Tham chiếu", "Số đúng/kỳ vọng", "Số thực tế", "Chênh lệch", "Mô tả", "Hướng xử lý",
   ]);
   issues.forEach((issue, index) => {
@@ -463,7 +493,7 @@ function buildIssuesSheet(workbook: ExcelJS.Workbook, issues: AccountingIssue[])
 }
 
 function buildOrdersSheet(workbook: ExcelJS.Workbook, data: AccountingExportData, issues: AccountingIssue[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Đơn hàng", "TOÀN BỘ ĐƠN HÀNG VÀ DOANH THU TRONG PHẠM VI", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.orders, "TOÀN BỘ ĐƠN HÀNG VÀ DOANH THU TRONG PHẠM VI", [
     "STT", "Ngày tạo", "Ngày thanh toán", "Mã đơn", "Người tạo", "Phương thức", "TT thanh toán", "TT thực hiện",
     "Chi tiết món", "Tổng theo món", "Tổng đơn", "Lệch tổng", "Payment ID", "Phải thu", "Đã thu", "Hoàn tiền",
     "Doanh thu ghi nhận", "Mã lỗi", "Chú thích",
@@ -496,7 +526,7 @@ function buildOrdersSheet(workbook: ExcelJS.Workbook, data: AccountingExportData
 }
 
 function buildPaymentsSheet(workbook: ExcelJS.Workbook, data: AccountingExportData, issues: AccountingIssue[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Payments", "TOÀN BỘ BẢN GHI PAYMENT VÀ ĐỐI CHIẾU", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.payments, "TOÀN BỘ BẢN GHI PAYMENT VÀ ĐỐI CHIẾU", [
     "STT", "Payment ID", "Mã đơn", "TT thanh toán", "TT thực hiện", "Phương thức", "Mã thanh toán", "Tổng đơn",
     "Phải thu", "Lệch phải thu/đơn", "Đã thu", "Lệch thu/phải thu", "Tổng SePay", "Lệch SePay/đã thu",
     "Hoàn trong kỳ", "Còn lại sau hoàn", "Ngày xác nhận", "Người xác nhận tiền mặt", "Số GD SePay", "Ngày tạo", "Cập nhật",
@@ -528,7 +558,7 @@ function buildPaymentsSheet(workbook: ExcelJS.Workbook, data: AccountingExportDa
 }
 
 function buildSepaySheet(workbook: ExcelJS.Workbook, data: AccountingExportData, issues: AccountingIssue[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "SePay", "GIAO DỊCH SEPAY VÀ TRẠNG THÁI ĐỐI SOÁT", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.sepay, "GIAO DỊCH SEPAY VÀ TRẠNG THÁI ĐỐI SOÁT", [
     "STT", "Ngày giao dịch", "Ngày nhận", "SePay transaction ID", "Code", "Nội dung", "Reference", "Tiền vào",
     "Match status", "Payment ID", "Mã đơn", "Payment phải thu", "Payment đã thu", "Lệch ghi nhận", "Resolution",
     "Ghi chú xử lý", "Ngày xử lý", "Người xử lý", "Mã lỗi", "Chú thích",
@@ -556,7 +586,7 @@ function buildSepaySheet(workbook: ExcelJS.Workbook, data: AccountingExportData,
 }
 
 function buildRefundsSheet(workbook: ExcelJS.Workbook, data: AccountingExportData, issues: AccountingIssue[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Hoàn tiền", "CÁC KHOẢN HOÀN TIỀN GHI NHẬN TRONG KỲ", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.refunds, "CÁC KHOẢN HOÀN TIỀN GHI NHẬN TRONG KỲ", [
     "STT", "Ngày hoàn", "Audit ID", "Payment ID", "Mã đơn", "Phương thức", "Số đã thu", "Số hoàn", "Còn lại",
     "Lý do", "Người ghi nhận", "Mã lỗi", "Chú thích",
   ]);
@@ -580,7 +610,7 @@ function buildRefundsSheet(workbook: ExcelJS.Workbook, data: AccountingExportDat
 }
 
 function buildJournalSheet(workbook: ExcelJS.Workbook, report: RevenueReport, entries: AccountingEntry[]): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Nhật ký kế toán", "NHẬT KÝ DOANH THU VÀ HOÀN TIỀN", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.journal, "NHẬT KÝ DOANH THU VÀ HOÀN TIỀN", [
     "STT", "Ngày hạch toán", "Số chứng từ", "Diễn giải", "Phương thức", "TK Nợ", "TK Có", "Phát sinh", "Giảm trừ", "Doanh thu thuần",
   ], `Từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} - Đơn vị: VND`);
   entries.forEach((entry, index) => {
@@ -600,7 +630,7 @@ function buildJournalSheet(workbook: ExcelJS.Workbook, report: RevenueReport, en
 }
 
 function buildDailySheet(workbook: ExcelJS.Workbook, report: RevenueReport): ExcelJS.Worksheet {
-  const sheet = createDataSheet(workbook, "Tổng hợp ngày", "BẢNG TỔNG HỢP DOANH THU THEO NGÀY", [
+  const sheet = createDataSheet(workbook, SHEET_NAMES.daily, "BẢNG TỔNG HỢP DOANH THU THEO NGÀY", [
     "STT", "Ngày", "Tiền mặt", "QR/Ngân hàng", "Doanh thu gộp", "Hoàn tiền", "Doanh thu thuần", "Số đơn", "Số hoàn",
   ], `Từ ${formatDate(report.range.from)} đến ${formatDate(report.range.to)} - Đơn vị: VND`);
   report.byTime.forEach((item, index) => {
@@ -616,6 +646,22 @@ function buildDailySheet(workbook: ExcelJS.Workbook, report: RevenueReport): Exc
   sheet.getColumn(2).numFmt = "dd/mm/yyyy";
   setMoneyColumns(sheet, [3, 4, 5, 6, 7]);
   setWidths(sheet, [7, 16, 17, 17, 18, 17, 18, 12, 12]);
+  finishDataSheet(sheet);
+  return sheet;
+}
+
+function buildGuideSheet(workbook: ExcelJS.Workbook, report: RevenueReport): ExcelJS.Worksheet {
+  const sheet = createDataSheet(workbook, SHEET_NAMES.guide, "HƯỚNG DẪN SỬ DỤNG FILE KẾ TOÁN", [
+    "Mục", "Nội dung", "Lưu ý kiểm soát",
+  ], `Kỳ báo cáo: ${formatDate(report.range.from)} - ${formatDate(report.range.to)}`);
+  [
+    ["Phạm vi", "File phản ánh doanh thu, thanh toán, giao dịch SePay và hoàn tiền đang lưu trong Order Flow.", "Đối chiếu chứng từ gốc trước khi hạch toán hoặc kê khai."],
+    ["Không thuộc phạm vi", "Order Flow không lưu số dư đầu kỳ, nhập-xuất-tồn, giá vốn, chi phí, VAT đầu vào hoặc hồ sơ đối tác.", "Không tự suy diễn các số liệu chưa có trong hệ thống."],
+    ["Công thức", "Các ô tổng và chênh lệch dùng công thức Excel; file được đặt chế độ tính lại khi mở.", "Không ghi đè ô công thức nếu chưa lưu bản sao."],
+    ["Màu cảnh báo", "Đỏ: nghiêm trọng; cam: chênh lệch; vàng: cần rà soát; tím: thiếu dữ liệu; xanh: thông tin.", `Xem chi tiết và hướng xử lý tại sheet ${SHEET_NAMES.issues}.`],
+    ["Kỳ báo cáo", `${formatDate(report.range.from)} - ${formatDate(report.range.to)}`, "Múi giờ Asia/Ho_Chi_Minh; đơn vị tiền VND."],
+  ].forEach((row) => sheet.addRow(row));
+  setWidths(sheet, [22, 72, 62]);
   finishDataSheet(sheet);
   return sheet;
 }
@@ -774,48 +820,82 @@ function createDataSheet(
   headers: string[],
   subtitle = "Dữ liệu nguồn từ Order Flow - Đơn vị tiền: VND",
 ): ExcelJS.Worksheet {
-  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 3, showGridLines: false }] });
+  const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 5, showGridLines: false }] });
   const lastColumn = columnLetter(headers.length);
   sheet.mergeCells(`A1:${lastColumn}1`);
-  sheet.getCell("A1").value = title;
+  sheet.getCell("A1").value = "ORDER FLOW";
   sheet.mergeCells(`A2:${lastColumn}2`);
-  sheet.getCell("A2").value = subtitle;
-  sheet.addRow(headers);
-  styleTitle(sheet, headers.length);
-  styleHeader(sheet.getRow(3));
+  sheet.getCell("A2").value = title;
+  sheet.mergeCells(`A3:${lastColumn}3`);
+  sheet.getCell("A3").value = subtitle;
+  sheet.getRow(4).height = 8;
+  sheet.getRow(5).values = headers;
+  styleTitle(sheet);
+  styleHeader(sheet.getRow(5));
   return sheet;
 }
 
 function finishDataSheet(sheet: ExcelJS.Worksheet): void {
-  sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: Math.max(3, sheet.rowCount), column: sheet.columnCount } };
-  const hasLongTextColumns = Array.from({ length: sheet.columnCount }, (_, index) => sheet.getRow(3).getCell(index + 1).value)
+  sheet.autoFilter = { from: { row: 5, column: 1 }, to: { row: Math.max(5, sheet.rowCount), column: sheet.columnCount } };
+  const hasLongTextColumns = Array.from({ length: sheet.columnCount }, (_, index) => sheet.getRow(5).getCell(index + 1).value)
     .some((value) => value === "Chú thích" || value === "Ghi chú" || value === "Hướng xử lý");
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber <= 3) return;
+    if (rowNumber <= 5) return;
     row.height = hasLongTextColumns ? 48 : 24;
     row.alignment = { vertical: "middle", wrapText: true };
     row.eachCell((cell) => {
-      cell.font = { ...cell.font, name: "Arial", size: 9 };
+      cell.font = { ...cell.font, name: "Arial", size: 10 };
     });
   });
+  applyBodyStyle(sheet, 6);
 }
 
-function styleTitle(sheet: ExcelJS.Worksheet, _columnCount: number): void {
-  sheet.getCell("A1").font = { name: "Arial", size: 15, bold: true, color: { argb: "FF173F35" } };
+function styleTitle(sheet: ExcelJS.Worksheet): void {
+  sheet.getCell("A1").font = { name: "Arial", size: 12, bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getCell("A1").fill = solidFill(TEMPLATE_STYLE.banner);
   sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
-  sheet.getCell("A2").font = { name: "Arial", size: 9, italic: true, color: { argb: "FF64748B" } };
+  sheet.getCell("A2").font = { name: "Arial", size: 11, bold: true, color: { argb: TEMPLATE_STYLE.title } };
   sheet.getCell("A2").alignment = { horizontal: "center", vertical: "middle" };
-  sheet.getRow(1).height = 28;
+  sheet.getCell("A3").font = { name: "Arial", size: 9, italic: true, color: { argb: TEMPLATE_STYLE.subtitle } };
+  sheet.getCell("A3").alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  sheet.getRow(1).height = 24;
+  sheet.getRow(2).height = 22;
+  sheet.getRow(3).height = 20;
 }
 
 function styleHeader(row: ExcelJS.Row): void {
-  row.height = 38;
-  row.eachCell((cell) => {
-    cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = solidFill("FF173F35");
+  row.height = 34;
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = solidFill(TEMPLATE_STYLE.header);
     cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-    cell.border = { bottom: { style: "medium", color: { argb: "FF173F35" } } };
+    cell.border = thinBorder();
   });
+}
+
+function applyBodyStyle(sheet: ExcelJS.Worksheet, fromRow: number): void {
+  for (let rowNumber = fromRow; rowNumber <= sheet.rowCount; rowNumber += 1) {
+    const row = sheet.getRow(rowNumber);
+    if (!row.hasValues) continue;
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = mergeBorder(cell.border, thinBorder());
+      if (!cell.font?.name) cell.font = { ...cell.font, name: "Arial", size: 10 };
+    });
+  }
+}
+
+function thinBorder(): Partial<ExcelJS.Borders> {
+  const edge = { style: "thin" as const, color: { argb: TEMPLATE_STYLE.border } };
+  return { top: edge, left: edge, bottom: edge, right: edge };
+}
+
+function mergeBorder(current: Partial<ExcelJS.Borders> | undefined, fallback: Partial<ExcelJS.Borders>): Partial<ExcelJS.Borders> {
+  return {
+    top: current?.top ?? fallback.top,
+    left: current?.left ?? fallback.left,
+    bottom: current?.bottom ?? fallback.bottom,
+    right: current?.right ?? fallback.right,
+  };
 }
 
 function applyIssuesToRow(row: ExcelJS.Row, issues: AccountingIssue[], issueColumn: number): void {
@@ -937,15 +1017,16 @@ function applyStatusCell(cell: ExcelJS.Cell, severity: IssueSeverity | null): vo
 }
 
 function addTotals(sheet: ExcelJS.Worksheet, labelColumn: number, sumColumns: number[]): void {
-  const totalRow = Math.max(5, sheet.rowCount + 1);
+  const totalRow = Math.max(7, sheet.rowCount + 1);
   sheet.getCell(totalRow, labelColumn).value = "CỘNG";
   sumColumns.forEach((column) => {
-    const staticTotal = sheet.getColumn(column).values.slice(4).reduce<number>((sum, value) => sum + numericCellResult(value), 0);
-    sheet.getCell(totalRow, column).value = { formula: `SUM(${columnLetter(column)}4:${columnLetter(column)}${totalRow - 1})`, result: staticTotal };
+    const staticTotal = sheet.getColumn(column).values.slice(6).reduce<number>((sum, value) => sum + numericCellResult(value), 0);
+    sheet.getCell(totalRow, column).value = { formula: `SUM(${columnLetter(column)}6:${columnLetter(column)}${totalRow - 1})`, result: staticTotal };
   });
-  sheet.getRow(totalRow).font = { name: "Arial", size: 9, bold: true };
+  sheet.getRow(totalRow).font = { name: "Arial", size: 10, bold: true };
+  sheet.getRow(totalRow).fill = solidFill(TEMPLATE_STYLE.labelFill);
   sheet.getRow(totalRow).eachCell((cell) => {
-    cell.border = { ...cell.border, top: { style: "double", color: { argb: "FF173F35" } } };
+    cell.border = { ...thinBorder(), top: { style: "double", color: { argb: TEMPLATE_STYLE.banner } } };
   });
 }
 
