@@ -77,6 +77,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 - The complete application can run from published Docker images through root `compose.yaml`: PostgreSQL, Redis, one-shot OWNER initialization, API, Admin Web, Telegram Bot and notification worker. GHCR release automation builds both AMD64 and ARM64 images.
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- The API runs a server-side QR-payment recovery poller every three seconds by default. It scans pending QR payments in a bounded batch, queries SePay with `SEPAY_API_TOKEN`, then sends exact matches through the same idempotent SePay transaction pipeline used by webhooks.
 - OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
 - The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.

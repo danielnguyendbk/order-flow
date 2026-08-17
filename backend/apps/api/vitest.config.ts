@@ -16,6 +16,7 @@ export default defineConfig({
       "src/modules/barista/tests/**/*.test.ts",
       "src/modules/admin/tests/**/*.test.ts",
       "src/modules/notifications/tests/**/*.test.ts",
+      "src/jobs/**/*.test.ts",
     ],
     exclude: ["src/modules/**/tests/**/*.integration.test.ts"],
   },

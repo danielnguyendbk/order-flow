@@ -88,6 +88,7 @@ export async function reconcileQrPayment(ctx: OrderStatusContext, api: BackendAp
       const messages: Record<string, string> = {
         SEPAY_API_NOT_CONFIGURED: "Chưa cấu hình SePay API Token để kiểm tra giao dịch chủ động.",
         SEPAY_API_TOKEN_INVALID: "SePay API Token không hợp lệ hoặc đã hết hiệu lực.",
+        SEPAY_API_RATE_LIMITED: "SePay đang giới hạn yêu cầu. Hệ thống sẽ tự kiểm tra lại sau ít nhất một phút.",
         SEPAY_API_UNAVAILABLE: "Không thể kết nối SePay lúc này. Hãy thử lại sau.",
       };
       if (error.code && messages[error.code]) {

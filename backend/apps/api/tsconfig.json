@@ -16,6 +16,7 @@
     "src/server.ts",
     "src/config/**/*.ts",
     "src/core/**/*.ts",
+    "src/jobs/**/*.ts",
     "src/middleware/**/*.ts",
     "src/modules/admin/**/*.ts",
     "src/modules/auth/**/*.ts",

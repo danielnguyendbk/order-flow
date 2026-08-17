@@ -16,7 +16,7 @@ describe("SepayApiClient", () => {
         { id: "1", account_number: input.accountNumber, transaction_date: "2026-08-10 22:37:00", amount_in: "5000.00", amount_out: "0.00", code: null, transaction_content: `MBVCB ${input.paymentCode}`, reference_number: "REF1" },
       ],
     }), { status: 200, headers: { "content-type": "application/json" } }));
-    const client = new SepayApiClient("token", fetchImpl);
+    const client = new SepayApiClient("token", fetchImpl, "https://my.sepay.vn/userapi/transactions/list");
 
     await expect(client.findIncomingTransaction(input)).resolves.toMatchObject({
       id: "1",
@@ -29,6 +29,17 @@ describe("SepayApiClient", () => {
     );
   });
 
+  it("uses the SePay v2 live endpoint by default", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "success", data: [] }), { status: 200 }));
+
+    await new SepayApiClient("token", fetchImpl).findIncomingTransaction(input);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.objectContaining({ hostname: "userapi.sepay.vn", pathname: "/v2/transactions" }),
+      expect.anything(),
+    );
+  });
+
   it("does not accept a same-amount transaction with a different payment code", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       transactions: [
@@ -36,7 +47,11 @@ describe("SepayApiClient", () => {
       ],
     }), { status: 200 }));
 
-    await expect(new SepayApiClient("token", fetchImpl).findIncomingTransaction(input)).resolves.toBeNull();
+    await expect(new SepayApiClient(
+      "token",
+      fetchImpl,
+      "https://my.sepay.vn/userapi/transactions/list",
+    ).findIncomingTransaction(input)).resolves.toBeNull();
   });
 
   it("supports SePay API v2 Sandbox responses and UUID transaction IDs", async () => {
@@ -107,6 +122,20 @@ describe("SepayApiClient", () => {
     ).findIncomingTransaction(input)).resolves.toMatchObject({
       id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     });
+  });
+
+  it("surfaces SePay rate limits with the requested retry delay", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, {
+      status: 429,
+      headers: { "retry-after": "12" },
+    }));
+
+    await expect(new SepayApiClient("token", fetchImpl).findIncomingTransaction(input))
+      .rejects.toMatchObject<SepayApiClientError>({
+        statusCode: 429,
+        code: "SEPAY_API_RATE_LIMITED",
+        retryAfterMs: 12_000,
+      });
   });
 
   it("fails closed when the API token is missing", async () => {

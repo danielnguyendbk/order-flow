@@ -71,6 +71,9 @@ services:
       SEPAY_WEBHOOK_API_KEY: ${SEPAY_WEBHOOK_API_KEY:-}
       SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
       SEPAY_API_BASE_URL: ${SEPAY_API_BASE_URL:-https://userapi.sepay.vn/v2/transactions}
+      SEPAY_QR_POLL_ENABLED: ${SEPAY_QR_POLL_ENABLED:-false}
+      SEPAY_QR_POLL_INTERVAL_MS: ${SEPAY_QR_POLL_INTERVAL_MS:-3000}
+      SEPAY_QR_POLL_BATCH_SIZE: ${SEPAY_QR_POLL_BATCH_SIZE:-5}
     ports:
       - "${API_PORT:-3001}:3001"
     depends_on:
