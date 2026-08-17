@@ -9,6 +9,8 @@ The repository currently contains two main workspaces: `backend/` and `frontend/
 ```text
 order-flow/
 ├── AGENTS.md                         # This persistent project map
+├── compose.yaml                      # Pull-and-run production container stack
+├── DOCKER_DEPLOYMENT.md              # Container publishing and operator guide
 ├── package.json                      # Root process runner (`npm run live`)
 ├── SWIFT_MOBILE_APP_SPEC.md          # OWNER-only, read-only Swift manager dashboard contract
 ├── frontend/                         # Next.js Admin Web Application
@@ -20,6 +22,8 @@ order-flow/
 └── backend/
     ├── README.md                     # Short workspace overview
     ├── docker-compose.yml            # Local PostgreSQL 16 service
+    ├── Dockerfile                    # Shared API/Bot/worker/init production image
+    ├── Dockerfile.postgres           # PostgreSQL image with baseline schema
     ├── docs/
     │   ├── api-contract.md           # Planned HTTP route inventory
     │   └── openapi.yaml              # Importable Postman/OpenAPI contract for all routes
@@ -71,6 +75,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 ## Current implementation state
 
+- The complete application can run from published Docker images through root `compose.yaml`: PostgreSQL, Redis, one-shot OWNER initialization, API, Admin Web, Telegram Bot and notification worker. GHCR release automation builds both AMD64 and ARM64 images.
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
 - The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
@@ -87,6 +92,12 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
 - The staff `Kiểm tra thanh toán` action actively queries SePay API v2 as a webhook-recovery path, requiring `SEPAY_API_TOKEN` and an environment-specific `SEPAY_API_BASE_URL`; Live and Test Mode/Sandbox tokens are isolated. Numeric API v1 and UUID API v2 transaction IDs share the same string idempotency column.
 - The experimental voice-order handler can download a Telegram voice message and invoke a configured Hermes-compatible command bridge; it is disabled unless `VOICE_ORDER_SCRIPT` is configured.
+
+## Progress log — 2026-08-16
+
+- Added production multi-stage Docker images for the shared backend runtime and standalone Next.js frontend, plus a PostgreSQL 16 image that initializes the full baseline schema.
+- Added a pull-only production Compose stack with health/dependency gates, persistent PostgreSQL/Redis volumes, idempotent OWNER initialization, internal service URLs and configurable public ports.
+- Added GHCR tag publishing for `linux/amd64` and `linux/arm64`, an environment template, and an operator guide for download, startup, upgrades, logs and package visibility.
 
 ## Progress log — 2026-08-14
 

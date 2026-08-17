@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
 
 # JavaScript / TypeScript dependencies and build output.
 node_modules/
