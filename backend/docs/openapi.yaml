@@ -1240,8 +1240,8 @@ paths:
     post:
       tags: [Admin Finance]
       operationId: exportRevenueReport
-      summary: Export accounting XLSX or template-based TNDN DOCX
-      description: The XLSX includes related orders, Payments, SePay transactions, refunds, formula-driven accounting tie-outs and color-coded annotated exceptions. DOCX formats retain the supplied 03/04-TNDN templates.
+      summary: Export accounting XLSX
+      description: The workbook follows the supplied SME sample's numbered-sheet presentation and includes related orders, Payments, SePay transactions, refunds, formula-driven accounting tie-outs, color-coded annotated exceptions and a scope guide.
       x-implementation-status: implemented
       security:
         - bearerAuth: []
@@ -1266,47 +1266,10 @@ paths:
               properties:
                 format:
                   type: string
-                  enum: [xlsx, tax-revenue, tax-revenue-expense]
-                taxpayerName:
-                  type: string
-                taxCode:
-                  type: string
-                activityName:
-                  type: string
-                taxRatePercent:
-                  type: number
-                  minimum: 0
-                  maximum: 100
-                deductibleExpenses:
-                  type: integer
-                  minimum: 0
-                adjustmentsIncrease:
-                  type: integer
-                  minimum: 0
-                adjustmentsDecrease:
-                  type: integer
-                  minimum: 0
-                exemptIncome:
-                  type: integer
-                  minimum: 0
-                carriedLoss:
-                  type: integer
-                  minimum: 0
-                scienceFund:
-                  type: integer
-                  minimum: 0
-                taxRelief:
-                  type: integer
-                  minimum: 0
-                priorOverpayment:
-                  type: integer
-                  minimum: 0
-                provisionalTaxPaid:
-                  type: integer
-                  minimum: 0
+                  enum: [xlsx]
       responses:
         "200":
-          description: Generated XLSX or DOCX attachment
+          description: Generated XLSX attachment
           headers:
             Content-Disposition:
               schema:
