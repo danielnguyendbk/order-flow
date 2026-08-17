@@ -23,6 +23,7 @@ describe("Telegram callback data protocol", () => {
     ["addMore", undefined],
     ["backCategories", undefined],
     ["backReview", undefined],
+    ["goBack", undefined],
     ["skipNote", undefined],
     ["payCash", undefined],
     ["payQr", undefined],

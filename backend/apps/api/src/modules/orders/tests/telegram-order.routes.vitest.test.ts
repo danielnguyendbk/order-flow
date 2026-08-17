@@ -38,6 +38,7 @@ function fakeService(overrides: Partial<TelegramOrderServiceContract> = {}): Tel
       amount: 30_000,
       qrImageUrl: "https://vietqr.app/img?amount=30000",
     }),
+    resetQr: vi.fn().mockResolvedValue(draft),
     reconcileQr: vi.fn().mockResolvedValue({ order: { ...draft, paymentMethod: "QR", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }, matched: true }),
     deliver: vi.fn().mockResolvedValue({ ...draft, fulfillmentStatus: "DELIVERED" }),
     ...overrides,
@@ -112,11 +113,14 @@ describe("Telegram service-staff order HTTP contract", () => {
     const baseUrl = await startApi(service);
     const cash = await apiRequest(baseUrl, "/orders/order-1/payments/cash/confirm", "POST");
     const qr = await apiRequest(baseUrl, "/orders/order-1/payments/qr", "POST");
+    const reset = await apiRequest(baseUrl, "/orders/order-1/payments/qr/reset", "POST");
     const reconciliation = await apiRequest(baseUrl, "/orders/order-1/payments/qr/reconcile", "POST");
     expect(cash.status).toBe(200);
     expect(await cash.json()).toMatchObject({ paymentMethod: "CASH", paymentStatus: "PAID", fulfillmentStatus: "QUEUED" });
     expect(qr.status).toBe(200);
     expect(await qr.json()).toMatchObject({ paymentCode: "PAYORD001", amount: 30_000 });
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toMatchObject({ paymentMethod: null, paymentStatus: "UNPAID" });
     expect(reconciliation.status).toBe(200);
     expect(await reconciliation.json()).toMatchObject({ matched: true, order: { paymentStatus: "PAID", fulfillmentStatus: "QUEUED" } });
     const delivered = await apiRequest(baseUrl, "/orders/order-1/deliver", "POST", { requesterId: "attacker" });

@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
+import { myOrdersKeyboard, orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import type { EmployeeSession } from "../types.js";
-import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
+import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, returnToPaymentSelection, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -39,6 +40,7 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     listMyOrders: vi.fn().mockResolvedValue([order()]),
     confirmCashPayment: vi.fn().mockResolvedValue(order()),
     createQrPayment: vi.fn().mockResolvedValue({ order: order(), paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }),
+    resetQrPayment: vi.fn().mockResolvedValue(order({ paymentMethod: null, paymentStatus: "UNPAID" })),
     reconcileQrPayment: vi.fn().mockResolvedValue({ order: order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }), matched: true }),
     deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
     listBaristaQueue: vi.fn().mockResolvedValue([]),
@@ -74,6 +76,38 @@ function callbackContext(data: string): OrderStatusCallbackContext & { replies: 
 }
 
 describe("Telegram order tracking", () => {
+  it("provides back navigation on order list and order detail screens", () => {
+    const listLabels = myOrdersKeyboard([order()]).reply_markup.inline_keyboard.flat().map((button) => button.text);
+    const detailLabels = orderStatusKeyboard(order()).reply_markup.inline_keyboard.flat().map((button) => button.text);
+
+    expect(listLabels).toContain("Trở lại");
+    expect(detailLabels).toContain("Trở lại");
+  });
+
+  it("shows back and payment check actions side by side for QR payment", () => {
+    const rows = qrPaymentKeyboard("order-1").reply_markup.inline_keyboard;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].map((button) => button.text)).toEqual(["Trở lại", "Kiểm tra thanh toán"]);
+    expect(rows[0]).toEqual([
+      expect.objectContaining({ callback_data: "order:payment-back:order-1" }),
+      expect.objectContaining({ callback_data: "order:reconcile:order-1" }),
+    ]);
+  });
+
+  it("resets a pending QR payment and returns to payment method selection", async () => {
+    const backend = api();
+    const ctx = callbackContext("order:payment-back:order-1");
+
+    await returnToPaymentSelection(ctx, backend, "order-1");
+
+    expect(backend.resetQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.session.draftOrder).toMatchObject({ orderId: "order-1", step: "REVIEW" });
+    expect(ctx.clears).toEqual(["cleared"]);
+    expect(ctx.replies.at(-1)).toContain("🧾 ĐƠN ORD-001");
+    expect(ctx.replies.at(-1)).toContain("💰 TỔNG: 30.000");
+  });
+
   it("lists only the authenticated employee's orders", async () => {
     const backend = api();
     const ctx = context();

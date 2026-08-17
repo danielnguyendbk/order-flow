@@ -4,9 +4,12 @@ import type { DraftOrder } from "../api/order-types.js";
 import { orderStatusSummary } from "../formatters/order-status.js";
 
 export function myOrdersKeyboard(orders: DraftOrder[]) {
-  return Markup.inlineKeyboard(orders.map((order) => [
-    Markup.button.callback(`${order.code} · ${orderStatusSummary(order.paymentStatus, order.fulfillmentStatus)}`, `order:status:${order.id}`),
-  ]));
+  return Markup.inlineKeyboard([
+    ...orders.map((order) => [
+      Markup.button.callback(`${order.code} · ${orderStatusSummary(order.paymentStatus, order.fulfillmentStatus)}`, `order:status:${order.id}`),
+    ]),
+    [Markup.button.callback("Trở lại", "service:menu")],
+  ]);
 }
 
 export function orderStatusKeyboard(order: DraftOrder) {
@@ -16,14 +19,16 @@ export function orderStatusKeyboard(order: DraftOrder) {
   }
   rows.push(
     [Markup.button.callback("Làm mới trạng thái", `order:status:${order.id}`)],
-    [Markup.button.callback("Đơn của tôi", "service:orders:mine")],
+    [Markup.button.callback("Trở lại", "service:orders:mine")],
   );
   return Markup.inlineKeyboard(rows);
 }
 
-export function qrPaymentKeyboard(orderId: string, qrImageUrl: string) {
+export function qrPaymentKeyboard(orderId: string) {
   return Markup.inlineKeyboard([
-    [Markup.button.url("Mở mã QR", qrImageUrl)],
-    [Markup.button.callback("Kiểm tra thanh toán", `order:reconcile:${orderId}`)],
+    [
+      Markup.button.callback("Trở lại", `order:payment-back:${orderId}`),
+      Markup.button.callback("Kiểm tra thanh toán", `order:reconcile:${orderId}`),
+    ],
   ]);
 }

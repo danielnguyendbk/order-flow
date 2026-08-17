@@ -36,6 +36,7 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     listMyOrders: vi.fn().mockResolvedValue([]),
     confirmCashPayment: vi.fn(),
     createQrPayment: vi.fn(),
+    resetQrPayment: vi.fn(),
     deliverOrder: vi.fn(),
     listBaristaQueue: vi.fn(),
     listBaristaOrders: vi.fn(),

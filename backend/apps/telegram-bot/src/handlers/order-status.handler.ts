@@ -3,8 +3,11 @@ import type { Telegraf } from "telegraf";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import { authenticateEmployee } from "../auth/employee-auth.js";
+import { createCallbackRevision } from "../callbacks/callback-data.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
 import { fulfillmentStatusLabel, paymentStatusLabel } from "../formatters/order-status.js";
+import { formatPaymentSelection } from "../formatters/payment-selection.js";
+import { reviewKeyboard } from "../keyboards/draft-order.js";
 import { myOrdersKeyboard, orderStatusKeyboard } from "../keyboards/order-status.js";
 import type { BotContext, BotSession, EmployeeSession } from "../types.js";
 import { isAccessDenied } from "./start.handler.js";
@@ -45,7 +48,7 @@ export async function showMyOrders(ctx: OrderStatusContext, api: BackendApi, aut
     }
     const orders = await api.listMyOrders(employee.telegramUserId);
     if (!orders.length) {
-      await ctx.reply("Bạn chưa có đơn nào.");
+      await ctx.reply("Bạn chưa có đơn nào.", myOrdersKeyboard([]));
       return;
     }
     await ctx.reply("Chọn đơn để xem trạng thái:", myOrdersKeyboard(orders));
@@ -120,6 +123,34 @@ export async function deliverServiceOrder(ctx: OrderStatusContext, api: BackendA
   }
 }
 
+export async function returnToPaymentSelection(ctx: OrderStatusContext, api: BackendApi, orderId: string): Promise<void> {
+  try {
+    const employee = await authenticateEmployee(ctx, api);
+    if (employee.role !== "SERVICE_STAFF") {
+      await ctx.reply("Bạn không có quyền thay đổi phương thức thanh toán đơn này.");
+      return;
+    }
+
+    const order = await api.resetQrPayment(employee.telegramUserId, orderId);
+    const callbackRevision = createCallbackRevision();
+    ctx.session.draftOrder = { orderId: order.id, step: "REVIEW", callbackRevision };
+    await ctx.clearCallbackMessage?.().catch(() => undefined);
+    await ctx.reply(formatPaymentSelection(order), reviewKeyboard(order, callbackRevision));
+  } catch (error) {
+    if (error instanceof BackendApiError && ["QR_RESET_NOT_ALLOWED", "QR_PAYMENT_RECEIVED", "ORDER_STATE_CHANGED"].includes(error.code ?? "")) {
+      await ctx.clearCallbackMessage?.().catch(() => undefined);
+      try {
+        const employee = ctx.session.employee;
+        if (employee?.role !== "SERVICE_STAFF") throw error;
+        const current = await api.getDraftOrder(employee.telegramUserId, orderId);
+        await ctx.reply(`Không thể chọn lại phương thức vì trạng thái thanh toán đã thay đổi.\n\n${formatOrderStatus(current)}`, orderStatusKeyboard(current));
+        return;
+      } catch { /* Fall through to the standard error below. */ }
+    }
+    await ctx.reply(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể quay lại chọn phương thức thanh toán. Hãy thử lại.");
+  }
+}
+
 export async function handleOrderStatusCallback(ctx: OrderStatusCallbackContext, api: BackendApi): Promise<void> {
   const key = ctx.callbackData;
   const acquireResult = acquireCallback(ctx.session, key);
@@ -135,7 +166,7 @@ export async function handleOrderStatusCallback(ctx: OrderStatusCallbackContext,
 
   let completed = false;
   try {
-    const match = /^order:(status|reconcile|deliver):(.+)$/.exec(key);
+    const match = /^order:(status|reconcile|deliver|payment-back):(.+)$/.exec(key);
     if (!match) {
       await ctx.clearCallbackMessage?.().catch(() => undefined);
       await ctx.answerCallback("Nút này đã hết hạn.");
@@ -145,6 +176,10 @@ export async function handleOrderStatusCallback(ctx: OrderStatusCallbackContext,
     await ctx.answerCallback();
     if (match[1] === "status") await showOrderStatus(ctx, api, match[2]);
     else if (match[1] === "reconcile") await reconcileQrPayment(ctx, api, match[2]);
+    else if (match[1] === "payment-back") {
+      await returnToPaymentSelection(ctx, api, match[2]);
+      completed = true;
+    }
     else {
       await deliverServiceOrder(ctx, api, match[2]);
       completed = true;

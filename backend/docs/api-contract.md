@@ -119,10 +119,12 @@ Status: **implemented**
 | --- | --- | --- |
 | `GET` | `/api/v1/orders/:orderId/payments` | List payment records for an order |
 | `POST` | `/api/v1/orders/:orderId/payments/qr` | Initialize or reuse a QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/qr/reset` | Reset a pending QR payment before any transaction is received |
 | `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Confirm a CASH payment and queue the order |
 
 - `GET /orders/:orderId/payments` returns the linked payment history for the order.
 - QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
+- QR reset returns the order to `UNPAID` so staff can choose another payment method; it is rejected after any SePay transaction or received amount is recorded.
 - CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
 - CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
 - CASH confirmation and QR initialization write financial audit logs.
@@ -201,6 +203,7 @@ Implementation status: **implemented for authenticated Telegram service staff**.
 | `DELETE` | `/api/v1/orders/:orderId/items/:itemId` | Delete an item and recalculate total |
 | `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid draft |
 | `POST` | `/api/v1/orders/:orderId/payments/qr` | Start an idempotent QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/qr/reset` | Return a pending QR order to payment-method selection when no transaction exists |
 | `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Atomically confirm CASH and queue the order |
 | `POST` | `/api/v1/orders/:orderId/deliver` | Creator confirms handoff of a READY order |
 

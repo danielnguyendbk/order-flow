@@ -441,6 +441,28 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/orders/{orderId}/payments/qr/reset:
+    post:
+      tags: [Payments]
+      operationId: resetPendingQrPayment
+      summary: Reset a pending QR payment before any transaction is received
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+      responses:
+        "200":
+          description: Order returned to UNPAID payment-method selection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v1/orders/{orderId}/payments/cash/confirm:
     post:
       tags: [Payments]

@@ -3,7 +3,7 @@ import type { Telegraf } from "telegraf";
 import type { BackendApi } from "../api/backend-client.js";
 import { authenticateEmployee, type EmployeeAuthenticationApi } from "../auth/employee-auth.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
-import { roleMenu } from "../keyboards/role-menu.js";
+import { roleMenu, serviceStaffQuickKeyboard } from "../keyboards/role-menu.js";
 import { startDraftOrder } from "./draft-order.handler.js";
 import { isAccessDenied } from "./start.handler.js";
 import type { BotContext, BotSession, EmployeeRole } from "../types.js";
@@ -15,6 +15,7 @@ type CallbackAction = {
 
 const actions: Record<string, CallbackAction> = {
   "service:order:create": { role: "SERVICE_STAFF" },
+  "service:menu": { role: "SERVICE_STAFF", message: "⚡ Thao tác nhanh:" },
 };
 
 export interface CallbackHandlerContext {
@@ -51,7 +52,13 @@ export async function handleCallback(ctx: CallbackHandlerContext, api: EmployeeA
     }
 
     await ctx.answerCallback();
-    if (action.message) await ctx.reply(action.message);
+    if (ctx.callbackData === "service:menu") await ctx.clearCallbackMessage?.().catch(() => undefined);
+    if (action.message) {
+      await ctx.reply(
+        action.message,
+        ctx.callbackData === "service:menu" ? serviceStaffQuickKeyboard() : roleMenu(employee.role),
+      );
+    }
     completed = true;
   } catch (error) {
     await ctx.answerCallback(isAccessDenied(error) ? "Tài khoản không còn được phép sử dụng." : "Không thể xử lý. Hãy thử lại.");

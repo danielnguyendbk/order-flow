@@ -50,6 +50,44 @@ describe("TelegramOrderService input guards", () => {
     await expect(service.createQr("employee", "order")).rejects.toMatchObject({ statusCode: 503, code: "QR_CONFIG_MISSING" });
   });
 
+  it("resets a pending QR payment before any transaction is received", async () => {
+    const resetOrder = { ...pendingQrOrder, paymentMethod: null, paymentStatus: "UNPAID" };
+    const database: any = {
+      order: {
+        findUnique: vi.fn().mockResolvedValueOnce(pendingQrOrder).mockResolvedValueOnce(resetOrder),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      payment: {
+        findUnique: vi.fn().mockResolvedValue({ id: "payment-1", receivedAmount: 0n, _count: { sepayTransactions: 0 } }),
+        delete: vi.fn().mockResolvedValue({}),
+      },
+      orderStatusHistory: { create: vi.fn().mockResolvedValue({}) },
+    };
+    database.$transaction = vi.fn(async (operation: (tx: any) => unknown) => operation(database));
+
+    const result = await new TelegramOrderService(database as PrismaClient).resetQr("staff-1", "order-qr");
+
+    expect(database.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: { paymentMethod: null, paymentStatus: "UNPAID" },
+    }));
+    expect(database.payment.delete).toHaveBeenCalledWith({ where: { id: "payment-1" } });
+    expect(database.orderStatusHistory.create).toHaveBeenCalledWith({ data: expect.objectContaining({ oldStatus: "PENDING", newStatus: "UNPAID" }) });
+    expect(result).toMatchObject({ paymentMethod: null, paymentStatus: "UNPAID", fulfillmentStatus: "PENDING_PAYMENT" });
+  });
+
+  it("does not reset QR after a transaction has been received", async () => {
+    const database: any = {
+      order: { findUnique: vi.fn().mockResolvedValue(pendingQrOrder), updateMany: vi.fn() },
+      payment: { findUnique: vi.fn().mockResolvedValue({ id: "payment-1", receivedAmount: 5_000n, _count: { sepayTransactions: 1 } }), delete: vi.fn() },
+    };
+    database.$transaction = vi.fn(async (operation: (tx: any) => unknown) => operation(database));
+
+    await expect(new TelegramOrderService(database as PrismaClient).resetQr("staff-1", "order-qr"))
+      .rejects.toMatchObject({ statusCode: 409, code: "QR_PAYMENT_RECEIVED" });
+    expect(database.order.updateMany).not.toHaveBeenCalled();
+    expect(database.payment.delete).not.toHaveBeenCalled();
+  });
+
   it("does not change a pending order when SePay has no exact transaction", async () => {
     const database: any = {
       order: { findUnique: vi.fn().mockResolvedValue(pendingQrOrder) },
