@@ -164,7 +164,7 @@ function getLocalTimeBucket(date: Date, groupBy: string): string {
   const parts = hcmFormatter.formatToParts(date);
   const map = {} as Record<string, string>;
   for (const p of parts) map[p.type] = p.value;
-  
+
   if (groupBy === "hour") return `${map.year}-${map.month}-${map.day} ${map.hour}:00`;
   if (groupBy === "month") return `${map.year}-${map.month}`;
   if (groupBy === "week") {

@@ -197,19 +197,17 @@ API_BASE_URL=http://127.0.0.1:3001/api/v1
 
 Biến này chỉ được đọc ở server Next.js, không thêm tiền tố `NEXT_PUBLIC_`.
 
-## 4. Khởi tạo PostgreSQL và Redis
+## 4. Khởi tạo PostgreSQL
 
 Từ thư mục gốc `order-flow/`:
 
 ```powershell
-docker compose -f backend/docker-compose.yml up -d postgres redis
+docker compose -f backend/docker-compose.yml up -d postgres
 docker compose -f backend/docker-compose.yml ps
 ```
 
-Docker Compose tạo:
-
-- PostgreSQL 16 tại `localhost:5432`, database/user/password đều là `order_flow`
-- Redis 7 tại `localhost:6379`
+Docker Compose tạo PostgreSQL 16 tại `localhost:5432`, database/user/password đều là `order_flow`.
+Notification Worker vẫn cần một Redis bên ngoài được cấu hình qua `REDIS_URL` nếu tiến trình này được bật.
 
 Khởi tạo Prisma Client, đồng bộ schema và seed dữ liệu:
 
@@ -238,7 +236,7 @@ Repository hiện không có Prisma migration history, vì vậy một database 
 
 ## 5. Chạy toàn bộ dự án
 
-Giữ Docker Desktop và hai container PostgreSQL/Redis đang chạy. Từ thư mục gốc `order-flow/`, chạy:
+Giữ Docker Desktop và container PostgreSQL đang chạy. Nếu bật Notification Worker, bảo đảm `REDIS_URL` trỏ đến một Redis khả dụng. Từ thư mục gốc `order-flow/`, chạy:
 
 ```powershell
 npm run live
@@ -332,7 +330,7 @@ Dừng các tiến trình Node bằng `Ctrl+C`, sau đó dừng container:
 docker compose -f backend/docker-compose.yml down
 ```
 
-Lệnh trên giữ nguyên dữ liệu trong Docker volumes. Nếu chủ động muốn xóa toàn bộ dữ liệu PostgreSQL và Redis local để khởi tạo lại từ đầu:
+Lệnh trên giữ nguyên dữ liệu trong Docker volumes. Nếu chủ động muốn xóa toàn bộ dữ liệu PostgreSQL local để khởi tạo lại từ đầu:
 
 ```powershell
 docker compose -f backend/docker-compose.yml down -v
@@ -410,7 +408,7 @@ order-flow/
 │   ├── apps/api/                # Express REST API
 │   ├── apps/telegram-bot/       # Telegraf Bot và notification worker
 │   ├── prisma/                  # Prisma schema, seed và SQL hỗ trợ
-│   └── docker-compose.yml       # PostgreSQL + Redis local
+│   └── docker-compose.yml       # PostgreSQL local
 ├── .env.example
 └── README.md
 ```

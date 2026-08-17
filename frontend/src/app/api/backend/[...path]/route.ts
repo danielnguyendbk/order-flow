@@ -39,9 +39,14 @@ async function forward(request: Request, context: { params: Promise<{ path: stri
   }
 
   if (!upstream) return NextResponse.json({ message: "API backend chưa sẵn sàng." }, { status: 503 });
+  const responseHeaders = new Headers({
+    "content-type": upstream.headers.get("content-type") ?? "application/json",
+  });
+  const contentDisposition = upstream.headers.get("content-disposition");
+  if (contentDisposition) responseHeaders.set("content-disposition", contentDisposition);
   const response = new NextResponse(upstream.body, {
     status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
+    headers: responseHeaders,
   });
   if (refreshed) await setSessionCookies(response, refreshed);
   if (upstream.status === 401) clearSessionCookies(response);

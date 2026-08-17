@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
-import { PageHeader, Panel, EmptyState, Field, PageLoading } from "@/components/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { PageHeader, Panel, EmptyState, Field, Modal, PageLoading } from "@/components/ui";
 import { formatVnd, formatDate } from "@/lib/format";
-import { getRevenueReport, type ApiRevenueReport } from "@/lib/api";
+import {
+  downloadRevenueExport,
+  getRevenueReport,
+  type ApiRevenueReport,
+  type RevenueExportFormat,
+  type TaxDeclarationExportInput,
+} from "@/lib/api";
 import { useApiData } from "@/lib/use-api-data";
 import { toDateInput } from "@/lib/period";
 
@@ -12,29 +18,54 @@ import { useToast } from "@/components/Toast";
 type MethodFilter = "ALL" | "CASH" | "QR";
 type ViewMode = "day" | "week" | "month" | "year";
 
+const emptyTaxForm = {
+  taxpayerName: "",
+  taxCode: "",
+  activityName: "Dịch vụ ăn uống",
+  taxRatePercent: "",
+  deductibleExpenses: "0",
+  adjustmentsIncrease: "0",
+  adjustmentsDecrease: "0",
+  exemptIncome: "0",
+  carriedLoss: "0",
+  scienceFund: "0",
+  taxRelief: "0",
+  priorOverpayment: "0",
+  provisionalTaxPaid: "0",
+};
+
 export default function RevenueReportPage() {
   const toast = useToast();
-  
+
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [anchorDateStr, setAnchorDateStr] = useState(toDateInput(new Date()));
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("ALL");
+  const [taxExportFormat, setTaxExportFormat] = useState<Exclude<RevenueExportFormat, "xlsx"> | null>(null);
+  const [taxForm, setTaxForm] = useState(emptyTaxForm);
+  const [exporting, setExporting] = useState<RevenueExportFormat | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [fromTime, setFromTime] = useState<string>("00:00");
   const [toTime, setToTime] = useState<string>("23:59");
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("revenueFilters");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.viewMode) setViewMode(parsed.viewMode);
-        if (parsed.anchorDateStr) setAnchorDateStr(parsed.anchorDateStr);
-        if (parsed.methodFilter) setMethodFilter(parsed.methodFilter);
-        if (parsed.fromTime) setFromTime(parsed.fromTime);
-        if (parsed.toTime) setToTime(parsed.toTime);
-      } catch (e) {}
-    }
-    setIsInitialized(true);
+    const frame = window.requestAnimationFrame(() => {
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.viewMode) setViewMode(parsed.viewMode);
+          if (parsed.anchorDateStr) setAnchorDateStr(parsed.anchorDateStr);
+          if (parsed.methodFilter) setMethodFilter(parsed.methodFilter);
+          if (parsed.fromTime) setFromTime(parsed.fromTime);
+          if (parsed.toTime) setToTime(parsed.toTime);
+        } catch {
+          sessionStorage.removeItem("revenueFilters");
+        }
+      }
+      setIsInitialized(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -60,10 +91,10 @@ export default function RevenueReportPage() {
         actualFromTime = toTime;
         actualToTime = fromTime;
       }
-      return { 
-        from: `${toDateInput(fromDate)}T${actualFromTime}:00+07:00`, 
-        to: `${toDateInput(toDate)}T${actualToTime}:59+07:00`, 
-        groupBy: apiGroupBy 
+      return {
+        from: `${toDateInput(fromDate)}T${actualFromTime}:00+07:00`,
+        to: `${toDateInput(toDate)}T${actualToTime}:59+07:00`,
+        groupBy: apiGroupBy,
       };
     } else if (viewMode === "week") {
       apiGroupBy = "day";
@@ -91,37 +122,6 @@ export default function RevenueReportPage() {
   }, [from, to, groupBy]);
 
   const { data: report, loading, error } = useApiData<ApiRevenueReport | null>(load, null);
-
-  const handleExportExcel = () => {
-    const byTime = report?.byTime;
-    if (!byTime || byTime.length === 0) {
-      toast.push("Không có dữ liệu doanh thu để xuất file", "error");
-      return;
-    }
-
-    const headers = ["Thời gian", "Tiền mặt (CASH)", "Chuyển khoản (QR)", "Đã hoàn (REFUNDED)", "Doanh thu thuần", "Số đơn"];
-    const rows = byTime.map((item) => [
-      item.time,
-      item.cashAmount,
-      item.qrAmount,
-      item.refundedAmount,
-      item.netRevenue,
-      item.orderCount,
-    ]);
-
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Bao_cao_doanh_thu_${from}_den_${to}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast.push("Đã xuất báo cáo doanh thu ra file Excel (.csv)", "success");
-  };
-
   const summary = report?.summary;
   const byMethod = report?.byMethod;
   const byTime = report?.byTime;
@@ -184,6 +184,55 @@ export default function RevenueReportPage() {
     return Math.max(max, 1);
   }, [filteredItems, methodFilter]);
 
+  const exportExcel = async () => {
+    setExportError(null);
+    setExporting("xlsx");
+    try {
+      await downloadRevenueExport(from, to, "xlsx");
+      toast.push("Đã tải báo cáo kế toán XLSX", "success");
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Không thể xuất Excel.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const updateTaxField = (field: keyof typeof emptyTaxForm, value: string) => {
+    setTaxForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitTaxExport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!taxExportFormat) return;
+    const toMoney = (value: string) => Math.max(0, Math.round(Number(value) || 0));
+    const tax: TaxDeclarationExportInput = {
+      taxpayerName: taxForm.taxpayerName.trim(),
+      taxCode: taxForm.taxCode.trim(),
+      activityName: taxForm.activityName.trim(),
+      taxRatePercent: Number(taxForm.taxRatePercent),
+      deductibleExpenses: toMoney(taxForm.deductibleExpenses),
+      adjustmentsIncrease: toMoney(taxForm.adjustmentsIncrease),
+      adjustmentsDecrease: toMoney(taxForm.adjustmentsDecrease),
+      exemptIncome: toMoney(taxForm.exemptIncome),
+      carriedLoss: toMoney(taxForm.carriedLoss),
+      scienceFund: toMoney(taxForm.scienceFund),
+      taxRelief: toMoney(taxForm.taxRelief),
+      priorOverpayment: toMoney(taxForm.priorOverpayment),
+      provisionalTaxPaid: toMoney(taxForm.provisionalTaxPaid),
+    };
+    setExportError(null);
+    setExporting(taxExportFormat);
+    try {
+      await downloadRevenueExport(from, to, taxExportFormat, tax);
+      setTaxExportFormat(null);
+      toast.push("Đã tải tờ khai DOCX", "success");
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Không thể xuất tờ khai.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   function getPathFor(key: "netVal" | "cashVal" | "qrVal") {
     if (filteredItems.length === 0) return { pathD: "", polygonD: "" };
     const points = filteredItems.map((item, i) => {
@@ -214,7 +263,7 @@ export default function RevenueReportPage() {
 
   const formatShortTime = (timeStr: string) => {
     if (timeStr.includes(" ")) {
-      const [date, time] = timeStr.split(" ");
+      const [, time] = timeStr.split(" ");
       return time.substring(0,5);
     }
     const p = timeStr.split("-");
@@ -229,15 +278,14 @@ export default function RevenueReportPage() {
         title="Báo cáo doanh thu"
         description="Phân tích doanh thu và sản lượng theo thời gian và phương thức thanh toán."
       >
-        <button
-          type="button"
-          onClick={handleExportExcel}
-          className="btn text-xs"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Xuất Excel
+        <button type="button" className="btn" onClick={() => void exportExcel()} disabled={!report || exporting !== null}>
+          {exporting === "xlsx" ? "Đang xuất..." : "Xuất Excel"}
+        </button>
+        <button type="button" className="btn-ghost" onClick={() => setTaxExportFormat("tax-revenue")} disabled={!report || exporting !== null}>
+          Tờ khai theo doanh thu
+        </button>
+        <button type="button" className="btn" onClick={() => setTaxExportFormat("tax-revenue-expense")} disabled={!report || exporting !== null}>
+          Tờ khai doanh thu - chi phí
         </button>
       </PageHeader>
 
@@ -285,9 +333,9 @@ export default function RevenueReportPage() {
                 <input className="input" type="date" value={anchorDateStr} onChange={(e) => setAnchorDateStr(e.target.value)} title="Chọn 1 ngày bất kỳ trong tuần" />
               )}
               {viewMode === "month" && (
-                <select 
-                  className="input h-[34px] py-1" 
-                  value={anchorDateStr.substring(0, 7)} 
+                <select
+                  className="input h-[34px] py-1"
+                  value={anchorDateStr.substring(0, 7)}
                   onChange={(e) => setAnchorDateStr(e.target.value + "-01")}
                 >
                   {Array.from({ length: 60 }, (_, i) => {
@@ -325,6 +373,7 @@ export default function RevenueReportPage() {
       </Panel>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {exportError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{exportError}</div>}
 
       {!report || !totals ? (
         <Panel>
@@ -437,19 +486,19 @@ export default function RevenueReportPage() {
                         />
                       )}
                     </svg>
-                    
+
                     {filteredItems.map((item, i) => {
                       const x = filteredItems.length > 1 ? (i / (filteredItems.length - 1)) * 100 : 50;
                       const yNet = item.netVal > 0 ? 100 - (item.netVal / maxDailyAmount) * 90 : 100;
                       const yCash = item.cashVal > 0 ? 100 - (item.cashVal / maxDailyAmount) * 90 : 100;
                       const yQr = item.qrVal > 0 ? 100 - (item.qrVal / maxDailyAmount) * 90 : 100;
-                      
+
                       const showNet = methodFilter === "ALL";
                       const showCash = methodFilter === "ALL" || methodFilter === "CASH";
                       const showQr = methodFilter === "ALL" || methodFilter === "QR";
 
                       return (
-                        <div 
+                        <div
                           key={item.time}
                           className="group absolute top-0 bottom-0 flex flex-col justify-end items-center"
                           style={{ left: `${x}%`, width: '30px', transform: 'translateX(-50%)' }}
@@ -472,8 +521,8 @@ export default function RevenueReportPage() {
                           )}
 
                           {/* Tooltip */}
-                          <div 
-                            className="pointer-events-none absolute z-20 whitespace-nowrap rounded-lg bg-slate-800 px-3 py-2.5 text-xs text-white opacity-0 shadow-xl transition-all group-hover:-translate-y-2 group-hover:opacity-100 border border-slate-700/50" 
+                          <div
+                            className="pointer-events-none absolute z-20 whitespace-nowrap rounded-lg bg-slate-800 px-3 py-2.5 text-xs text-white opacity-0 shadow-xl transition-all group-hover:-translate-y-2 group-hover:opacity-100 border border-slate-700/50"
                             style={{ top: `${Math.min(yNet, yCash, yQr)}%`, transform: 'translateY(-100%)', marginTop: '-12px' }}
                           >
                             <div className="text-[11px] text-slate-300 font-semibold mb-1 border-b border-slate-600 pb-1">{formatShortTime(item.time)} - {item.orderCount} đơn</div>
@@ -484,7 +533,7 @@ export default function RevenueReportPage() {
                             </div>
                             <div className="absolute left-1/2 top-full -mt-px h-0 w-0 -translate-x-1/2 border-x-[6px] border-t-[6px] border-x-transparent border-t-slate-800"></div>
                           </div>
-                          
+
                           {/* X-axis Label */}
                           <span className="absolute -bottom-6 text-[10px] font-medium text-slate-400 group-hover:text-forest-800 transition-colors whitespace-nowrap">
                             {formatShortTime(item.time)}
@@ -549,6 +598,77 @@ export default function RevenueReportPage() {
           </Panel>
         </>
       )}
+
+      <Modal
+        open={taxExportFormat !== null}
+        onClose={() => setTaxExportFormat(null)}
+        eyebrow="XUẤT TỜ KHAI DOCX"
+        title={taxExportFormat === "tax-revenue-expense" ? "Tờ khai theo doanh thu - chi phí" : "Tờ khai theo tỷ lệ trên doanh thu"}
+        subtitle="Mẫu DOCX được sao từ file gốc trong backend/docs. Hãy xác nhận các chỉ tiêu chưa có trong Order Flow."
+        wide
+      >
+        <form onSubmit={submitTaxExport} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Tên người nộp thuế">
+              <input className="input" value={taxForm.taxpayerName} onChange={(e) => updateTaxField("taxpayerName", e.target.value)} required maxLength={255} />
+            </Field>
+            <Field label="Mã số thuế">
+              <input className="input" value={taxForm.taxCode} onChange={(e) => updateTaxField("taxCode", e.target.value)} required maxLength={30} />
+            </Field>
+            <Field label="Ngành/hoạt động kinh doanh">
+              <input className="input" value={taxForm.activityName} onChange={(e) => updateTaxField("activityName", e.target.value)} required maxLength={255} />
+            </Field>
+            <Field label="Thuế suất / tỷ lệ thuế (%)" hint="Nhập theo hồ sơ thuế của đơn vị; hệ thống không tự suy đoán từ doanh thu.">
+              <input className="input" type="number" min="0" max="100" step="0.01" value={taxForm.taxRatePercent} onChange={(e) => updateTaxField("taxRatePercent", e.target.value)} required />
+            </Field>
+          </div>
+
+          {taxExportFormat === "tax-revenue-expense" && (
+            <div className="grid gap-3 rounded-xl border border-line bg-slate-50 p-4 sm:grid-cols-2">
+              <Field label="Chi phí được trừ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.deductibleExpenses} onChange={(e) => updateTaxField("deductibleExpenses", e.target.value)} required />
+              </Field>
+              <Field label="Điều chỉnh tăng lợi nhuận (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.adjustmentsIncrease} onChange={(e) => updateTaxField("adjustmentsIncrease", e.target.value)} />
+              </Field>
+              <Field label="Điều chỉnh giảm lợi nhuận (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.adjustmentsDecrease} onChange={(e) => updateTaxField("adjustmentsDecrease", e.target.value)} />
+              </Field>
+              <Field label="Thu nhập miễn thuế (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.exemptIncome} onChange={(e) => updateTaxField("exemptIncome", e.target.value)} />
+              </Field>
+              <Field label="Lỗ được chuyển trong kỳ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.carriedLoss} onChange={(e) => updateTaxField("carriedLoss", e.target.value)} />
+              </Field>
+              <Field label="Trích quỹ khoa học công nghệ (VND)">
+                <input className="input" type="number" min="0" step="1" value={taxForm.scienceFund} onChange={(e) => updateTaxField("scienceFund", e.target.value)} />
+              </Field>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Thuế được miễn/giảm (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.taxRelief} onChange={(e) => updateTaxField("taxRelief", e.target.value)} />
+            </Field>
+            <Field label="Nộp thừa kỳ trước (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.priorOverpayment} onChange={(e) => updateTaxField("priorOverpayment", e.target.value)} />
+            </Field>
+            <Field label="Thuế đã tạm nộp (VND)">
+              <input className="input" type="number" min="0" step="1" value={taxForm.provisionalTaxPaid} onChange={(e) => updateTaxField("provisionalTaxPaid", e.target.value)} />
+            </Field>
+          </div>
+
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+            Order Flow chỉ tự điền doanh thu và hoàn tiền. Chi phí, thuế suất, ưu đãi, lỗ chuyển kỳ và số thuế đã nộp phải được đối chiếu với sổ kế toán/chứng từ trước khi nộp cơ quan thuế.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setTaxExportFormat(null)}>Hủy</button>
+            <button type="submit" className="btn" disabled={exporting !== null}>
+              {exporting ? "Đang tạo DOCX..." : "Tạo và tải DOCX"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

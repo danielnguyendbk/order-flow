@@ -9,6 +9,14 @@ export class ApiError extends Error {
 
 type ApiOptions = Omit<RequestInit, "body"> & { body?: unknown };
 
+interface ApiErrorPayload {
+  message?: string;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 export async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const response = await fetch(`/api/backend/${path.replace(/^\//, "")}`, {
     ...options,
@@ -21,17 +29,21 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}): Pro
   });
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as any;
+    const payload = await response.json().catch(() => null) as ApiErrorPayload | null;
     if (response.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
       window.location.href = "/login";
     }
-    
+
     let errorMessage = payload?.error?.message ?? payload?.message ?? "Không thể tải dữ liệu từ máy chủ.";
-    if (payload?.error?.details && Array.isArray(payload.error.details)) {
-      const issues = payload.error.details.map((d: any) => `${d.path}: ${d.message}`).join(", ");
+    if (Array.isArray(payload?.error?.details)) {
+      const issues = payload.error.details.map((detail: unknown) => {
+        if (!detail || typeof detail !== "object") return String(detail);
+        const record = detail as Record<string, unknown>;
+        return `${String(record.path ?? "input")}: ${String(record.message ?? "không hợp lệ")}`;
+      }).join(", ");
       if (issues) errorMessage += ` (${issues})`;
     }
-    
+
     throw new ApiError(errorMessage, response.status);
   }
 
@@ -330,6 +342,59 @@ export function getRevenueReport(from: string, to: string, groupBy: string = "da
   return apiRequest<{ data: ApiRevenueReport }>(
     `admin/reports/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&groupBy=${encodeURIComponent(groupBy)}`,
   );
+}
+
+export type RevenueExportFormat = "xlsx" | "tax-revenue" | "tax-revenue-expense";
+
+export interface TaxDeclarationExportInput {
+  taxpayerName: string;
+  taxCode: string;
+  activityName: string;
+  taxRatePercent: number;
+  deductibleExpenses: number;
+  adjustmentsIncrease: number;
+  adjustmentsDecrease: number;
+  exemptIncome: number;
+  carriedLoss: number;
+  scienceFund: number;
+  taxRelief: number;
+  priorOverpayment: number;
+  provisionalTaxPaid: number;
+}
+
+export async function downloadRevenueExport(
+  from: string,
+  to: string,
+  format: RevenueExportFormat,
+  tax?: TaxDeclarationExportInput,
+): Promise<void> {
+  const response = await fetch(
+    `/api/backend/admin/reports/revenue/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    {
+      method: "POST",
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ format, ...(tax ?? {}) }),
+    },
+  );
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string; error?: { message?: string } } | null;
+    throw new ApiError(payload?.error?.message ?? payload?.message ?? "Không thể xuất báo cáo.", response.status);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+    ?? (format === "xlsx" ? "so-doanh-thu.xlsx" : "to-khai-thue.docx");
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function resolveReconciliation(

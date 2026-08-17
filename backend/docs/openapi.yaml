@@ -18,6 +18,7 @@ servers:
 tags:
   - name: Telegram Auth
   - name: Admin Auth
+  - name: Admin Dashboard
   - name: Service Orders
   - name: Barista
   - name: Payments
@@ -1005,6 +1006,37 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/admin/dashboard:
+    get:
+      tags: [Admin Dashboard]
+      operationId: getAdminDashboard
+      summary: Get live owner dashboard data
+      description: Returns PostgreSQL aggregates using Asia/Ho_Chi_Minh revenue buckets. Requires an active OWNER JWT.
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 7
+      responses:
+        "200":
+          description: Dashboard snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/v1/admin/transactions:
     get:
       tags: [Admin Finance]
@@ -1197,6 +1229,97 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GenericDataResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/admin/reports/revenue/export:
+    post:
+      tags: [Admin Finance]
+      operationId: exportRevenueReport
+      summary: Export accounting XLSX or template-based TNDN DOCX
+      description: The XLSX includes related orders, Payments, SePay transactions, refunds, formula-driven accounting tie-outs and color-coded annotated exceptions. DOCX formats retain the supplied 03/04-TNDN templates.
+      x-implementation-status: implemented
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok start of day.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: ISO date-time or YYYY-MM-DD. Date-only values use Asia/Bangkok end of day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format]
+              properties:
+                format:
+                  type: string
+                  enum: [xlsx, tax-revenue, tax-revenue-expense]
+                taxpayerName:
+                  type: string
+                taxCode:
+                  type: string
+                activityName:
+                  type: string
+                taxRatePercent:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                deductibleExpenses:
+                  type: integer
+                  minimum: 0
+                adjustmentsIncrease:
+                  type: integer
+                  minimum: 0
+                adjustmentsDecrease:
+                  type: integer
+                  minimum: 0
+                exemptIncome:
+                  type: integer
+                  minimum: 0
+                carriedLoss:
+                  type: integer
+                  minimum: 0
+                scienceFund:
+                  type: integer
+                  minimum: 0
+                taxRelief:
+                  type: integer
+                  minimum: 0
+                priorOverpayment:
+                  type: integer
+                  minimum: 0
+                provisionalTaxPaid:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Generated XLSX or DOCX attachment
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -1719,6 +1842,207 @@ components:
           type: integer
         limit:
           type: integer
+
+    DashboardResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/DashboardSnapshot"
+
+    DashboardSnapshot:
+      type: object
+      required:
+        - generatedAt
+        - timeZone
+        - range
+        - summary
+        - health
+        - ordersByPaymentStatus
+        - ordersByFulfillmentStatus
+        - revenueByPaymentMethod
+        - revenueSeries
+        - recentOrders
+        - paymentAlerts
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        timeZone:
+          type: string
+          const: Asia/Ho_Chi_Minh
+        range:
+          type: object
+          required: [from, to, days]
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            days: { type: integer, minimum: 1, maximum: 90 }
+        summary:
+          type: object
+          required:
+            - totalOrderCount
+            - rangeOrderCount
+            - paidOrderCount
+            - grossRevenue
+            - todayRevenue
+            - averagePaidOrderValue
+          properties:
+            totalOrderCount: { type: integer }
+            rangeOrderCount: { type: integer }
+            paidOrderCount: { type: integer }
+            grossRevenue:
+              type: string
+              description: VND BigInt serialized as a decimal string.
+            todayRevenue:
+              type: string
+              description: VND BigInt serialized as a decimal string.
+            averagePaidOrderValue:
+              type: string
+              description: VND BigInt serialized as a decimal string.
+        health:
+          type: object
+          required:
+            - activeOrderCount
+            - pendingPaymentOrderCount
+            - queuedOrderCount
+            - preparingOrderCount
+            - readyOrderCount
+            - paymentReviewOrderCount
+            - activeUserCount
+            - availableMenuItemCount
+          properties:
+            activeOrderCount: { type: integer }
+            pendingPaymentOrderCount: { type: integer }
+            queuedOrderCount: { type: integer }
+            preparingOrderCount: { type: integer }
+            readyOrderCount: { type: integer }
+            paymentReviewOrderCount: { type: integer }
+            activeUserCount: { type: integer }
+            availableMenuItemCount: { type: integer }
+        ordersByPaymentStatus:
+          type: object
+          required: [UNPAID, PENDING, PAID, UNDERPAID, OVERPAID, REVIEW]
+          properties:
+            UNPAID: { type: integer }
+            PENDING: { type: integer }
+            PAID: { type: integer }
+            UNDERPAID: { type: integer }
+            OVERPAID: { type: integer }
+            REVIEW: { type: integer }
+        ordersByFulfillmentStatus:
+          type: object
+          required: [PENDING_PAYMENT, QUEUED, PREPARING, READY, DELIVERED, CANCELLED]
+          properties:
+            PENDING_PAYMENT: { type: integer }
+            QUEUED: { type: integer }
+            PREPARING: { type: integer }
+            READY: { type: integer }
+            DELIVERED: { type: integer }
+            CANCELLED: { type: integer }
+        revenueByPaymentMethod:
+          type: object
+          required: [CASH, QR]
+          properties:
+            CASH: { $ref: "#/components/schemas/DashboardRevenueGroup" }
+            QR: { $ref: "#/components/schemas/DashboardRevenueGroup" }
+        revenueSeries:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardRevenuePoint" }
+        recentOrders:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardRecentOrder" }
+        paymentAlerts:
+          type: array
+          items: { $ref: "#/components/schemas/DashboardPaymentAlert" }
+
+    DashboardRevenueGroup:
+      type: object
+      required: [amount, orderCount]
+      properties:
+        amount:
+          type: string
+          description: VND BigInt serialized as a decimal string.
+        orderCount: { type: integer }
+
+    DashboardRevenuePoint:
+      type: object
+      required: [date, revenue, orderCount]
+      properties:
+        date: { type: string, format: date }
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: Present only when days=1; local hour in Asia/Ho_Chi_Minh.
+        revenue:
+          type: string
+          description: VND BigInt serialized as a decimal string.
+        orderCount: { type: integer }
+
+    DashboardUserSummary:
+      type: object
+      required: [id, fullName]
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+
+    DashboardRecentOrder:
+      type: object
+      required:
+        - id
+        - orderCode
+        - paymentStatus
+        - fulfillmentStatus
+        - totalAmount
+        - creator
+        - itemCount
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, format: uuid }
+        orderCode: { type: string }
+        paymentMethod:
+          anyOf:
+            - $ref: "#/components/schemas/PaymentMethod"
+            - type: "null"
+        paymentStatus: { $ref: "#/components/schemas/PaymentStatus" }
+        fulfillmentStatus: { $ref: "#/components/schemas/FulfillmentStatus" }
+        totalAmount:
+          type: string
+          description: VND BigInt serialized as a decimal string.
+        creator: { $ref: "#/components/schemas/DashboardUserSummary" }
+        assignedBarista:
+          anyOf:
+            - $ref: "#/components/schemas/DashboardUserSummary"
+            - type: "null"
+        itemCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DashboardPaymentAlert:
+      type: object
+      required: [id, orderCode, paymentStatus, totalAmount, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderCode: { type: string }
+        paymentStatus:
+          type: string
+          enum: [UNDERPAID, OVERPAID, REVIEW]
+        totalAmount:
+          type: string
+          description: VND BigInt serialized as a decimal string.
+        updatedAt: { type: string, format: date-time }
+        payment:
+          type: [object, "null"]
+          properties:
+            paymentCode: { type: [string, "null"] }
+            expectedAmount:
+              type: string
+              description: VND BigInt serialized as a decimal string.
+            receivedAmount:
+              type: string
+              description: VND BigInt serialized as a decimal string.
 
     AuthUser:
       type: object

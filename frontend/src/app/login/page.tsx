@@ -41,21 +41,21 @@ export default function LoginPage() {
     const nodes: SplatNode[] = [];
     const numNodes = 24; // Smooth out the curves
     const baseMaxR = isAuto ? 190 : 150;
-    
+
     // Create 3 to 6 soft rounded lobes for the ink drop
     const lobeCount = 3 + Math.floor(Math.random() * 4);
     const phaseOffset = Math.random() * Math.PI * 2;
 
     for (let i = 0; i < numNodes; i++) {
       const angle = (i / numNodes) * Math.PI * 2;
-      
+
       // Sine wave creates soft, rounded 'cauliflower' lobes of an ink wash
-      const lobeEffect = Math.sin(angle * lobeCount + phaseOffset) * 0.25; 
+      const lobeEffect = Math.sin(angle * lobeCount + phaseOffset) * 0.25;
       // Very slight random noise for organic feel, no sharp spikes
-      const randomNoise = (Math.random() - 0.5) * 0.15; 
-      
+      const randomNoise = (Math.random() - 0.5) * 0.15;
+
       const maxR = baseMaxR * (1.0 + lobeEffect + randomNoise);
-      
+
       nodes.push({
         angle,
         currentR: 8, // Start slightly softer
@@ -177,7 +177,7 @@ export default function LoginPage() {
         ctx.beginPath();
 
         const numNodes = s.nodes.length;
-        
+
         // Mathematically correct smooth closed curve using midpoints
         const firstNode = s.nodes[0];
         const lastNode = s.nodes[numNodes - 1];
@@ -185,7 +185,7 @@ export default function LoginPage() {
         const p0y = Math.sin(firstNode.angle) * firstNode.currentR;
         const pNx = Math.cos(lastNode.angle) * lastNode.currentR;
         const pNy = Math.sin(lastNode.angle) * lastNode.currentR;
-        
+
         const startX = (pNx + p0x) / 2;
         const startY = (pNy + p0y) / 2;
         ctx.moveTo(startX, startY);
@@ -194,14 +194,14 @@ export default function LoginPage() {
           const node = s.nodes[j];
           const currX = Math.cos(node.angle) * node.currentR;
           const currY = Math.sin(node.angle) * node.currentR;
-          
+
           const nextNode = s.nodes[(j + 1) % numNodes];
           const nextX = Math.cos(nextNode.angle) * nextNode.currentR;
           const nextY = Math.sin(nextNode.angle) * nextNode.currentR;
-          
+
           const midX = (currX + nextX) / 2;
           const midY = (currY + nextY) / 2;
-          
+
           // Control point is the node, destination is the midpoint to next node
           ctx.quadraticCurveTo(currX, currY, midX, midY);
         }

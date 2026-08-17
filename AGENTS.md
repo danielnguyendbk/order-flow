@@ -32,7 +32,7 @@ order-flow/
     │   │       ├── middleware/       # HTTP middleware
     │   │       ├── routes/           # Route registration
     │   │       └── modules/          # Domain modules (listed below); auth is implemented
-    │   ├── telegram-bot/             # Telegram bot service
+    │   └── telegram-bot/             # Telegram bot service
     │   │   └── src/
     │   │       ├── bot.ts            # Bot factory placeholder (`createBot`)
     │   │       ├── commands/          # Bot commands
@@ -41,14 +41,15 @@ order-flow/
     │   │       ├── middleware/        # Bot middleware
     │   │       ├── scenes/            # Multi-step conversation flows
     │   │       └── services/          # Bot-facing integrations/services
-    │   └── admin-web/                # (Deprecated placeholder)
     ├── packages/
     │   ├── shared-types/              # Types shared across applications
     │   ├── shared-constants/          # Constants shared across applications
     │   └── eslint-config/             # Shared ESLint configuration
     └── prisma/
         ├── schema.prisma              # PostgreSQL Prisma schema
-        └── seed.ts                    # Idempotent initial OWNER seed entry point
+        ├── seed.ts                    # Idempotent initial OWNER seed entry point
+        ├── seed-visualization.ts      # Large local-Docker dataset; reuses existing users
+        └── sync-users-to-docker.ts    # Safe Supabase users → local Docker upsert
 ```
 
 ## API domain modules
@@ -71,6 +72,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 ## Current implementation state
 
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
+- OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
 - The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
 - The Telegram Bot authenticates each interaction through `POST /api/v1/telegram/bot/session`, stores only an ephemeral Bot session, and renders role-specific menus. Telegram Web App JWT authentication remains at `POST /api/v1/telegram/session`.
@@ -83,7 +85,27 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Barista API transitions use conditional updates plus serializable transactions so assignment/status and history commit together; service-staff delivery is separately authenticated and creator-owned.
 - Notification delivery uses a PostgreSQL transactional outbox and a BullMQ/Redis Telegram worker. ORDER_PAID targets the order creator plus every active Barista with an actionable claim button, ORDER_READY targets the order creator, and PAYMENT_REVIEW targets active owners, with persistent retry state and an internal requeue CLI.
 - Telegram development commands run through `apps/telegram-bot/src/dev-runner.ts`, which deliberately lets the local `.env` override stale shell credentials; production commands continue to use deployment-provided environment variables.
-- The staff `Kiểm tra thanh toán` action actively queries the SePay transaction API as a webhook-recovery path, requiring an independent `SEPAY_API_TOKEN`; it only processes an incoming transaction after account, amount, payment code and payment creation time all match, then reuses the webhook transaction/idempotency pipeline.
+- The staff `Kiểm tra thanh toán` action actively queries SePay API v2 as a webhook-recovery path, requiring `SEPAY_API_TOKEN` and an environment-specific `SEPAY_API_BASE_URL`; Live and Test Mode/Sandbox tokens are isolated. Numeric API v1 and UUID API v2 transaction IDs share the same string idempotency column.
+- The experimental voice-order handler can download a Telegram voice message and invoke a configured Hermes-compatible command bridge; it is disabled unless `VOICE_ORDER_SCRIPT` is configured.
+
+## Progress log — 2026-08-14
+
+- Added three OWNER report exports to the revenue page: an accounting-oriented XLSX, a 04/TNDN revenue-method DOCX, and a 03/TNDN revenue-expense DOCX.
+- DOCX exports retain the two source templates in `backend/docs`, fill revenue from PostgreSQL, and require the user to confirm tax identity, rate, expense and adjustment inputs that Order Flow does not store.
+- XLSX export provides summary, issue register, order/Payment/SePay/refund detail, journal and daily reconciliation sheets. Formula-driven checks reconcile order totals, expected/received amounts, bank transactions and cumulative refunds; colored bold cells and comments identify each exception and remediation. The workbook retains an explicit scope note for missing VAT/input-invoice/expense data.
+
+## Progress log — 2026-08-12
+
+- Added SePay API v2 active transaction lookup with explicit Live/Sandbox endpoints so Telegram payment checks can use isolated Test Mode API tokens.
+- Migrated SePay external transaction identifiers from `bigint` to `varchar(64)`, preserving legacy numeric IDs while accepting v2 UUIDs.
+- Added a 60-second SePay lookup tolerance for bank timestamp rounding/clock skew while retaining exact account, incoming amount and payment-code validation.
+- Pending QR status messages now expose `Kiểm tra thanh toán` directly, so active SePay reconciliation is not limited to the original QR message.
+
+## Progress log — 2026-08-11
+
+- Removed the deprecated `backend/apps/admin-web` placeholder and its unused browser Supabase client; the active Next.js admin application remains in the repository-level `frontend/` workspace.
+- Added the optional experimental Telegram voice-order bridge on `test/dashboard-with-voice`; normal button-based ordering remains available when the bridge is disabled or fails.
+- Ported the dashboard aggregate API from `bc00f75` without its retired simulator or older admin-route behavior; the service now reuses the shared Prisma singleton.
 
 ## Progress log — 2026-08-10
 
@@ -92,6 +114,15 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Fixed `Request validation failed` on the Thực đơn (catalog) and Danh mục (categories) pages: the admin menu-item and employee list schemas capped `limit` at 100 while the admin UI loads up to 500–1000 rows. Raised the cap to 1000 in `adminItemListQuerySchema` (`item.schemas.ts`) and `employeeListQuerySchema` (`employee.schemas.ts`).
 - Consolidated all backend services to consume the shared `PrismaClient` singleton (`src/db.ts`). Configured `connection_limit=5` in `src/db.ts` and `max: 3` in `src/config/database.ts` (node-postgres `pg.Pool`). This caps total active connections at 8, completely below Supabase Transaction Pooler's ceiling of 15 connections, eliminating `EMAXCONNSESSION` process crashes under concurrent admin UI navigation.
 - Verified after the fixes: all admin endpoints (orders, transactions, reconciliations, revenue, audit-logs, menu, employees, barista queue) return 200 both directly and through the FE `/api/backend` proxy, including 7 parallel calls × 3 rounds; API type-check and 57 API tests pass.
+
+## Progress log — 2026-08-10
+
+- Added a deterministic, rerunnable visualization seed that targets only the PostgreSQL database exposed by local Docker, covering menu, orders, order items, payments, status history and historical notifications across a configurable time range.
+- The visualization seed uses a dedicated localhost Docker PostgreSQL URL instead of the normal Supabase environment URL, never writes `users`, requires existing active SERVICE_STAFF and BARISTA records, and refuses production/remote database targets.
+- Removed the local Redis service from Docker Compose; auth session caching remains process-local, while the optional BullMQ notification worker requires an externally supplied Redis service if used.
+- Added a guarded, non-destructive users-only sync from Supabase into local Docker PostgreSQL; it preserves UUIDs and refuses unique identity conflicts.
+- Usage and verification queries are documented in `backend/docs/visualization-seed.md`.
+- Removed the local realtime Order Simulator and its dedicated API scripts; test data remains available through the Docker-only visualization seed.
 
 ## Progress log — 2026-08-07
 
@@ -140,7 +171,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - API work: start at `backend/apps/api/src/` and the relevant `modules/<domain>/` folder.
 - Telegram work: start at `backend/apps/telegram-bot/src/`.
 - Telegram callback protocol and replay guards: start at `backend/apps/telegram-bot/src/callbacks/`.
-- Admin UI work: start at `backend/apps/admin-web/src/`.
+- Admin UI work: start at `frontend/src/app/`.
 - Database work: start at `backend/prisma/schema.prisma` and `backend/prisma/seed.ts`.
 - Cross-application contracts/constants: use `backend/packages/shared-types/` and `backend/packages/shared-constants/`.
 - Local database infrastructure: use `backend/docker-compose.yml`.
@@ -149,7 +180,6 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Swift mobile work: start at `SWIFT_MOBILE_APP_SPEC.md`; the MVP is an OWNER-only, read-only manager dashboard and explicitly excludes service-staff/Barista actions.
 - Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
 - Telegram authentication: Web App JWT flow is registered in `backend/apps/api/src/modules/auth/auth.routes.ts`; internal Bot employee resolution is implemented in `telegram-session.routes.ts` and mounted at `/api/v1/telegram/bot/session` from `apps/api/src/app.ts`.
-- Supabase browser access: use `backend/apps/admin-web/src/services/supabase.ts`; its public values live in the root `.env.local`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 
 ## Installed GitHub skills

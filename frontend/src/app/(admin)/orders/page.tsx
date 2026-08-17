@@ -29,11 +29,11 @@ import {
 const PAYMENT_STATUS_OPTIONS = Object.keys(ORDER_PAYMENT_STATUS_LABEL) as OrderPaymentStatus[];
 const FULFILLMENT_STATUS_OPTIONS = Object.keys(ORDER_FULFILLMENT_STATUS_LABEL) as OrderFulfillmentStatus[];
 
-function formatLocation(input: string | null) {
+function formatLocation(input: string | null | undefined) {
   if (!input) return "Bàn tự do";
   const lower = input.trim().toLowerCase();
   if (lower === "mang đi") return "Mang đi";
-  
+
   const match = lower.match(/^(?:bàn|ban)\s*(\d+)$/);
   if (match) {
     return `Bàn ${match[1].padStart(2, '0')}`;

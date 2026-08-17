@@ -106,7 +106,7 @@ function formatKey(k: string) {
 function formatValue(k: string, v: unknown) {
   if (v === null || v === undefined) return "Trống";
   if (typeof v === "boolean") return v ? "Có" : "Không";
-  
+
   if (typeof v === "number" || (typeof v === "string" && !isNaN(Number(v)))) {
     // Check if key relates to currency
     const lowerK = k.toLowerCase();
@@ -134,7 +134,7 @@ function formatEntity(entity: string) {
 export default function AuditPage() {
   const load = useCallback(async () => (await getAuditLogs()).data, []);
   const { data: logs, loading, error } = useApiData(load, [] as ApiAuditLog[]);
-  
+
   if (loading && logs.length === 0) {
     return <PageLoading label="Đang tải nhật ký thao tác..." subText="Đang lấy thông tin audit log từ hệ thống..." />;
   }
@@ -142,9 +142,9 @@ export default function AuditPage() {
   return (
     <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Nhật ký thao tác" description="Theo dõi lịch sử thay đổi trên hệ thống dễ dàng." />
-      
+
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      
+
       <Panel>
         <div className="-mx-5 overflow-x-auto px-5">
           <table className="w-full min-w-[820px]">
@@ -170,19 +170,19 @@ export default function AuditPage() {
                   <td className="td whitespace-nowrap text-sm font-medium text-slate-600">
                     {formatDateTime(log.createdAt)}
                   </td>
-                  
+
                   <td className="td">
                     <Badge tone={log.actor ? "teal" : "violet"}>
                       {log.actor?.username ?? log.actor?.fullName ?? "Hệ thống"}
                     </Badge>
                   </td>
-                  
+
                   <td className="td">
                     <strong className="text-sm font-bold text-slate-800">
                       {formatAction(log.action)}
                     </strong>
                   </td>
-                  
+
                   <td className="td">
                     <div className="text-sm font-semibold text-slate-700">
                       {formatEntity(log.entityType)}
@@ -194,7 +194,7 @@ export default function AuditPage() {
                       </div>
                     )}
                   </td>
-                  
+
                   <td className="td py-3">
                     {!log.details ? (
                       <span className="text-xs text-slate-400 italic">Không có</span>

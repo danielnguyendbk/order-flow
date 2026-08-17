@@ -155,12 +155,16 @@ Status: **implemented**
 | --- | --- | --- |
 | `POST` | `/api/v1/admin/orders/:orderId/refund` | Record a manual refund for a paid order |
 | `GET` | `/api/v1/admin/reports/revenue` | Return revenue totals by date range and payment method |
+| `POST` | `/api/v1/admin/reports/revenue/export` | Export the selected range as an accounting XLSX or a template-based 03/04-TNDN DOCX |
 | `GET` | `/api/v1/admin/audit-logs` | List audit logs |
 
 - Refund body: `{ "refundedByUserId": "...", "reason": "...", "amount": 50000 }`; `amount` is optional and defaults to the received payment amount.
 - Refunds require an owner actor, reject duplicate refund records for the same payment, and write `MANUAL_REFUND_RECORDED` audit logs.
 - Revenue accepts `from` and `to` query parameters as ISO date-time strings or `YYYY-MM-DD`; date-only values are expanded to the Asia/Bangkok day boundary.
 - Revenue separates `CASH`, `QR`, and `REFUNDED`; refunded amounts are excluded from net revenue.
+- Revenue export accepts the same `from`/`to` query and a JSON body with `format = xlsx | tax-revenue | tax-revenue-expense`.
+- XLSX export contains a control summary, cross-check status, issue register, all related orders, Payments, SePay transactions, refunds, an accounting journal with suggested Vietnamese account mappings, and daily reconciliation. Formula-driven differences compare order totals, expected/received Payment amounts, linked SePay amounts and cumulative refunds; each severity has its own color, bold source cells and cell comments with remediation guidance. It explicitly excludes VAT, input invoices and expenses that Order Flow does not store.
+- DOCX exports copy the retained `backend/docs/15._04.TNDN_2507183508.docx` or `backend/docs/2._03.TNDN_2507200143.docx` template and fill only known or user-confirmed fields. Taxpayer identity, tax rate, expenses, adjustments, relief and prior/provisional payments are required or explicitly supplied by the caller rather than inferred.
 
 ## Barista queue
 
@@ -258,6 +262,19 @@ Status: **implemented**
 | `PATCH` | `/api/v1/admin/menu-items/:itemId` | Partially update a menu item |
 | `DELETE` | `/api/v1/admin/menu-items/:itemId` | Delete a menu item |
 
+## Admin dashboard
+
+Status: **implemented**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/admin/dashboard` | Get live owner dashboard metrics, status counts, revenue series, recent orders, and payment alerts |
+
+- Requires a valid `Authorization: Bearer <OWNER_JWT>` session; service staff and Baristas receive `403`.
+- Optional `days` query controls the revenue range from 1 through 90 days and defaults to 7.
+- Revenue amounts are returned as decimal strings because PostgreSQL/Prisma stores VND amounts as `BigInt`.
+- Revenue buckets use the `Asia/Ho_Chi_Minh` timezone. With `days=1`, `revenueSeries` contains 24 hourly buckets; longer ranges use daily buckets.
+
 ## Admin orders
 
 Status: **implemented**
@@ -280,7 +297,7 @@ Status: **implemented**
 | Service orders, items and public ownership actions | `apps/api/src/modules/orders/` |
 | Payments and payment transitions | `apps/api/src/modules/payments/` plus order status updates in `apps/api/src/modules/orders/` |
 | Barista queue and public claim view | `apps/api/src/modules/barista/` plus claim handling in `apps/api/src/modules/orders/` |
-| Admin orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
+| Admin dashboard and orders | `apps/api/src/modules/admin/` plus status mutation handling in `apps/api/src/modules/orders/` |
 | Public/admin menu categories and items | `apps/api/src/modules/menu/` |
 | Telegram service-staff orders and payments | `apps/api/src/modules/orders/` |
 | Telegram Barista queue and processing | `apps/api/src/modules/barista/` |
