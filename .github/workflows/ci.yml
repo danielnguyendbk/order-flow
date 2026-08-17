@@ -32,6 +32,11 @@ jobs:
           npm --prefix apps/api ci
       - name: Check and test API
         working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@127.0.0.1:5432/order_flow_test
+          JWT_ACCESS_SECRET: ci-access-secret-that-is-at-least-32-characters
+          JWT_REFRESH_SECRET: ci-refresh-secret-that-is-at-least-32-characters
         run: |
           npm run check:api
           npm run test:api
