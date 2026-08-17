@@ -14,6 +14,13 @@ export function myOrdersKeyboard(orders: DraftOrder[]) {
 
 export function orderStatusKeyboard(order: DraftOrder) {
   const rows = [];
+  if (
+    order.paymentMethod === "QR"
+    && order.paymentStatus === "PENDING"
+    && order.fulfillmentStatus === "PENDING_PAYMENT"
+  ) {
+    rows.push([Markup.button.callback("Kiểm tra thanh toán", `order:reconcile:${order.id}`)]);
+  }
   if (order.fulfillmentStatus === "READY") {
     rows.push([Markup.button.callback("Đã giao khách", `order:deliver:${order.id}`)]);
   }

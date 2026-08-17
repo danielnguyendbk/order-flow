@@ -13,6 +13,9 @@ const relevantVariables = [
   "TELEGRAM_WEBHOOK_PATH",
   "TELEGRAM_WEBHOOK_SECRET_TOKEN",
   "PORT",
+  "VOICE_ORDER_PYTHON",
+  "VOICE_ORDER_SCRIPT",
+  "VOICE_ORDER_TIMEOUT_MS",
 ] as const;
 
 function baseEnvironment(): void {
@@ -33,6 +36,19 @@ describe("Telegram bot environment", () => {
       apiBaseUrl: "http://localhost:3000/api/v1",
       botInternalSecret: "test-secret",
       webhook: undefined,
+    });
+  });
+
+  it("configures the optional voice-order bridge", () => {
+    baseEnvironment();
+    vi.stubEnv("VOICE_ORDER_PYTHON", "/opt/hermes/python");
+    vi.stubEnv("VOICE_ORDER_SCRIPT", "/opt/order-flow/voice_order_bridge.py");
+    vi.stubEnv("VOICE_ORDER_TIMEOUT_MS", "180000");
+
+    expect(getBotConfig().voiceOrder).toEqual({
+      executable: "/opt/hermes/python",
+      scriptPath: "/opt/order-flow/voice_order_bridge.py",
+      timeoutMs: 180000,
     });
   });
 

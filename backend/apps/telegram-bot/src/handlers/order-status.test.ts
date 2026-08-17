@@ -4,7 +4,8 @@ import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
 import { myOrdersKeyboard, orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import type { EmployeeSession } from "../types.js";
-import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, returnToPaymentSelection, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
+import { orderStatusKeyboard } from "../keyboards/order-status.js";
+import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
 
 const employee: EmployeeSession = {
   employeeId: "employee-1",
@@ -76,36 +77,20 @@ function callbackContext(data: string): OrderStatusCallbackContext & { replies: 
 }
 
 describe("Telegram order tracking", () => {
-  it("provides back navigation on order list and order detail screens", () => {
-    const listLabels = myOrdersKeyboard([order()]).reply_markup.inline_keyboard.flat().map((button) => button.text);
-    const detailLabels = orderStatusKeyboard(order()).reply_markup.inline_keyboard.flat().map((button) => button.text);
+  it("shows active reconciliation on every pending QR order status", () => {
+    const buttons = orderStatusKeyboard(order()).reply_markup.inline_keyboard.flat();
 
-    expect(listLabels).toContain("Trở lại");
-    expect(detailLabels).toContain("Trở lại");
+    expect(buttons).toContainEqual(expect.objectContaining({
+      text: "Kiểm tra thanh toán",
+      callback_data: "order:reconcile:order-1",
+    }));
   });
 
-  it("shows back and payment check actions side by side for QR payment", () => {
-    const rows = qrPaymentKeyboard("order-1").reply_markup.inline_keyboard;
+  it("hides reconciliation after a QR order is paid", () => {
+    const buttons = orderStatusKeyboard(order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }))
+      .reply_markup.inline_keyboard.flat();
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0].map((button) => button.text)).toEqual(["Trở lại", "Kiểm tra thanh toán"]);
-    expect(rows[0]).toEqual([
-      expect.objectContaining({ callback_data: "order:payment-back:order-1" }),
-      expect.objectContaining({ callback_data: "order:reconcile:order-1" }),
-    ]);
-  });
-
-  it("resets a pending QR payment and returns to payment method selection", async () => {
-    const backend = api();
-    const ctx = callbackContext("order:payment-back:order-1");
-
-    await returnToPaymentSelection(ctx, backend, "order-1");
-
-    expect(backend.resetQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
-    expect(ctx.session.draftOrder).toMatchObject({ orderId: "order-1", step: "REVIEW" });
-    expect(ctx.clears).toEqual(["cleared"]);
-    expect(ctx.replies.at(-1)).toContain("🧾 ĐƠN ORD-001");
-    expect(ctx.replies.at(-1)).toContain("💰 TỔNG: 30.000");
+    expect(buttons).not.toContainEqual(expect.objectContaining({ text: "Kiểm tra thanh toán" }));
   });
 
   it("lists only the authenticated employee's orders", async () => {

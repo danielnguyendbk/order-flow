@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
 
 # JavaScript / TypeScript dependencies and build output.
 node_modules/
@@ -18,3 +19,4 @@ coverage/
 # Local database exports can contain production data and password hashes.
 /backend/backup.sql
 
+backend/docs/

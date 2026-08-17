@@ -112,7 +112,7 @@ function PaymentsPageInner() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Đối soát Thanh toán" description="Đối soát giao dịch tự động từ SePay QR Code và xác nhận thu tiền mặt từ nhân viên phục vụ.">
         <Link href="/payments?needsReview=1" className={needsReview ? "btn" : "btn-ghost"}>Chỉ cần xử lý</Link>
         <Link href="/payments" className="btn-ghost">Tất cả giao dịch</Link>

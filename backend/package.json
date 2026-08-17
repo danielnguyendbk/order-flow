@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "npm run dev:api",
     "dev:api": "npm --prefix apps/api run dev",
+    "dev:api:docker": "DATABASE_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow DIRECT_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow npm --prefix apps/api run dev",
     "dev:sepay-tunnel-proxy": "tsx apps/api/src/modules/sepay/sepay-tunnel-proxy.main.ts",
     "check:api": "npm --prefix apps/api run check",
     "test:api": "npm --prefix apps/api run test",
@@ -19,7 +20,10 @@
     "start:bot": "node apps/telegram-bot/dist/index.js",
     "start:notification-worker": "node apps/telegram-bot/dist/worker.js",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate:sepay-v2:docker": "DATABASE_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow DIRECT_URL=postgresql://order_flow:order_flow@localhost:5432/order_flow node scripts/run-migration.cjs prisma/sql/2026-08-12_sepay_v2_transaction_ids.sql && npm run db:generate",
     "db:seed": "prisma db seed --schema prisma/schema.prisma",
+    "db:seed:visualization": "tsx prisma/seed-visualization.ts",
+    "db:sync:users:docker": "tsx prisma/sync-users-to-docker.ts",
     "build:bot": "tsc --project apps/telegram-bot/tsconfig.json",
     "check:bot": "tsc --noEmit --project apps/telegram-bot/tsconfig.json",
     "test:bot": "vitest run --config apps/telegram-bot/vitest.config.ts",
@@ -35,14 +39,15 @@
     "seed:thai006": "tsx prisma/seed.ts thai006"
   },
   "dependencies": {
-    "@prisma/client": "6.19.0",
+    "@prisma/client": "6.19.3",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.58.0",
+    "dotenv": "^17.4.2",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
-    "prisma": "6.19.0",
+    "prisma": "6.19.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"

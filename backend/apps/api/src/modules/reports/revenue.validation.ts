@@ -1,6 +1,7 @@
 export interface RevenueQuery {
   from: Date;
   to: Date;
+  groupBy?: "hour" | "day" | "week" | "month";
 }
 
 export function parseRevenueQuery(query: any): RevenueQuery {
@@ -19,7 +20,11 @@ export function parseRevenueQuery(query: any): RevenueQuery {
     throw Object.assign(new Error("from must be before or equal to to"), { status: 400 });
   }
 
-  return { from, to };
+  const groupBy = ["hour", "day", "week", "month"].includes(query.groupBy)
+    ? query.groupBy
+    : "day";
+
+  return { from, to, groupBy };
 }
 
 function parseDate(value: unknown, fallback: Date, boundary: "start" | "end"): Date {

@@ -54,9 +54,23 @@ Webhook vẫn là luồng chính. Để nút **Kiểm tra thanh toán** có th�
 
 ```dotenv
 SEPAY_API_TOKEN="TOKEN_MOI_TAO"
+SEPAY_API_BASE_URL="https://userapi.sepay.vn/v2/transactions"
 ```
 
-API chỉ chấp nhận giao dịch tiền vào khi khớp đồng thời tài khoản nhận, số tiền dự kiến, mã thanh toán và thời gian sau lúc tạo payment. Giao dịch tìm được vẫn đi qua cùng transaction/idempotency của webhook trước khi cập nhật đơn.
+Khi kiểm thử bằng **Test Mode**, token Sandbox không dùng được với endpoint Live. Đổi URL thành:
+
+```dotenv
+SEPAY_API_BASE_URL="https://userapi-sandbox.sepay.vn/v2/transactions"
+```
+
+Trước lần chạy API đầu tiên sau khi nâng cấp, áp dụng migration hỗ trợ UUID giao dịch SePay v2:
+
+```bash
+cd backend
+npm run db:migrate:sepay-v2:docker
+```
+
+API chỉ chấp nhận giao dịch tiền vào khi khớp đồng thời tài khoản nhận, số tiền dự kiến và mã thanh toán. Thời gian giao dịch được phép sớm hơn lúc tạo payment tối đa 60 giây để bù sai lệch đồng hồ hoặc độ chính xác thời gian từ ngân hàng/SePay. Giao dịch tìm được vẫn đi qua cùng transaction/idempotency của webhook trước khi cập nhật đơn.
 
 ## 4. Tạo webhook trên SePay
 
@@ -76,7 +90,7 @@ SePay sẽ gửi header `Authorization: Apikey KHOA_VUA_TAO`. Endpoint thành c�
 
 ## 5. Kiểm thử trước khi dùng tiền thật
 
-1. Bật **Test Mode** trên SePay.
+1. Bật **Test Mode** trên SePay, tạo API Access Test Mode và dùng endpoint `userapi-sandbox.sepay.vn` như phần 3.1.
 2. Tạo webhook test với URL và API key ở trên.
 3. Tạo một đơn QR trong Telegram Bot, ghi lại chính xác mã `PAYORD...` và số tiền.
 4. Dùng chức năng mô phỏng giao dịch của SePay với đúng số tiền và nội dung đó.

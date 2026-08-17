@@ -206,13 +206,13 @@ export class SepayService {
   }
 
   private normalizePayload(payload: any) {
-    const sepayTransactionId = BigInt(
+    const sepayTransactionId = String(
       payload.sepayTransactionId ??
         payload.sepay_transaction_id ??
         payload.transactionId ??
         payload.transaction_id ??
         payload.id
-    );
+    ).trim();
 
     const amountIn = BigInt(
       payload.amountIn ?? payload.amount_in ?? payload.transferAmount ?? payload.amount

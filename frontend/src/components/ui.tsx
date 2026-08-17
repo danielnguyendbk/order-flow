@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /* ── Panel / card ── */
 export function Panel({
@@ -35,7 +35,31 @@ export function Panel({
   );
 }
 
-/* ── Page header ── */
+/* ── Page header → top navbar ── */
+export interface PageHeaderState {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}
+
+const PageHeaderContext = createContext<{
+  state: PageHeaderState | null;
+  setState: (state: PageHeaderState | null) => void;
+}>({ state: null, setState: () => {} });
+
+export function PageHeaderProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<PageHeaderState | null>(null);
+  return (
+    <PageHeaderContext.Provider value={{ state, setState }}>
+      {children}
+    </PageHeaderContext.Provider>
+  );
+}
+
+export function usePageHeaderState() {
+  return useContext(PageHeaderContext).state;
+}
+
 export function PageHeader({
   title,
   description,
@@ -45,15 +69,12 @@ export function PageHeader({
   description?: ReactNode;
   children?: ReactNode;
 }) {
-  return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-4 pt-1 pb-2">
-      <div>
-        <h1 className="text-2xl font-extrabold leading-tight tracking-tight text-ink lg:text-[26px]">{title}</h1>
-        {description && <p className="mt-1.5 text-sm font-normal text-muted">{description}</p>}
-      </div>
-      {children && <div className="flex flex-wrap items-center gap-2.5">{children}</div>}
-    </div>
-  );
+  const { setState } = useContext(PageHeaderContext);
+  useLayoutEffect(() => {
+    setState({ title, description, actions: children });
+    return () => setState(null);
+  }, [title, description, children, setState]);
+  return null;
 }
 
 /* ── Stats row ── */

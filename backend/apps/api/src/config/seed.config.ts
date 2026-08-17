@@ -30,7 +30,7 @@ const seedConfigSchema = z.object({
     .default("owner"),
   SEED_OWNER_PASSWORD: z
     .string()
-    .min(12, "SEED_OWNER_PASSWORD must contain at least 12 characters"),
+    .min(1, "SEED_OWNER_PASSWORD must not be empty"),
   SEED_PASSWORD_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
 });
 

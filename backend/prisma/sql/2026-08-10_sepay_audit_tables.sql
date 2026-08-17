@@ -51,7 +51,7 @@ $$;
 -- sepay_transactions -------------------------------------------
 create table if not exists public.sepay_transactions (
   id uuid primary key default gen_random_uuid(),
-  sepay_transaction_id bigint not null unique,
+  sepay_transaction_id varchar(64) not null unique,
   payment_id uuid,
   transaction_date timestamptz not null,
   code varchar(100),

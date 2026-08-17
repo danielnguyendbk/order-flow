@@ -8,6 +8,8 @@ import { registerOrderStatusHandlers } from "./handlers/order-status.handler.js"
 import { registerBaristaOrderHandlers } from "./handlers/barista-order.handler.js";
 import { registerBaristaQuickHandlers } from "./handlers/barista-menu.handler.js";
 import { registerMenuFallbackHandler, registerServiceQuickHandlers } from "./handlers/service-menu.handler.js";
+import { registerVoiceOrderHandler } from "./handlers/voice-order.handler.js";
+import { CommandVoiceOrderIntake } from "./handlers/voice-order-intake.js";
 import { registerStartHandler } from "./handlers/start.handler.js";
 import type { BotContext, BotSession } from "./types.js";
 
@@ -23,6 +25,9 @@ export function createBot(config: BotConfig = getBotConfig()) {
   registerStartHandler(bot, api);
   registerServiceQuickHandlers(bot, api);
   registerBaristaQuickHandlers(bot, api);
+  if (config.voiceOrder) {
+    registerVoiceOrderHandler(bot, api, new CommandVoiceOrderIntake(config.voiceOrder));
+  }
   registerDraftOrderHandlers(bot, api);
   registerOrderStatusHandlers(bot, api);
   registerBaristaOrderHandlers(bot, api);
@@ -38,4 +43,3 @@ export function createBot(config: BotConfig = getBotConfig()) {
 
   return bot;
 }
-

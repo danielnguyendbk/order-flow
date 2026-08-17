@@ -157,7 +157,7 @@ export default function BaristaPage() {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader title="Pha chế" description="Phân công đơn đã thanh toán và theo dõi tiến độ của từng Barista.">
         <label className="flex w-full flex-col items-start gap-1.5 text-sm font-semibold text-slate-700 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           <span>Barista phụ trách</span>

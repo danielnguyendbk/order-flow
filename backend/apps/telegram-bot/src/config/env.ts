@@ -2,6 +2,11 @@ export interface BotConfig {
   telegramBotToken: string;
   apiBaseUrl: string;
   botInternalSecret: string;
+  voiceOrder?: {
+    executable: string;
+    scriptPath: string;
+    timeoutMs: number;
+  };
   webhook?: {
     domain: string;
     path: string;
@@ -64,10 +69,25 @@ export function getBotConfig(): BotConfig {
     throw new Error("TELEGRAM_WEBHOOK_PATH must start with / and cannot contain a query or fragment");
   }
 
+  const voiceScript = process.env.VOICE_ORDER_SCRIPT?.trim();
+  const voiceTimeoutMs = Number(process.env.VOICE_ORDER_TIMEOUT_MS?.trim() || 180_000);
+  if (voiceScript && (!Number.isInteger(voiceTimeoutMs) || voiceTimeoutMs < 10_000 || voiceTimeoutMs > 600_000)) {
+    throw new Error("VOICE_ORDER_TIMEOUT_MS must be an integer from 10000 to 600000");
+  }
+
   return {
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     apiBaseUrl: apiBaseUrl.toString().replace(/\/$/, ""),
     botInternalSecret: required("BOT_INTERNAL_SECRET"),
+    ...(voiceScript
+      ? {
+          voiceOrder: {
+            executable: process.env.VOICE_ORDER_PYTHON?.trim() || "python3",
+            scriptPath: voiceScript,
+            timeoutMs: voiceTimeoutMs,
+          },
+        }
+      : {}),
     webhook: webhookDomain
       ? { domain: webhookDomain.origin, path: webhookPath, port, secretToken: webhookSecret() }
       : undefined,

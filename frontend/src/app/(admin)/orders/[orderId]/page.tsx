@@ -403,7 +403,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
   }
 
   return (
-    <div>
+    <div className="animate-[fadeUp_.35s_ease-out]">
       <PageHeader
         title={
           <>
