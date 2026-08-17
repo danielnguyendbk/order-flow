@@ -1,0 +1,170 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { BackendApiError, type BackendApi } from "../api/backend-client.js";
+import type { DraftOrder } from "../api/order-types.js";
+import type { EmployeeSession } from "../types.js";
+import { orderStatusKeyboard } from "../keyboards/order-status.js";
+import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
+
+const employee: EmployeeSession = {
+  employeeId: "employee-1",
+  telegramUserId: 1001,
+  displayName: "Khoa",
+  role: "SERVICE_STAFF",
+};
+
+function order(overrides: Partial<DraftOrder> = {}): DraftOrder {
+  return {
+    id: "order-1",
+    code: "ORD-001",
+    paymentMethod: "QR",
+    paymentStatus: "PENDING",
+    fulfillmentStatus: "PENDING_PAYMENT",
+    totalAmount: 30_000,
+    items: [],
+    ...overrides,
+  };
+}
+
+function api(overrides: Partial<BackendApi> = {}): BackendApi {
+  return {
+    createTelegramSession: vi.fn().mockResolvedValue(employee),
+    createDraftOrder: vi.fn().mockResolvedValue(order()),
+    getMenuCategories: vi.fn().mockResolvedValue([]),
+    getMenuItems: vi.fn().mockResolvedValue([]),
+    addDraftOrderItem: vi.fn().mockResolvedValue(order()),
+    updateDraftOrderItem: vi.fn().mockResolvedValue(order()),
+    deleteDraftOrderItem: vi.fn().mockResolvedValue(order()),
+    getDraftOrder: vi.fn().mockResolvedValue(order()),
+    cancelDraftOrder: vi.fn().mockResolvedValue(undefined),
+    listMyOrders: vi.fn().mockResolvedValue([order()]),
+    confirmCashPayment: vi.fn().mockResolvedValue(order()),
+    createQrPayment: vi.fn().mockResolvedValue({ order: order(), paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }),
+    reconcileQrPayment: vi.fn().mockResolvedValue({ order: order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }), matched: true }),
+    deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
+    listBaristaQueue: vi.fn().mockResolvedValue([]),
+    listBaristaOrders: vi.fn().mockResolvedValue([]),
+    getBaristaOrder: vi.fn(),
+    getBaristaOrderHistory: vi.fn().mockResolvedValue([]),
+    claimBaristaOrder: vi.fn(),
+    markBaristaOrderReady: vi.fn(),
+    ...overrides,
+  };
+}
+
+function context(): OrderStatusContext & { replies: string[] } {
+  const replies: string[] = [];
+  return { from: { id: employee.telegramUserId }, session: { employee }, replies, reply: async (message) => void replies.push(message) };
+}
+
+function callbackContext(data: string): OrderStatusCallbackContext & { replies: string[]; answers: string[]; clears: string[] } {
+  const replies: string[] = [];
+  const answers: string[] = [];
+  const clears: string[] = [];
+  return {
+    from: { id: employee.telegramUserId },
+    session: { employee },
+    callbackData: data,
+    replies,
+    answers,
+    clears,
+    reply: async (message) => void replies.push(message),
+    answerCallback: async (message) => void answers.push(message ?? ""),
+    clearCallbackMessage: async () => void clears.push("cleared"),
+  };
+}
+
+describe("Telegram order tracking", () => {
+  it("shows active reconciliation on every pending QR order status", () => {
+    const buttons = orderStatusKeyboard(order()).reply_markup.inline_keyboard.flat();
+
+    expect(buttons).toContainEqual(expect.objectContaining({
+      text: "Kiểm tra thanh toán",
+      callback_data: "order:reconcile:order-1",
+    }));
+  });
+
+  it("hides reconciliation after a QR order is paid", () => {
+    const buttons = orderStatusKeyboard(order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }))
+      .reply_markup.inline_keyboard.flat();
+
+    expect(buttons).not.toContainEqual(expect.objectContaining({ text: "Kiểm tra thanh toán" }));
+  });
+
+  it("lists only the authenticated employee's orders", async () => {
+    const backend = api();
+    const ctx = context();
+    await showMyOrders(ctx, backend);
+    expect(backend.listMyOrders).toHaveBeenCalledWith(employee.telegramUserId);
+    expect(ctx.replies).toEqual(["Chọn đơn để xem trạng thái:"]);
+  });
+
+  it("refreshes payment and fulfillment status from the backend", async () => {
+    const backend = api({ getDraftOrder: vi.fn().mockResolvedValue(order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" })) });
+    const ctx = context();
+    await showOrderStatus(ctx, backend, "order-1");
+    expect(backend.getDraftOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.replies[0]).toContain("Đã thanh toán");
+    expect(ctx.replies[0]).toContain("Chờ pha");
+    expect(ctx.replies[0]).not.toContain("PAID");
+  });
+
+  it("actively reconciles a QR payment through SePay", async () => {
+    const backend = api();
+    const ctx = context();
+    await reconcileQrPayment(ctx, backend, "order-1");
+    expect(backend.reconcileQrPayment).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.replies[0]).toContain("Đã xác nhận giao dịch SePay");
+    expect(ctx.replies[0]).toContain("Đã thanh toán");
+  });
+
+  it("explains when SePay has no exact matching transaction", async () => {
+    const backend = api({ reconcileQrPayment: vi.fn().mockResolvedValue({ order: order(), matched: false }) });
+    const ctx = context();
+    await reconcileQrPayment(ctx, backend, "order-1");
+    expect(ctx.replies[0]).toContain("Chưa tìm thấy giao dịch SePay");
+    expect(ctx.replies[0]).toContain("Chờ xác nhận thanh toán");
+  });
+
+  it("blocks tracking on the next interaction after deactivation", async () => {
+    const backend = api({
+      createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Inactive", 403, "EMPLOYEE_INACTIVE")),
+    });
+    const ctx = context();
+    await showOrderStatus(ctx, backend, "order-1");
+    expect(ctx.session.employee).toBeUndefined();
+    expect(backend.getDraftOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets the creating service staff deliver only a READY order through the backend", async () => {
+    const delivered = order({ paymentStatus: "PAID", fulfillmentStatus: "DELIVERED" });
+    const backend = api({ deliverOrder: vi.fn().mockResolvedValue(delivered) });
+    const ctx = context();
+    await deliverServiceOrder(ctx, backend, "order-1");
+    expect(backend.deliverOrder).toHaveBeenCalledWith(employee.telegramUserId, "order-1");
+    expect(ctx.replies[0]).toContain("Đã giao");
+  });
+
+  it("clears removed order callbacks and refreshes the current order list", async () => {
+    const backend = api();
+    const ctx = callbackContext("order:removed:order-1");
+
+    await handleOrderStatusCallback(ctx, backend);
+
+    expect(ctx.clears).toEqual(["cleared"]);
+    expect(backend.listMyOrders).toHaveBeenCalledWith(employee.telegramUserId);
+  });
+
+  it("clears a stale delivery keyboard and renders the backend's latest state", async () => {
+    const backend = api({
+      deliverOrder: vi.fn().mockRejectedValue(new BackendApiError("Not ready", 409, "ORDER_NOT_READY")),
+      getDraftOrder: vi.fn().mockResolvedValue(order({ paymentStatus: "PAID", fulfillmentStatus: "PREPARING" })),
+    });
+    const ctx = callbackContext("order:deliver:order-1");
+
+    await handleOrderStatusCallback(ctx, backend);
+
+    expect(ctx.clears).toEqual(["cleared"]);
+    expect(ctx.replies.at(-1)).toContain("Đang pha chế");
+  });
+});

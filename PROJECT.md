@@ -193,7 +193,7 @@ Admin Dashboard
 | Tâm | Phát triển Nghiệp vụ Backend | Order, Kitchen Workflow, Delivery |
 | Thái | Hệ thống Thanh toán | Payment, SePay, Revenue, Reconciliation |
 | Khoa | Tích hợp Hệ thống | Telegram Bot, Notification, Integration, E2E Testing |
-| Đạt |  Frontend | Website quản trị và Dashboard |
+| Đạt | Frontend | Website quản trị và Dashboard |
 
 ---
 
@@ -261,5 +261,4 @@ Triển khai hệ thống
 - Swagger
 - Jest
 - Supertest
-
 

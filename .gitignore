@@ -1,0 +1,22 @@
+# Local environment files contain secrets and must never be committed.
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# JavaScript / TypeScript dependencies and build output.
+node_modules/
+.next/
+dist/
+build/
+coverage/
+
+# Local tooling.
+.DS_Store
+*.log
+/.runlogs/
+
+# Local database exports can contain production data and password hashes.
+/backend/backup.sql
+
+backend/docs/

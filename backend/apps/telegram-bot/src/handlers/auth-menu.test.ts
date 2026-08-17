@@ -1,0 +1,143 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { BackendApiError } from "../api/backend-client.js";
+import type { EmployeeAuthenticationApi } from "../auth/employee-auth.js";
+import type { EmployeeSession } from "../types.js";
+import { handleCallback, type CallbackHandlerContext } from "./callback.handler.js";
+import { handleStart, isAccessDenied, type StartHandlerContext } from "./start.handler.js";
+
+const serviceStaff: EmployeeSession = {
+  employeeId: "employee-service",
+  telegramUserId: 101,
+  displayName: "Minh Anh",
+  role: "SERVICE_STAFF",
+};
+
+const barista: EmployeeSession = {
+  employeeId: "employee-barista",
+  telegramUserId: 202,
+  displayName: "Thu Hà",
+  role: "BARISTA",
+};
+
+function apiReturning(employee: EmployeeSession): EmployeeAuthenticationApi {
+  return { createTelegramSession: vi.fn().mockResolvedValue(employee) };
+}
+
+function startContext(telegramUserId: number): StartHandlerContext & { replies: Array<[string, unknown?]> } {
+  const replies: Array<[string, unknown?]> = [];
+  return {
+    from: { id: telegramUserId },
+    session: {},
+    replies,
+    reply: async (message, extra) => void replies.push([message, extra]),
+  };
+}
+
+function callbackContext(data: string, telegramUserId: number): CallbackHandlerContext & { answers: string[]; replies: string[] } {
+  const answers: string[] = [];
+  const replies: string[] = [];
+  return {
+    from: { id: telegramUserId },
+    session: {},
+    callbackId: "callback-1",
+    callbackData: data,
+    answers,
+    replies,
+    answerCallback: async (message) => void answers.push(message ?? ""),
+    reply: async (message) => void replies.push(message),
+  };
+}
+
+function buttonLabels(extra: unknown): string[] {
+  const markup = (extra as { reply_markup: {
+    inline_keyboard?: Array<Array<{ text: string }>>;
+    keyboard?: Array<Array<{ text: string }>>;
+  } }).reply_markup;
+  const keyboard = markup.inline_keyboard ?? markup.keyboard ?? [];
+  return keyboard.flat().map((button) => button.text);
+}
+
+describe("Telegram authentication and role menu", () => {
+  it("stores the service-staff session and displays its menu", async () => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    await handleStart(ctx, apiReturning(serviceStaff));
+
+    expect(ctx.session.employee).toEqual(serviceStaff);
+    expect(buttonLabels(ctx.replies[0][1])).toEqual(["🛒 Tạo đơn", "🧾 Đơn đang tạo", "📋 Đơn gần đây", "🏠 Menu"]);
+    expect(ctx.replies[0][1]).toMatchObject({
+      reply_markup: { resize_keyboard: true, is_persistent: true, input_field_placeholder: "Chọn thao tác nhanh" },
+    });
+  });
+
+  it("stores the barista session and displays its menu", async () => {
+    const ctx = startContext(barista.telegramUserId);
+    await handleStart(ctx, apiReturning(barista));
+
+    expect(ctx.session.employee).toEqual(barista);
+    expect(buttonLabels(ctx.replies[0][1])).toEqual(["☕ Hàng đợi", "🔥 Đang pha", "📋 Đơn của tôi", "🏠 Menu"]);
+    expect(ctx.replies[0][1]).toMatchObject({
+      reply_markup: { resize_keyboard: true, is_persistent: true, input_field_placeholder: "Chọn thao tác pha chế" },
+    });
+  });
+
+  it.each([403, 404])("blocks an unregistered or inactive employee (%i)", async (status) => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Denied", status, "EMPLOYEE_INACTIVE")),
+    };
+
+    await handleStart(ctx, api);
+
+    expect(ctx.replies[0][0]).toContain("chưa được đăng ký hoặc đã bị vô hiệu hóa");
+    expect(ctx.session.employee).toBeUndefined();
+  });
+
+  it("treats an invalid internal secret as a service configuration error", async () => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    const error = new BackendApiError("Invalid bot credentials", 401, "BOT_AUTH_INVALID");
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(error),
+    };
+
+    await handleStart(ctx, api);
+
+    expect(isAccessDenied(error)).toBe(false);
+    expect(ctx.replies).toHaveLength(1);
+    expect(ctx.session.employee).toBeUndefined();
+  });
+
+  it("clears a stale employee session before a failed re-authentication", async () => {
+    const ctx = startContext(serviceStaff.telegramUserId);
+    ctx.session.employee = serviceStaff;
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Inactive", 403, "EMPLOYEE_INACTIVE")),
+    };
+
+    await handleStart(ctx, api);
+
+    expect(ctx.session.employee).toBeUndefined();
+  });
+
+  it("rejects a callback when the authenticated role does not match its menu action", async () => {
+    const ctx = callbackContext("barista:queue", serviceStaff.telegramUserId);
+    await handleCallback(ctx, apiReturning(serviceStaff));
+
+    expect(ctx.answers).toEqual(["Thao tác không còn hợp lệ."]);
+    expect(ctx.replies).toHaveLength(1);
+  });
+
+  it("rejects a stale callback and re-checks an inactive employee", async () => {
+    const stale = callbackContext("service:order:removed", serviceStaff.telegramUserId);
+    await handleCallback(stale, apiReturning(serviceStaff));
+    expect(stale.replies).toHaveLength(1);
+    expect(stale.answers).toEqual(["Thao tác không còn hợp lệ."]);
+
+    const inactive = callbackContext("service:order:create", serviceStaff.telegramUserId);
+    const api: EmployeeAuthenticationApi = {
+      createTelegramSession: vi.fn().mockRejectedValue(new BackendApiError("Inactive", 403, "EMPLOYEE_INACTIVE")),
+    };
+    await handleCallback(inactive, api);
+    expect(inactive.answers).toEqual(["Tài khoản không còn được phép sử dụng."]);
+  });
+});
