@@ -52,6 +52,7 @@ order-flow/
     │   └── eslint-config/             # Shared ESLint configuration
     └── prisma/
         ├── schema.prisma              # PostgreSQL Prisma schema
+        ├── migrations/                # Forward-only, tracked production SQL migrations
         ├── seed.ts                    # Idempotent initial OWNER seed entry point
         ├── seed-visualization.ts      # Large local-Docker dataset; reuses existing users
         └── sync-users-to-docker.ts    # Safe Supabase users → local Docker upsert
@@ -80,6 +81,11 @@ All module directories are under `backend/apps/api/src/modules/`:
 - The API is an Express app with Telegram employee-session authentication, order lifecycle, barista, admin, payment, SePay, reconciliation, refund, revenue report, audit and order-status-history modules. Its routes are mounted beneath `/api/v1`.
 - The API runs a server-side QR-payment recovery poller every three seconds by default. It scans pending QR payments in a bounded batch, queries SePay with `SEPAY_API_TOKEN`, then sends exact matches through the same idempotent SePay transaction pipeline used by webhooks.
 - OWNER-authenticated `GET /api/v1/admin/dashboard` returns live PostgreSQL aggregates, status counts, revenue buckets, recent orders and payment alerts for the requested 1–90 day range.
+- Web financial and order-mutation actors are derived from the access token; client-supplied actor IDs are not accepted. Refunds, reconciliation, reports, audit logs and status overrides are OWNER-only.
+- API sessions persist refresh-token hashes in PostgreSQL (`auth_sessions`), so logout and refresh-token replay protection work across replicas and restarts. The memory store is test-only.
+- `backend/prisma/migrations/` is applied once under a PostgreSQL advisory lock by `npm run db:migrate` and production `db-init`; `backend/docs/database-operations.md` covers backup and destructive restore.
+- Production Compose requires an immutable release version, binds service ports only to loopback for TLS reverse-proxy termination, and enables API security headers plus request rate limiting.
+- SePay persists only reconciliation fields and a minimal raw-payload schema marker; it does not retain arbitrary webhook JSON.
 - The OWNER revenue page exposes one accounting XLSX export styled after `backend/docs/demo_ketoan_SME.xlsx`; the former 03/04-TNDN DOCX export actions and API formats have been removed.
 - The root `npm run live` command uses `concurrently` to run the API, Admin Web, Telegram Bot and notification worker in one terminal.
 - `backend/apps/telegram-bot` is a TypeScript/Telegraf application managed by the root `backend/package.json`; it has its own local environment template, Vitest configuration and notification-worker skeleton.
@@ -98,6 +104,8 @@ All module directories are under `backend/apps/api/src/modules/`:
 
 ## Progress log — 2026-08-17
 
+- Closed the primary impersonation risk by deriving payment, refund, reconciliation and order-mutation actors from the access token, restricting financial administration to OWNER, and updating the web client/OpenAPI contract.
+- Added tracked migrations, durable PostgreSQL auth sessions, database backup/restore runbooks, CI quality/security gates, immutable Compose release versions, loopback-only ports, response security headers and request rate limiting.
 - Reworked the accounting XLSX export to follow the supplied SME workbook's numbered-sheet structure, blue title/header palette, Arial typography, borders and print setup while retaining Order Flow's real control, transaction, journal and reconciliation data.
 - Added a ninth guidance sheet that documents scope and avoids fabricating opening balances, inventory, cost, VAT or expense data that Order Flow does not store.
 - Removed the 03/TNDN and 04/TNDN DOCX export actions, request formats, generation code and direct JSZip dependency from the OWNER revenue workflow.
@@ -198,7 +206,7 @@ All module directories are under `backend/apps/api/src/modules/`:
 - Planned API routes: read `backend/docs/api-contract.md` before implementing handlers.
 - Postman/API generation: import `backend/docs/openapi.yaml`; keep it synchronized with route behavior and `api-contract.md`.
 - Swift mobile work: start at `SWIFT_MOBILE_APP_SPEC.md`; the MVP is an OWNER-only, read-only manager dashboard and explicitly excludes service-staff/Barista actions.
-- Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; restart clears sessions and multi-instance deployments require a shared replacement such as Redis.
+- Auth session storage: use `backend/apps/api/src/modules/auth/auth-session.store.ts`; production sessions are persisted in PostgreSQL, while the memory implementation is test-only.
 - Telegram authentication: Web App JWT flow is registered in `backend/apps/api/src/modules/auth/auth.routes.ts`; internal Bot employee resolution is implemented in `telegram-session.routes.ts` and mounted at `/api/v1/telegram/bot/session` from `apps/api/src/app.ts`.
 - Environment variable names/templates: use the root `.env.example`; never commit `.env.local`.
 

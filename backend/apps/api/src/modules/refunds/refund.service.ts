@@ -4,7 +4,7 @@ import { PaymentStatus } from "../orders/order.types";
 import { prisma } from "../../db";
 
 export interface RefundOrderInput {
-  refundedByUserId: string;
+  actorUserId: string;
   reason: string;
   amount?: number;
 }
@@ -17,11 +17,11 @@ export class RefundService {
           where: { id: orderId },
           include: { payment: true },
         }),
-        tx.user.findUnique({ where: { id: input.refundedByUserId } }),
+        tx.user.findUnique({ where: { id: input.actorUserId } }),
       ]);
 
       if (!order) throw createHttpError(404, `Order ${orderId} not found`);
-      if (!actor) throw createHttpError(404, `User ${input.refundedByUserId} not found`);
+      if (!actor) throw createHttpError(404, `User ${input.actorUserId} not found`);
       if (actor.role !== "OWNER") {
         throw createHttpError(403, "Only owner can record a manual refund");
       }
@@ -60,7 +60,7 @@ export class RefundService {
 
       const auditLog = await tx.auditLog.create({
         data: {
-          actorUserId: input.refundedByUserId,
+          actorUserId: input.actorUserId,
           action: "MANUAL_REFUND_RECORDED",
           entityType: AuditEntityType.PAYMENT,
           entityId: order.payment.id,
@@ -86,7 +86,7 @@ export class RefundService {
         refund: {
           amount: refundAmount,
           reason: input.reason.trim(),
-          refundedByUserId: input.refundedByUserId,
+          refundedByUserId: input.actorUserId,
         },
       };
     });

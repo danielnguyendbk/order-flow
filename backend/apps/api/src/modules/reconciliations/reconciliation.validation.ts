@@ -8,10 +8,6 @@ export function validateResolveReconciliation(data: any): ValidationResult {
     return { isValid: false, errors: ["Request body is required"] };
   }
 
-  if (!data.resolvedByUserId || typeof data.resolvedByUserId !== "string") {
-    errors.push("resolvedByUserId is required");
-  }
-
   if (!data.resolutionAction || !Object.values(ResolutionAction).includes(data.resolutionAction)) {
     errors.push(`resolutionAction must be one of: ${Object.values(ResolutionAction).join(", ")}`);
   }

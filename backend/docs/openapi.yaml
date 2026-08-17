@@ -1529,20 +1529,13 @@ components:
     ConfirmCashPaymentRequest:
       type: object
       additionalProperties: false
-      required: [confirmedByUserId]
       properties:
-        confirmedByUserId:
-          type: string
         amount:
           type: integer
           minimum: 0
     InitQrPaymentRequest:
       type: object
       additionalProperties: false
-      required: [requestedByUserId]
-      properties:
-        requestedByUserId:
-          type: string
     PaymentRecord:
       type: object
       required: [id, orderId, method, status, expectedAmount, createdAt, updatedAt]
@@ -1646,10 +1639,8 @@ components:
     ResolveReconciliationRequest:
       type: object
       additionalProperties: false
-      required: [resolvedByUserId, resolutionAction, resolutionNote]
+      required: [resolutionAction, resolutionNote]
       properties:
-        resolvedByUserId:
-          type: string
         resolutionAction:
           $ref: "#/components/schemas/ResolutionAction"
         resolutionNote:
@@ -1658,10 +1649,8 @@ components:
     RefundOrderRequest:
       type: object
       additionalProperties: false
-      required: [refundedByUserId, reason]
+      required: [reason]
       properties:
-        refundedByUserId:
-          type: string
         reason:
           type: string
           minLength: 1
@@ -1684,10 +1673,8 @@ components:
     CreateOrderRequest:
       type: object
       additionalProperties: false
-      required: [createdByUserId, items]
+      required: [items]
       properties:
-        createdByUserId:
-          type: string
         paymentMethod:
           $ref: "#/components/schemas/PaymentMethod"
         customerNote:
@@ -1705,8 +1692,6 @@ components:
         reason:
           type: string
           minLength: 1
-        requesterId:
-          type: string
     AddOrderItemRequest:
       type: object
       additionalProperties: false

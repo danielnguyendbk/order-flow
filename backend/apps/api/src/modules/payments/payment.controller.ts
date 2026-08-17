@@ -31,8 +31,15 @@ export class PaymentController {
         res.status(400).json({ message: "Validation failed", errors: v.errors });
         return;
       }
+      if (!req.auth) {
+        res.status(401).json({ message: "Authenticated user is required" });
+        return;
+      }
 
-      const payment = await this.paymentService.confirmCash(req.params.orderId, req.body);
+      const payment = await this.paymentService.confirmCash(req.params.orderId, {
+        amount: req.body.amount,
+        actorUserId: req.auth.userId,
+      });
       res.status(200).json(payment);
     } catch (err) {
       next(err);
@@ -50,8 +57,14 @@ export class PaymentController {
         res.status(400).json({ message: "Validation failed", errors: v.errors });
         return;
       }
+      if (!req.auth) {
+        res.status(401).json({ message: "Authenticated user is required" });
+        return;
+      }
 
-      const result = await this.paymentService.initQrPayment(req.params.orderId, req.body);
+      const result = await this.paymentService.initQrPayment(req.params.orderId, {
+        actorUserId: req.auth.userId,
+      });
       res.status(200).json(result);
     } catch (err) {
       next(err);

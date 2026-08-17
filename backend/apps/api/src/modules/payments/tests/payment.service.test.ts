@@ -61,7 +61,7 @@ describe("PaymentService financial audit", () => {
     tx.payment.findUnique.mockResolvedValue({ id: "payment-1", receivedAmount: 45000n });
 
     await new PaymentService({} as any).confirmCash("order-1", {
-      confirmedByUserId: "staff-1",
+      actorUserId: "staff-1",
     });
 
     expect(tx.auditLog.create).toHaveBeenCalledWith({
@@ -101,7 +101,7 @@ describe("PaymentService financial audit", () => {
     tx.orderStatusHistory.create.mockResolvedValue({});
 
     await new PaymentService({} as any).initQrPayment("order-1", {
-      requestedByUserId: "staff-1",
+      actorUserId: "staff-1",
     });
 
     expect(tx.auditLog.create).toHaveBeenCalledWith({

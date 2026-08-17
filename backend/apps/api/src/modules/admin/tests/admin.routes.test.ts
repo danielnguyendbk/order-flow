@@ -192,9 +192,9 @@ describe("Admin order routes", () => {
     expect(staffList.status).toBe(200);
   });
 
-  it("overrides status using the authenticated actor and requires a reason", async () => {
+  it("allows only an owner to override status and requires a reason", async () => {
     const baseUrl = await startApi();
-    const response = await request(baseUrl, "/orders/order-1/override-status", "POST", staffToken, {
+    const response = await request(baseUrl, "/orders/order-1/override-status", "POST", ownerToken, {
       domain: "FULFILLMENT",
       status: "READY",
       reason: "Customer asked to expedite",
@@ -204,12 +204,19 @@ describe("Admin order routes", () => {
     const payload = await response.json();
     expect(payload).toMatchObject({ fulfillmentStatus: FulfillmentStatus.READY });
 
-    const bad = await request(baseUrl, "/orders/order-1/override-status", "POST", staffToken, {
+    const bad = await request(baseUrl, "/orders/order-1/override-status", "POST", ownerToken, {
       domain: "PAYMENT",
       status: "PAID",
     });
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ errors: expect.arrayContaining(["reason is required"]) });
+
+    const staffResponse = await request(baseUrl, "/orders/order-1/override-status", "POST", staffToken, {
+      domain: "FULFILLMENT",
+      status: "READY",
+      reason: "Attempted override",
+    });
+    expect(staffResponse.status).toBe(403);
   });
 
   it("rejects non-admin roles", async () => {

@@ -12,12 +12,12 @@ import { generatePaymentCode } from "../orders/order-code";
 import { prisma } from "../../db";
 
 export interface ConfirmCashInput {
-  confirmedByUserId: string;
+  actorUserId: string;
   amount?: number;
 }
 
 export interface InitQrPaymentInput {
-  requestedByUserId: string;
+  actorUserId: string;
 }
 
 export interface InitQrPaymentResult {
@@ -37,7 +37,7 @@ export class PaymentService {
   }
 
   public async confirmCash(orderId: string, input: ConfirmCashInput): Promise<Payment> {
-    const confirmedByUserId = input.confirmedByUserId;
+    const confirmedByUserId = input.actorUserId;
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const [order, actor] = await Promise.all([
@@ -168,7 +168,7 @@ export class PaymentService {
     orderId: string,
     input: InitQrPaymentInput
   ): Promise<InitQrPaymentResult> {
-    const requestedByUserId = input.requestedByUserId;
+    const requestedByUserId = input.actorUserId;
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const [order, actor] = await Promise.all([

@@ -1,0 +1,53 @@
+name: Quality and security gates
+
+on:
+  pull_request:
+  push:
+    branches: [feat-tele, dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            backend/apps/api/package-lock.json
+            frontend/package-lock.json
+      - name: Reject whitespace errors
+        run: git diff --check HEAD^ HEAD
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          npm ci
+          npm --prefix apps/api ci
+      - name: Check and test API
+        working-directory: backend
+        run: |
+          npm run check:api
+          npm run test:api
+          npm --prefix apps/api run test:node
+      - name: Check and test Telegram bot
+        working-directory: backend
+        run: |
+          npm run check:bot
+          npm run test:bot
+      - name: Audit production backend dependencies
+        working-directory: backend
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix apps/api audit --omit=dev --audit-level=high
+      - name: Install and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+          npm audit --omit=dev --audit-level=high

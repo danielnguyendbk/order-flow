@@ -87,7 +87,7 @@ export class AuthService implements AuthServicePort {
     const identity = await this.tokens.verifyRefreshToken(refreshToken);
     const user = await this.repository.findUserById(identity.userId);
     if (!user || user.status !== "ACTIVE") {
-      this.sessions.revoke(identity.sessionId, identity.userId);
+      await this.sessions.revoke(identity.sessionId, identity.userId);
       throw new AppError("UNAUTHORIZED", "Refresh session is invalid or expired");
     }
 
@@ -95,7 +95,7 @@ export class AuthService implements AuthServicePort {
       user,
       identity.sessionId,
     );
-    const rotated = this.sessions.rotate({
+    const rotated = await this.sessions.rotate({
       sessionId: identity.sessionId,
       userId: identity.userId,
       currentTokenHash: this.tokens.hashRefreshToken(refreshToken),
@@ -122,12 +122,12 @@ export class AuthService implements AuthServicePort {
     requiredRoleOrRoles?: AccessRole | AccessRole[],
   ): Promise<AccessIdentity> {
     const identity = await this.tokens.verifyAccessToken(accessToken);
-    if (!this.sessions.isActive(identity.sessionId, identity.userId)) {
+    if (!(await this.sessions.isActive(identity.sessionId, identity.userId))) {
       throw new AppError("UNAUTHORIZED", "Session is invalid or expired");
     }
     const user = await this.repository.findUserById(identity.userId);
     if (!user || user.status !== "ACTIVE") {
-      this.sessions.revoke(identity.sessionId, identity.userId);
+      await this.sessions.revoke(identity.sessionId, identity.userId);
       throw new AppError("UNAUTHORIZED", "Session is invalid or expired");
     }
     const requiredRoles = Array.isArray(requiredRoleOrRoles)
@@ -152,7 +152,7 @@ export class AuthService implements AuthServicePort {
   }
 
   async logout(identity: AccessIdentity): Promise<void> {
-    this.sessions.revoke(identity.sessionId, identity.userId);
+    await this.sessions.revoke(identity.sessionId, identity.userId);
   }
 
   private async createSession(
@@ -164,7 +164,7 @@ export class AuthService implements AuthServicePort {
       this.tokens.signAccessToken(user, sessionId),
       this.tokens.signRefreshToken(user, sessionId),
     ]);
-    this.sessions.create({
+    await this.sessions.create({
       id: sessionId,
       userId: user.id,
       refreshTokenHash: this.tokens.hashRefreshToken(refreshToken),

@@ -1,5 +1,6 @@
 const { PrismaClient, UserRole, UserStatus } = require("@prisma/client");
 const { hash } = require("bcryptjs");
+const { applyMigrations } = require("./apply-migrations.cjs");
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -8,6 +9,7 @@ function required(name) {
 }
 
 async function main() {
+  await applyMigrations();
   const username = required("SEED_OWNER_USERNAME");
   const password = required("SEED_OWNER_PASSWORD");
   const fullName = process.env.SEED_OWNER_FULL_NAME?.trim() || "Store Owner";

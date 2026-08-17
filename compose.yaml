@@ -1,7 +1,7 @@
 name: order-flow
 
 x-backend-image: &backend-image
-  image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-backend:${ORDER_FLOW_VERSION:-latest}
+  image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-backend:${ORDER_FLOW_VERSION:?Set an immutable release version in .env.docker}
 
 x-database-environment: &database-environment
   DATABASE_URL: postgresql://${POSTGRES_USER:-order_flow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}@postgres:5432/${POSTGRES_DB:-order_flow}
@@ -9,7 +9,7 @@ x-database-environment: &database-environment
 
 services:
   postgres:
-    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-postgres:${ORDER_FLOW_VERSION:-latest}
+    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-postgres:${ORDER_FLOW_VERSION:?Set an immutable release version in .env.docker}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-order_flow}
       POSTGRES_USER: ${POSTGRES_USER:-order_flow}
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.10-alpine3.21
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -60,7 +60,9 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env.docker}
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
-      AUTH_SESSION_CACHE_MAX: ${AUTH_SESSION_CACHE_MAX:-10000}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-60000}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-300}
       BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:?Set BOT_INTERNAL_SECRET in .env.docker}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.docker}
       TELEGRAM_AUTH_MAX_AGE_SECONDS: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:-300}
@@ -75,7 +77,7 @@ services:
       SEPAY_QR_POLL_INTERVAL_MS: ${SEPAY_QR_POLL_INTERVAL_MS:-3000}
       SEPAY_QR_POLL_BATCH_SIZE: ${SEPAY_QR_POLL_BATCH_SIZE:-5}
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "127.0.0.1:${API_PORT:-3001}:3001"
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -88,11 +90,11 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-frontend:${ORDER_FLOW_VERSION:-latest}
+    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-frontend:${ORDER_FLOW_VERSION:?Set an immutable release version in .env.docker}
     environment:
       API_BASE_URL: http://api:3001/api/v1
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -116,7 +118,7 @@ services:
       TELEGRAM_WEBHOOK_SECRET_TOKEN: ${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}
       PORT: 3002
     ports:
-      - "${BOT_WEBHOOK_PORT:-3002}:3002"
+      - "127.0.0.1:${BOT_WEBHOOK_PORT:-3002}:3002"
     depends_on:
       api:
         condition: service_healthy

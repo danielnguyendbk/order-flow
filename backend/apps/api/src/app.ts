@@ -5,9 +5,9 @@ import { createSepayRouter } from "./modules/sepay/sepay.routes";
 
 import { createDatabasePool } from "./config/database.js";
 import { getEnv } from "./config/env.js";
-import { errorHandler, notFound, requestId } from "./middleware/index.js";
+import { errorHandler, notFound, rateLimit, requestId, securityHeaders } from "./middleware/index.js";
 import { AuthRepository } from "./modules/auth/auth.repository.js";
-import { MemoryAuthSessionStore } from "./modules/auth/auth-session.store.js";
+import { PostgresAuthSessionStore } from "./modules/auth/auth-session.store.js";
 import { AuthService, type AuthServicePort } from "./modules/auth/auth.service.js";
 import { AuthTokenService } from "./modules/auth/auth.tokens.js";
 import {
@@ -63,8 +63,9 @@ export function createApp(options: CreateAppOptions = {}): Application {
 
   if (!authService && !botOnly) {
     const env = getEnv();
+    app.set("trust proxy", env.TRUST_PROXY);
     const pool = createDatabasePool(env);
-    const sessions = new MemoryAuthSessionStore(env.AUTH_SESSION_CACHE_MAX);
+    const sessions = new PostgresAuthSessionStore(pool);
     authService = new AuthService(
       new AuthRepository(pool),
       sessions,
@@ -78,12 +79,17 @@ export function createApp(options: CreateAppOptions = {}): Application {
       telegramBotSession = { internalSecret: env.BOT_INTERNAL_SECRET };
     }
     dispose = async () => {
-      sessions.clear();
+      await sessions.clear();
       await pool.end();
     };
   }
 
   app.locals.dispose = dispose;
+  app.use(securityHeaders);
+  if (!botOnly) {
+    const env = getEnv();
+    app.use(rateLimit({ windowMs: env.API_RATE_LIMIT_WINDOW_MS, max: env.API_RATE_LIMIT_MAX }));
+  }
   app.use(requestId);
   app.set("json replacer", (_key: string, value: unknown) =>
     typeof value === "bigint" ? value.toString() : value,

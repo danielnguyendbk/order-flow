@@ -65,11 +65,11 @@ export function createAdminRouter(
 
   router.get("/orders",                           controller.listOrders);
   router.get("/orders/:orderId",                  controller.getOrder);
-  router.post("/orders/:orderId/override-status", controller.overrideStatus);
-  router.use("/", createRefundRouter());
-  router.use("/", createAuditRouter());
-  router.use("/", createRevenueReportRouter());
-  router.use("/", createReconciliationRouter());
+  router.post("/orders/:orderId/override-status", requireAdminAuth(authService), controller.overrideStatus);
+  router.use("/", requireAdminAuth(authService), createRefundRouter());
+  router.use("/", requireAdminAuth(authService), createAuditRouter());
+  router.use("/", requireAdminAuth(authService), createRevenueReportRouter());
+  router.use("/", requireAdminAuth(authService), createReconciliationRouter());
 
   return router;
 }
