@@ -1,0 +1,6 @@
+# syntax=docker/dockerfile:1.7
+
+FROM postgres:16-alpine
+
+COPY prisma/sql/telegram_order_sepay_supabase_fixed.sql /docker-entrypoint-initdb.d/10-order-flow-schema.sql
+COPY prisma/sql/2026-08-12_sepay_v2_transaction_ids.sql /docker-entrypoint-initdb.d/20-sepay-v2-transaction-ids.sql

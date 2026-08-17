@@ -1,0 +1,138 @@
+name: order-flow
+
+x-backend-image: &backend-image
+  image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-backend:${ORDER_FLOW_VERSION:-latest}
+
+x-database-environment: &database-environment
+  DATABASE_URL: postgresql://${POSTGRES_USER:-order_flow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}@postgres:5432/${POSTGRES_DB:-order_flow}
+  DIRECT_URL: postgresql://${POSTGRES_USER:-order_flow}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}@postgres:5432/${POSTGRES_DB:-order_flow}
+
+services:
+  postgres:
+    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-postgres:${ORDER_FLOW_VERSION:-latest}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-order_flow}
+      POSTGRES_USER: ${POSTGRES_USER:-order_flow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  db-init:
+    <<: *backend-image
+    command: ["node", "scripts/container-init.cjs"]
+    environment:
+      <<: *database-environment
+      SEED_OWNER_FULL_NAME: ${SEED_OWNER_FULL_NAME:-Store Owner}
+      SEED_OWNER_USERNAME: ${SEED_OWNER_USERNAME:-owner}
+      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:?Set SEED_OWNER_PASSWORD in .env.docker}
+      SEED_PASSWORD_ROUNDS: ${SEED_PASSWORD_ROUNDS:-12}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend-image
+    environment:
+      <<: *database-environment
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env.docker}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env.docker}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
+      AUTH_SESSION_CACHE_MAX: ${AUTH_SESSION_CACHE_MAX:-10000}
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:?Set BOT_INTERNAL_SECRET in .env.docker}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.docker}
+      TELEGRAM_AUTH_MAX_AGE_SECONDS: ${TELEGRAM_AUTH_MAX_AGE_SECONDS:-300}
+      SEPAY_BANK_ACCOUNT: ${SEPAY_BANK_ACCOUNT:-}
+      SEPAY_BANK_NAME: ${SEPAY_BANK_NAME:-}
+      SEPAY_ACCOUNT_HOLDER: ${SEPAY_ACCOUNT_HOLDER:-}
+      SEPAY_QR_IMAGE_BASE_URL: ${SEPAY_QR_IMAGE_BASE_URL:-https://vietqr.app/img}
+      SEPAY_WEBHOOK_API_KEY: ${SEPAY_WEBHOOK_API_KEY:-}
+      SEPAY_API_TOKEN: ${SEPAY_API_TOKEN:-}
+      SEPAY_API_BASE_URL: ${SEPAY_API_BASE_URL:-https://userapi.sepay.vn/v2/transactions}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    image: ${ORDER_FLOW_IMAGE_PREFIX:-ghcr.io/danielnguyendbk/order-flow}-frontend:${ORDER_FLOW_VERSION:-latest}
+    environment:
+      API_BASE_URL: http://api:3001/api/v1
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  telegram-bot:
+    <<: *backend-image
+    command: ["node", "apps/telegram-bot/dist/index.js"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.docker}
+      API_BASE_URL: http://api:3001/api/v1
+      BOT_INTERNAL_SECRET: ${BOT_INTERNAL_SECRET:?Set BOT_INTERNAL_SECRET in .env.docker}
+      TELEGRAM_WEBHOOK_DOMAIN: ${TELEGRAM_WEBHOOK_DOMAIN:-}
+      TELEGRAM_WEBHOOK_PATH: ${TELEGRAM_WEBHOOK_PATH:-/telegram/webhook}
+      TELEGRAM_WEBHOOK_SECRET_TOKEN: ${TELEGRAM_WEBHOOK_SECRET_TOKEN:-}
+      PORT: 3002
+    ports:
+      - "${BOT_WEBHOOK_PORT:-3002}:3002"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notification-worker:
+    <<: *backend-image
+    command: ["node", "apps/telegram-bot/dist/worker.js"]
+    environment:
+      <<: *database-environment
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.docker}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

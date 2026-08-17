@@ -7,7 +7,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.json",
     "check:auth": "tsc -p tsconfig.auth.json",
-    "start": "node dist/index.js",
+    "start": "node dist/src/server.js",
     "test:auth": "vitest run --config vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:auth:integration": "vitest run --config vitest.integration.config.ts",
