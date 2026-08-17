@@ -307,7 +307,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
         draft.step = "QUANTITY";
         draft.quantity = undefined;
         await ctx.reply(
-          `Chọn số lượng ${draft.selectedMenuItemName}. Nút 1–5 sẽ thêm ngay; nhập số 1–99 nếu món cần ghi chú:`,
+          `Chọn số lượng ${draft.selectedMenuItemName}. Chọn nút 1–5 hoặc nhập số 1–99:`,
           quantityKeyboard(rotateDraftRevision(draft)),
         );
       } else if (draft.step === "PAYMENT_CONFIRMATION") {
@@ -374,7 +374,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       draft.selectedMenuItemName = item.name;
       draft.step = "QUANTITY";
       await ctx.reply(
-        `Chọn số lượng ${item.name}. Nút 1–5 sẽ thêm ngay; nhập số 1–99 nếu món cần ghi chú:`,
+        `Chọn số lượng ${item.name}. Chọn nút 1–5 hoặc nhập số 1–99:`,
         quantityKeyboard(rotateDraftRevision(draft)),
       );
       completed = true;
@@ -386,11 +386,9 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       if (draft.step !== "QUANTITY" || !draft.selectedMenuItemId || !Number.isInteger(quantity) || quantity < 1 || quantity > 5) {
         throw new Error(DRAFT_EXPIRED_MESSAGE);
       }
-      await api.addDraftOrderItem(employee.telegramUserId, draft.orderId, {
-        menuItemId: draft.selectedMenuItemId,
-        quantity,
-      });
-      await showReview(ctx, api, employee);
+      draft.quantity = quantity;
+      draft.step = "NOTE";
+      await ctx.reply("Nhập ghi chú cho món, hoặc chọn Bỏ qua:", noteKeyboard(rotateDraftRevision(draft)));
       completed = true;
       return;
     }

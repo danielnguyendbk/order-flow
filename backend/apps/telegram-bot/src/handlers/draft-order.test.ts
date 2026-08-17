@@ -201,30 +201,26 @@ describe("Telegram draft order flow", () => {
     expect(note.replies.at(-1)).toContain("TỔNG: 70.000");
   });
 
-  it("adds common quantities with one tap and keeps adding items to the same cart", async () => {
+  it("moves a one-tap quantity to the note step before adding it to the cart", async () => {
     const session = { draftOrder: { orderId: "order-1", step: "CATEGORY" as const } };
     const backend = api();
 
     await handleDraftCallback(callbackContext("draft:category:tea", session), backend);
     await handleDraftCallback(callbackContext("draft:item:tea-peach", session), backend);
     const revision = session.draftOrder!.callbackRevision;
-    await handleDraftCallback(callbackContext(draftCallbackData(revision, "quickQuantity", "2"), session), backend);
+    const quantity = callbackContext(draftCallbackData(revision, "quickQuantity", "2"), session);
+    await handleDraftCallback(quantity, backend);
 
+    expect(backend.addDraftOrderItem).not.toHaveBeenCalled();
+    expect(session.draftOrder).toMatchObject({ step: "NOTE", selectedMenuItemId: "tea-peach", quantity: 2 });
+    expect(quantity.replies).toEqual(["Nhập ghi chú cho món, hoặc chọn Bỏ qua:"]);
+
+    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "skipNote"), session), backend);
+
+    expect(backend.addDraftOrderItem).toHaveBeenCalledOnce();
     expect(backend.addDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", {
       menuItemId: "tea-peach",
       quantity: 2,
-    });
-    expect(session.draftOrder?.step).toBe("REVIEW");
-
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "addMore"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "category", "tea"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "item", "tea-peach"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "quickQuantity", "1"), session), backend);
-
-    expect(backend.addDraftOrderItem).toHaveBeenCalledTimes(2);
-    expect(backend.addDraftOrderItem).toHaveBeenLastCalledWith(employee.telegramUserId, "order-1", {
-      menuItemId: "tea-peach",
-      quantity: 1,
     });
     expect(session.draftOrder).toMatchObject({ orderId: "order-1", step: "REVIEW" });
   });
