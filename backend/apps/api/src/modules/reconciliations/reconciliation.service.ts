@@ -9,7 +9,7 @@ import {
 import { prisma } from "../../db";
 
 export interface ResolveReconciliationInput {
-  resolvedByUserId: string;
+  actorUserId: string;
   resolutionAction: ResolutionAction;
   resolutionNote: string;
 }
@@ -79,14 +79,14 @@ export class ReconciliationService {
     return this.db.$transaction(async (tx: Prisma.TransactionClient) => {
       const [reconciliation, user] = await Promise.all([
         tx.sepayTransaction.findUnique({ where: { id: reconciliationId } }),
-        tx.user.findUnique({ where: { id: input.resolvedByUserId } }),
+        tx.user.findUnique({ where: { id: input.actorUserId } }),
       ]);
 
       if (!reconciliation) {
         throw createHttpError(404, `Reconciliation ${reconciliationId} not found`);
       }
       if (!user) {
-        throw createHttpError(404, `User ${input.resolvedByUserId} not found`);
+        throw createHttpError(404, `User ${input.actorUserId} not found`);
       }
       if (user.role !== "OWNER") {
         throw createHttpError(403, "Only owner can resolve reconciliation records");
@@ -98,7 +98,7 @@ export class ReconciliationService {
           matchStatus: TransactionMatchStatus.REVIEWED,
           resolutionAction: input.resolutionAction,
           resolutionNote: input.resolutionNote.trim(),
-          resolvedByUserId: input.resolvedByUserId,
+          resolvedByUserId: input.actorUserId,
           resolvedAt: new Date(),
         },
         include: {
@@ -109,7 +109,7 @@ export class ReconciliationService {
 
       await tx.auditLog.create({
         data: {
-          actorUserId: input.resolvedByUserId,
+          actorUserId: input.actorUserId,
           action: "RECONCILIATION_RESOLVED",
           entityType: AuditEntityType.SEPAY_TRANSACTION,
           entityId: reconciliationId,

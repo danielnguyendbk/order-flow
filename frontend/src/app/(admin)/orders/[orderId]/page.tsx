@@ -243,7 +243,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
       return;
     }
     void act(
-      () => confirmCash(order.id, { confirmedByUserId: currentUserId, amount: totalVnd }),
+      () => confirmCash(order.id, { amount: totalVnd }),
       `Đã xác nhận thu tiền mặt ${formatVnd(totalVnd)} cho đơn ${order.orderCode}.`,
     );
     setCashOpen(false);
@@ -259,7 +259,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
     setQrContent("Đang khởi tạo...");
     setQrAmount("0");
     try {
-      const result = await initQrPayment(order.id, { requestedByUserId: currentUserId });
+      const result = await initQrPayment(order.id);
       setQrContent(result.transferContent);
       setQrAmount(result.amount);
     } catch (actionError) {
@@ -301,7 +301,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
       return;
     }
     void act(
-      () => refundOrder(order.id, { refundedByUserId: currentUserId, reason: refundReason.trim(), amount }),
+      () => refundOrder(order.id, { reason: refundReason.trim(), amount }),
       `Đã hoàn tiền ${formatVnd(amount)} cho đơn ${order.orderCode}.`,
     );
     setRefundOpen(false);
@@ -318,7 +318,7 @@ function OrderDetailView({ orderId }: { orderId: string }) {
       return;
     }
     void act(
-      () => cancelOrder(order.id, { reason: cancelReason.trim(), requesterId: currentUserId }),
+      () => cancelOrder(order.id, { reason: cancelReason.trim() }),
       `Đã hủy đơn ${order.orderCode}.`,
     );
     setCancelOpen(false);

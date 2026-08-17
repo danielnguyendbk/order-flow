@@ -7,10 +7,6 @@ export function validateRefundOrder(data: any): ValidationResult {
     return { isValid: false, errors: ["Request body is required"] };
   }
 
-  if (!data.refundedByUserId || typeof data.refundedByUserId !== "string") {
-    errors.push("refundedByUserId is required");
-  }
-
   if (!data.reason || typeof data.reason !== "string" || data.reason.trim() === "") {
     errors.push("reason is required");
   }

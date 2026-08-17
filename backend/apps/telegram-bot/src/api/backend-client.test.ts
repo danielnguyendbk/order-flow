@@ -102,18 +102,21 @@ describe("BackendClient", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify([order]), { status: 200, headers: { "content-type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(order), { status: 200, headers: { "content-type": "application/json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ order, paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }), { status: 200, headers: { "content-type": "application/json" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ order, paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(order), { status: 200, headers: { "content-type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
     const client = new BackendClient("http://localhost:3000/api/v1", "internal-secret");
 
     await client.listMyOrders(123);
     await client.confirmCashPayment(123, "order-1");
     await client.createQrPayment(123, "order-1");
+    await client.resetQrPayment(123, "order-1");
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       "http://localhost:3000/api/v1/orders?mine=true",
       "http://localhost:3000/api/v1/orders/order-1/payments/cash/confirm",
       "http://localhost:3000/api/v1/orders/order-1/payments/qr",
+      "http://localhost:3000/api/v1/orders/order-1/payments/qr/reset",
     ]);
     expect(fetchMock.mock.calls[1][1]).toMatchObject({
       method: "POST",

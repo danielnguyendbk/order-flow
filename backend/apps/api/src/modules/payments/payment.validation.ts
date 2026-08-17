@@ -7,10 +7,6 @@ export function validateConfirmCash(data: any): ValidationResult {
     return { isValid: false, errors: ["Request body is required"] };
   }
 
-  if (!data.confirmedByUserId || typeof data.confirmedByUserId !== "string") {
-    errors.push("confirmedByUserId is required");
-  }
-
   if (data.amount !== undefined) {
     const isNumber = typeof data.amount === "number";
     const isInteger = isNumber && Number.isInteger(data.amount);
@@ -27,10 +23,6 @@ export function validateInitQrPayment(data: any): ValidationResult {
 
   if (!data || typeof data !== "object") {
     return { isValid: false, errors: ["Request body is required"] };
-  }
-
-  if (!data.requestedByUserId || typeof data.requestedByUserId !== "string") {
-    errors.push("requestedByUserId is required");
   }
 
   return { isValid: errors.length === 0, errors };

@@ -22,7 +22,9 @@ const env: AppEnv = {
   JWT_REFRESH_SECRET: "refresh-secret-that-is-at-least-32-characters",
   JWT_ACCESS_TTL_SECONDS: 900,
   JWT_REFRESH_TTL_SECONDS: 2_592_000,
-  AUTH_SESSION_CACHE_MAX: 100,
+  TRUST_PROXY: false,
+  API_RATE_LIMIT_WINDOW_MS: 60_000,
+  API_RATE_LIMIT_MAX: 300,
   BOT_INTERNAL_SECRET: "test-internal-secret",
   TELEGRAM_BOT_TOKEN: "123456:test-bot-token",
   TELEGRAM_AUTH_MAX_AGE_SECONDS: 300,
@@ -55,7 +57,7 @@ class MemoryAuthRepository implements AuthRepositoryPort {
 function createService(): AuthService {
   return new AuthService(
     new MemoryAuthRepository(),
-    new MemoryAuthSessionStore(env.AUTH_SESSION_CACHE_MAX),
+    new MemoryAuthSessionStore(100),
     new AuthTokenService(env),
     env,
   );
@@ -115,7 +117,7 @@ test("Telegram auth can be disabled without affecting API startup", async () => 
   const telegramDisabledEnv = { ...env, TELEGRAM_BOT_TOKEN: "" };
   const service = new AuthService(
     new MemoryAuthRepository(),
-    new MemoryAuthSessionStore(telegramDisabledEnv.AUTH_SESSION_CACHE_MAX),
+    new MemoryAuthSessionStore(100),
     new AuthTokenService(telegramDisabledEnv),
     telegramDisabledEnv,
   );

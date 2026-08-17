@@ -9,6 +9,7 @@ export type DraftCallbackAction =
   | "addMore"
   | "backCategories"
   | "backReview"
+  | "goBack"
   | "quickQuantity"
   | "skipNote"
   | "payCash"
@@ -29,6 +30,7 @@ const ACTION_CODES: Record<DraftCallbackAction, string> = {
   addMore: "a",
   backCategories: "b",
   backReview: "r",
+  goBack: "g",
   quickQuantity: "v",
   skipNote: "s",
   payCash: "pc",

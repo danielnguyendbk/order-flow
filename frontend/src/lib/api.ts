@@ -247,7 +247,6 @@ export interface ApiCreateOrderItem {
 }
 
 export interface ApiCreateOrderInput {
-  createdByUserId: string;
   paymentMethod?: "CASH" | "QR";
   customerNote?: string;
   items: ApiCreateOrderItem[];
@@ -279,7 +278,7 @@ export function deleteOrderItem(orderId: string, itemId: string) {
   return apiRequest<ApiOrderLite>(`orders/${orderId}/items/${itemId}`, { method: "DELETE" });
 }
 
-export function cancelOrder(orderId: string, body: { reason: string; requesterId?: string }) {
+export function cancelOrder(orderId: string, body: { reason: string }) {
   return apiRequest<ApiOrderLite>(`orders/${orderId}/cancel`, { method: "POST", body });
 }
 
@@ -407,7 +406,7 @@ export async function downloadRevenueExport(
 
 export function resolveReconciliation(
   reconciliationId: string,
-  body: { resolvedByUserId: string; resolutionAction: string; resolutionNote: string },
+  body: { resolutionAction: string; resolutionNote: string },
 ) {
   return apiRequest<ApiSepayTransactionFull>(`admin/reconciliations/${reconciliationId}/resolve`, {
     method: "POST",
@@ -415,18 +414,18 @@ export function resolveReconciliation(
   });
 }
 
-export function refundOrder(orderId: string, body: { refundedByUserId: string; reason: string; amount?: number }) {
+export function refundOrder(orderId: string, body: { reason: string; amount?: number }) {
   return apiRequest<ApiOrder>(`admin/orders/${orderId}/refund`, { method: "POST", body });
 }
 
-export function confirmCash(orderId: string, body: { confirmedByUserId: string; amount?: number }) {
+export function confirmCash(orderId: string, body: { amount?: number }) {
   return apiRequest<ApiOrder>(`orders/${orderId}/payments/cash/confirm`, { method: "POST", body });
 }
 
-export function initQrPayment(orderId: string, body: { requestedByUserId: string }) {
+export function initQrPayment(orderId: string) {
   return apiRequest<{ payment: ApiPayment; transferContent: string; amount: string }>(
     `orders/${orderId}/payments/qr`,
-    { method: "POST", body },
+    { method: "POST", body: {} },
   );
 }
 

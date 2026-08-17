@@ -31,7 +31,7 @@ describe("ReconciliationService", () => {
 
     await expect(
       new ReconciliationService(buildDb(tx)).resolveReconciliation("transaction-1", {
-        resolvedByUserId: "staff-1",
+        actorUserId: "staff-1",
         resolutionAction: ResolutionAction.REJECT,
         resolutionNote: "Not allowed",
       }),
@@ -68,7 +68,7 @@ describe("ReconciliationService", () => {
 
     await expect(
       new ReconciliationService(buildDb(tx)).resolveReconciliation("transaction-1", {
-        resolvedByUserId: "owner-1",
+        actorUserId: "owner-1",
         resolutionAction: ResolutionAction.ACCEPT,
         resolutionNote: " Accept underpayment for promo ",
       }),

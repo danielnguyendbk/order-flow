@@ -15,10 +15,6 @@ export function validateCreateOrder(data: any): ValidationResult {
     return { isValid: false, errors: ["Request body is required"] };
   }
 
-  if (!data.createdByUserId || typeof data.createdByUserId !== "string") {
-    errors.push("createdByUserId is required");
-  }
-
   if (
     data.paymentMethod !== undefined &&
     !Object.values(PaymentMethod).includes(data.paymentMethod)

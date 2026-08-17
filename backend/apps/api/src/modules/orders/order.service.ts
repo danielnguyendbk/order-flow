@@ -146,6 +146,7 @@ export class OrderService {
   ): Promise<Order> {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw createHttpError(404, `Order ${orderId} not found`);
+    await this.assertOrderEditor(order.createdByUserId, requesterId);
 
     // Lock edit check: Only edit items when UNPAID and PENDING_PAYMENT
     if (order.paymentStatus !== PaymentStatus.UNPAID || order.fulfillmentStatus !== FulfillmentStatus.PENDING_PAYMENT) {
@@ -209,6 +210,7 @@ export class OrderService {
   ): Promise<Order> {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw createHttpError(404, `Order ${orderId} not found`);
+    await this.assertOrderEditor(order.createdByUserId, requesterId);
 
     // Lock edit check: Only edit items when UNPAID and PENDING_PAYMENT
     if (order.paymentStatus !== PaymentStatus.UNPAID || order.fulfillmentStatus !== FulfillmentStatus.PENDING_PAYMENT) {
@@ -250,6 +252,7 @@ export class OrderService {
   ): Promise<Order> {
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw createHttpError(404, `Order ${orderId} not found`);
+    await this.assertOrderEditor(order.createdByUserId, requesterId);
 
     // Lock edit check: Only edit items when UNPAID and PENDING_PAYMENT
     if (order.paymentStatus !== PaymentStatus.UNPAID || order.fulfillmentStatus !== FulfillmentStatus.PENDING_PAYMENT) {
@@ -296,6 +299,7 @@ export class OrderService {
 
     const order = await this.orderRepository.findById(orderId);
     if (!order) throw createHttpError(404, `Order ${orderId} not found`);
+    await this.assertOrderEditor(order.createdByUserId, requesterId);
 
     const current = order.fulfillmentStatus;
 
@@ -494,6 +498,24 @@ export class OrderService {
   // ─────────────────────────────────────────────────────────────
   // Admin endpoints
   // ─────────────────────────────────────────────────────────────
+
+  /**
+   * HTTP callers must be the order creator or an active OWNER. The optional
+   * argument preserves existing internal service calls; HTTP controllers never
+   * omit it.
+   */
+  private async assertOrderEditor(createdByUserId: string, requesterId?: string): Promise<void> {
+    if (!requesterId || requesterId === createdByUserId) return;
+
+    const requester = await prisma.user.findUnique({
+      where: { id: requesterId },
+      select: { role: true, status: true },
+    });
+
+    if (!requester || requester.status !== "ACTIVE" || requester.role !== "OWNER") {
+      throw createHttpError(403, "Only the order creator or an OWNER can modify this order");
+    }
+  }
 
   /**
    * Admin override: force-sets either `fulfillmentStatus` or `paymentStatus`

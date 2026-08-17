@@ -9,10 +9,8 @@ import { inPeriod, type Period } from "@/lib/period";
 import {
   getTransactions,
   getReconciliations,
-  getCurrentUser,
   resolveReconciliation,
   type ApiSepayTransactionFull,
-  type ApiUser,
 } from "@/lib/api";
 import { useApiData } from "@/lib/use-api-data";
 import {
@@ -92,14 +90,8 @@ export default function ReconciliationsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [period, setPeriod] = useState<Period | "">("");
   const [needsReview, setNeedsReview] = useState(false);
-  const [me, setMe] = useState<ApiUser | null>(null);
-
   const load = useCallback(async () => {
-    const [payload, mePayload] = await Promise.all([
-      needsReview ? getReconciliations() : getTransactions(),
-      getCurrentUser().catch(() => null),
-    ]);
-    setMe(mePayload?.data ?? null);
+    const payload = await (needsReview ? getReconciliations() : getTransactions());
     return payload.data.map(toReconciliation);
   }, [needsReview]);
 
@@ -155,14 +147,9 @@ export default function ReconciliationsPage() {
 
   const resolve = async () => {
     if (!resolving) return;
-    if (!me) {
-      toast.push("Không lấy được tài khoản đang đăng nhập.", "error");
-      return;
-    }
     setBusy(true);
     try {
       await resolveReconciliation(resolving.id, {
-        resolvedByUserId: me.id,
         resolutionAction,
         resolutionNote: resolveNote.trim() || "Admin xác nhận từ Web Admin",
       });

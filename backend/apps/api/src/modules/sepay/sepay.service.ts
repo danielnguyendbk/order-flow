@@ -232,7 +232,9 @@ export class SepayService {
       code,
       referenceCode: referenceCode ? String(referenceCode) : null,
       transactionDate: dateValue ? new Date(dateValue) : new Date(),
-      rawPayload: payload,
+      // Keep a schema marker, not an unbounded third-party payload. The fields
+      // required for reconciliation are persisted in dedicated columns above.
+      rawPayload: { source: "sepay-webhook", schemaVersion: 1 },
     };
   }
 

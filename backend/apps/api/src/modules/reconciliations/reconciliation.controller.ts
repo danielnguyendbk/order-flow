@@ -59,9 +59,17 @@ export class ReconciliationController {
         res.status(400).json({ message: "Validation failed", errors: v.errors });
         return;
       }
+      if (!req.auth) {
+        res.status(401).json({ message: "Authenticated user is required" });
+        return;
+      }
 
       res.status(200).json(
-        await this.service.resolveReconciliation(req.params.reconciliationId, req.body)
+        await this.service.resolveReconciliation(req.params.reconciliationId, {
+          resolutionAction: req.body.resolutionAction,
+          resolutionNote: req.body.resolutionNote,
+          actorUserId: req.auth.userId,
+        })
       );
     } catch (err) {
       next(err);

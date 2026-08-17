@@ -29,6 +29,7 @@ export interface BackendApi {
   listMyOrders(telegramUserId: number): Promise<DraftOrder[]>;
   confirmCashPayment(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult>;
+  resetQrPayment(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   reconcileQrPayment(telegramUserId: number, orderId: string): Promise<QrReconciliationResult>;
   deliverOrder(telegramUserId: number, orderId: string): Promise<DraftOrder>;
   listBaristaQueue(telegramUserId: number): Promise<BaristaOrder[]>;
@@ -114,6 +115,10 @@ export class BackendClient implements BackendApi {
 
   createQrPayment(telegramUserId: number, orderId: string): Promise<QrPaymentResult> {
     return this.post<QrPaymentResult>(`/orders/${encodeURIComponent(orderId)}/payments/qr`, telegramUserId);
+  }
+
+  resetQrPayment(telegramUserId: number, orderId: string): Promise<DraftOrder> {
+    return this.post<DraftOrder>(`/orders/${encodeURIComponent(orderId)}/payments/qr/reset`, telegramUserId);
   }
 
   reconcileQrPayment(telegramUserId: number, orderId: string): Promise<QrReconciliationResult> {

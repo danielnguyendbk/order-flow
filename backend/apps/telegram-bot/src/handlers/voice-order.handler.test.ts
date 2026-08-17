@@ -80,6 +80,7 @@ describe("voice order intake", () => {
       "➕ Thêm món",
       "✏️ 1 × Cà phê sữa đá",
       "✏️ 2 × Bánh mì que",
+      "Trở lại",
       "❌ Hủy đơn",
     ]);
   });

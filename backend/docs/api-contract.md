@@ -87,14 +87,13 @@ Status: **implemented**
 | `POST` | `/api/v1/orders/:orderId/ready` | Mark a preparing order ready |
 | `POST` | `/api/v1/orders/:orderId/deliver` | Mark a ready order delivered |
 
-- Create body: `{ "createdByUserId": "...", "paymentMethod": "QR|CASH", "customerNote": "...", "items": [{ "menuItemId": "...", "quantity": 1, "note": "..." }] }`.
+- Create body: `{ "paymentMethod": "QR|CASH", "customerNote": "...", "items": [{ "menuItemId": "...", "quantity": 1, "note": "..." }] }`. The API sets `createdByUserId` from the access token.
 - New orders start with `paymentStatus: "UNPAID"` and `fulfillmentStatus: "PENDING_PAYMENT"` from database defaults.
 - `orderCode` is unique in the database; create retries generated code collisions before surfacing a database error.
 - `GET /orders` supports `createdByUserId`, `fulfillmentStatus`, `paymentStatus`, `assignedBaristaId`, `page`, and `limit`; service staff can pass their own `createdByUserId` to list their own service orders.
 - `GET /orders/:orderId` returns `items` and `timeline`, where `timeline` is status history ordered oldest-first.
-- Cancel body: `{ "reason": "...", "requesterId": "..." }`. Unpaid pending-payment orders can be cancelled and the cancellation is recorded in `timeline`.
-- READY body: `{ "requesterId": "..." }`, or `baristaId`/`userId`. Only the assigned barista or a manager can mark READY.
-- DELIVER body: `{ "requesterId": "..." }`, or `baristaId`/`userId`. Only the creator or a manager can mark DELIVERED.
+- Cancel body: `{ "reason": "..." }`. The actor is derived from the token. Unpaid pending-payment orders can be cancelled and the cancellation is recorded in `timeline`.
+- READY and DELIVER derive their actor from the access token. Only the assigned barista or a manager can mark READY; only the creator or a manager can mark DELIVERED.
 
 ## Order items
 
@@ -110,6 +109,7 @@ Status: **implemented**
 - Add item resolves and snapshots the current menu item name and price from the backend. Client-supplied name, price, or total are ignored.
 - Every add/update/delete recalculates `totalAmount` from persisted item snapshots inside a database transaction.
 - Quantity must be a positive integer. Unavailable items and items in inactive categories cannot be added.
+- Only the order creator or an OWNER can add, update, remove, or cancel its items; this identity is never accepted from request JSON.
 
 ## Payments
 
@@ -119,11 +119,13 @@ Status: **implemented**
 | --- | --- | --- |
 | `GET` | `/api/v1/orders/:orderId/payments` | List payment records for an order |
 | `POST` | `/api/v1/orders/:orderId/payments/qr` | Initialize or reuse a QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/qr/reset` | Reset a pending QR payment before any transaction is received |
 | `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Confirm a CASH payment and queue the order |
 
 - `GET /orders/:orderId/payments` returns the linked payment history for the order.
 - QR initialization is idempotent for an existing pending QR payment and returns the transfer content and amount.
-- CASH confirmation requires `confirmedByUserId` and an exact amount when provided; only the order creator or owner can confirm.
+- QR reset returns the order to `UNPAID` so staff can choose another payment method; it is rejected after any SePay transaction or received amount is recorded.
+- CASH confirmation accepts an optional exact amount; its actor is derived from the token. Only the order creator or owner can confirm.
 - CASH confirmation transitions the order from `UNPAID/PENDING_PAYMENT` to `PAID/QUEUED` and records payment + fulfillment history.
 - CASH confirmation and QR initialization write financial audit logs.
 
@@ -158,7 +160,7 @@ Status: **implemented**
 | `POST` | `/api/v1/admin/reports/revenue/export` | Export the selected range as an accounting XLSX |
 | `GET` | `/api/v1/admin/audit-logs` | List audit logs |
 
-- Refund body: `{ "refundedByUserId": "...", "reason": "...", "amount": 50000 }`; `amount` is optional and defaults to the received payment amount.
+- Refund body: `{ "reason": "...", "amount": 50000 }`; `amount` is optional and defaults to the received payment amount. The financial actor is derived from the token.
 - Refunds require an owner actor, reject duplicate refund records for the same payment, and write `MANUAL_REFUND_RECORDED` audit logs.
 - Revenue accepts `from` and `to` query parameters as ISO date-time strings or `YYYY-MM-DD`; date-only values are expanded to the Asia/Bangkok day boundary.
 - Revenue separates `CASH`, `QR`, and `REFUNDED`; refunded amounts are excluded from net revenue.
@@ -204,6 +206,7 @@ Implementation status: **implemented for authenticated Telegram service staff**.
 | `DELETE` | `/api/v1/orders/:orderId/items/:itemId` | Delete an item and recalculate total |
 | `POST` | `/api/v1/orders/:orderId/cancel` | Cancel an unpaid draft |
 | `POST` | `/api/v1/orders/:orderId/payments/qr` | Start an idempotent QR payment |
+| `POST` | `/api/v1/orders/:orderId/payments/qr/reset` | Return a pending QR order to payment-method selection when no transaction exists |
 | `POST` | `/api/v1/orders/:orderId/payments/cash/confirm` | Atomically confirm CASH and queue the order |
 | `POST` | `/api/v1/orders/:orderId/deliver` | Creator confirms handoff of a READY order |
 

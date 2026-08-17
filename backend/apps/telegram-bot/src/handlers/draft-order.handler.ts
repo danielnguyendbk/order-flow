@@ -6,7 +6,8 @@ import { authenticateEmployee } from "../auth/employee-auth.js";
 import { createCallbackRevision, parseDraftCallbackData } from "../callbacks/callback-data.js";
 import { acquireCallback, markCallbackCompleted, releaseCallback } from "../callbacks/callback-guard.js";
 import { fulfillmentStatusLabel, paymentStatusLabel } from "../formatters/order-status.js";
-import { categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, paymentConfirmationKeyboard, quantityKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
+import { formatPaymentSelection } from "../formatters/payment-selection.js";
+import { backKeyboard, categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, paymentConfirmationKeyboard, quantityKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
 import { orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import { roleMenu } from "../keyboards/role-menu.js";
 import { formatOrderStatus } from "./order-status.handler.js";
@@ -57,22 +58,6 @@ function formatMoney(amount: number): string {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(amount);
 }
 
-function formatReview(order: DraftOrder): string {
-  const lines = order.items.map(
-    (item, index) => `${index + 1}. ${item.quantity} × ${item.name} · ${formatMoney(item.unitPrice * item.quantity)}${item.note ? `\n   📝 ${item.note}` : ""}`,
-  );
-
-  const itemCount = order.items.reduce((total, item) => total + item.quantity, 0);
-  return [
-    `🧾 ĐƠN ${order.code}`,
-    `Số món: ${itemCount}`,
-    "",
-    ...(lines.length ? lines : ["Giỏ hàng đang trống."]),
-    "",
-    `💰 TỔNG: ${formatMoney(order.totalAmount)}`,
-  ].join("\n");
-}
-
 async function requireServiceStaff(ctx: DraftOrderContext, api: BackendApi, employee?: EmployeeSession): Promise<EmployeeSession | undefined> {
   const authenticated = employee ?? (await authenticateEmployee(ctx, api));
   if (authenticated.role !== "SERVICE_STAFF") return undefined;
@@ -92,6 +77,19 @@ async function showCategories(ctx: DraftOrderContext, api: BackendApi, employee:
   await ctx.reply("Chọn danh mục món:", categoryKeyboard(categories, revision));
 }
 
+async function showItems(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession, categoryId: string): Promise<void> {
+  const draft = activeDraft(ctx);
+  if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
+
+  const items = await api.getMenuItems(employee.telegramUserId, categoryId);
+  draft.categoryId = categoryId;
+  draft.step = "ITEM";
+  await ctx.reply(
+    items.some((item) => item.isActive) ? "Chọn món:" : "Danh mục này hiện không có món đang bán.",
+    itemKeyboard(items, rotateDraftRevision(draft)),
+  );
+}
+
 async function showReview(ctx: DraftOrderContext, api: BackendApi, employee: EmployeeSession): Promise<void> {
   const draft = activeDraft(ctx);
   if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
@@ -108,7 +106,7 @@ async function showReview(ctx: DraftOrderContext, api: BackendApi, employee: Emp
   draft.quantity = undefined;
   draft.editingOrderItemId = undefined;
   draft.pendingPaymentMethod = undefined;
-  await ctx.reply(formatReview(order), reviewKeyboard(order, rotateDraftRevision(draft)));
+  await ctx.reply(formatPaymentSelection(order), reviewKeyboard(order, rotateDraftRevision(draft)));
 }
 
 async function showPaymentConfirmation(
@@ -136,6 +134,22 @@ async function showPaymentConfirmation(
   ].join("\n"), paymentConfirmationKeyboard(rotateDraftRevision(draft)));
 }
 
+async function showPaymentMethods(
+  ctx: DraftOrderContext,
+  api: BackendApi,
+  employee: EmployeeSession,
+): Promise<void> {
+  const draft = activeDraft(ctx);
+  if (!draft) throw new Error(DRAFT_EXPIRED_MESSAGE);
+
+  const order = await api.getDraftOrder(employee.telegramUserId, draft.orderId);
+  if (!isOpenDraft(order) || !order.items.length) throw new Error("Đơn không còn ở trạng thái có thể thanh toán.");
+
+  draft.step = "REVIEW";
+  draft.pendingPaymentMethod = undefined;
+  await ctx.reply(formatPaymentSelection(order), reviewKeyboard(order, rotateDraftRevision(draft)));
+}
+
 async function createQrPayment(
   ctx: DraftOrderContext,
   api: BackendApi,
@@ -145,7 +159,7 @@ async function createQrPayment(
   const payment = await api.createQrPayment(employee.telegramUserId, orderId);
   clearDraft(ctx);
   const message = `Quét QR để thanh toán ${formatMoney(payment.amount)}.\nNội dung: ${payment.paymentCode}\n\n${formatOrderStatus(payment.order)}`;
-  const keyboard = qrPaymentKeyboard(payment.order.id, payment.qrImageUrl);
+  const keyboard = qrPaymentKeyboard(payment.order.id);
   if (ctx.replyPhoto) await ctx.replyPhoto(payment.qrImageUrl, message, keyboard);
   else await ctx.reply(message, keyboard);
 }
@@ -279,6 +293,35 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       return;
     }
 
+    if (callback.action === "goBack") {
+      if (draft.step === "CATEGORY") {
+        await clearStaleKeyboard(ctx);
+        await ctx.reply("Đã trở lại menu Staff.", roleMenu(employee.role));
+      } else if (draft.step === "ITEM") {
+        await showCategories(ctx, api, employee);
+      } else if (draft.step === "QUANTITY") {
+        if (!draft.categoryId) throw new Error(DRAFT_EXPIRED_MESSAGE);
+        await showItems(ctx, api, employee, draft.categoryId);
+      } else if (draft.step === "NOTE") {
+        if (!draft.selectedMenuItemName) throw new Error(DRAFT_EXPIRED_MESSAGE);
+        draft.step = "QUANTITY";
+        draft.quantity = undefined;
+        await ctx.reply(
+          `Chọn số lượng ${draft.selectedMenuItemName}. Chọn nút 1–5 hoặc nhập số 1–99:`,
+          quantityKeyboard(rotateDraftRevision(draft)),
+        );
+      } else if (draft.step === "PAYMENT_CONFIRMATION") {
+        await showPaymentMethods(ctx, api, employee);
+      } else if (draft.step === "EDIT_QUANTITY" || draft.step === "EDIT_NOTE") {
+        if (!draft.editingOrderItemId) throw new Error(DRAFT_EXPIRED_MESSAGE);
+        await showItemEditor(ctx, api, employee, draft.editingOrderItemId);
+      } else {
+        await showCategories(ctx, api, employee);
+      }
+      completed = true;
+      return;
+    }
+
     if (callback.action === "payCash") {
       await showPaymentConfirmation(ctx, api, employee, "CASH");
       completed = true;
@@ -293,7 +336,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
 
     if (callback.action === "cancelPayment") {
       if (draft.step !== "PAYMENT_CONFIRMATION" || !draft.pendingPaymentMethod) throw new Error(DRAFT_EXPIRED_MESSAGE);
-      await showReview(ctx, api, employee);
+      await showPaymentMethods(ctx, api, employee);
       completed = true;
       return;
     }
@@ -316,10 +359,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       const categoryId = callback.entityId!;
       const categories = await api.getMenuCategories(employee.telegramUserId);
       if (!categories.some((category) => category.id === categoryId)) throw new Error("Danh mục không còn hợp lệ.");
-      const items = await api.getMenuItems(employee.telegramUserId, categoryId);
-      draft.categoryId = categoryId;
-      draft.step = "ITEM";
-      await ctx.reply(items.some((item) => item.isActive) ? "Chọn món:" : "Danh mục này hiện không có món đang bán.", itemKeyboard(items, rotateDraftRevision(draft)));
+      await showItems(ctx, api, employee, categoryId);
       completed = true;
       return;
     }
@@ -334,7 +374,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       draft.selectedMenuItemName = item.name;
       draft.step = "QUANTITY";
       await ctx.reply(
-        `Chọn số lượng ${item.name}. Nút 1–5 sẽ thêm ngay; nhập số 1–99 nếu món cần ghi chú:`,
+        `Chọn số lượng ${item.name}. Chọn nút 1–5 hoặc nhập số 1–99:`,
         quantityKeyboard(rotateDraftRevision(draft)),
       );
       completed = true;
@@ -346,11 +386,9 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       if (draft.step !== "QUANTITY" || !draft.selectedMenuItemId || !Number.isInteger(quantity) || quantity < 1 || quantity > 5) {
         throw new Error(DRAFT_EXPIRED_MESSAGE);
       }
-      await api.addDraftOrderItem(employee.telegramUserId, draft.orderId, {
-        menuItemId: draft.selectedMenuItemId,
-        quantity,
-      });
-      await showReview(ctx, api, employee);
+      draft.quantity = quantity;
+      draft.step = "NOTE";
+      await ctx.reply("Nhập ghi chú cho món, hoặc chọn Bỏ qua:", noteKeyboard(rotateDraftRevision(draft)));
       completed = true;
       return;
     }
@@ -376,8 +414,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       const itemId = callback.entityId!;
       draft.editingOrderItemId = itemId;
       draft.step = "EDIT_QUANTITY";
-      rotateDraftRevision(draft);
-      await ctx.reply("Nhập số lượng mới (1–99):");
+      await ctx.reply("Nhập số lượng mới (1–99):", backKeyboard(rotateDraftRevision(draft)));
       completed = true;
       return;
     }
@@ -400,8 +437,7 @@ export async function handleDraftCallback(ctx: DraftOrderCallbackContext, api: B
       const itemId = callback.entityId!;
       draft.editingOrderItemId = itemId;
       draft.step = "EDIT_NOTE";
-      rotateDraftRevision(draft);
-      await ctx.reply("Nhập ghi chú mới (hoặc gửi dấu - để xóa ghi chú):");
+      await ctx.reply("Nhập ghi chú mới (hoặc gửi dấu - để xóa ghi chú):", backKeyboard(rotateDraftRevision(draft)));
       completed = true;
       return;
     }

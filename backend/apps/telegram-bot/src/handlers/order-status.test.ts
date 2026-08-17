@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder } from "../api/order-types.js";
+import { myOrdersKeyboard, orderStatusKeyboard, qrPaymentKeyboard } from "../keyboards/order-status.js";
 import type { EmployeeSession } from "../types.js";
 import { orderStatusKeyboard } from "../keyboards/order-status.js";
 import { deliverServiceOrder, handleOrderStatusCallback, reconcileQrPayment, showMyOrders, showOrderStatus, type OrderStatusCallbackContext, type OrderStatusContext } from "./order-status.handler.js";
@@ -40,6 +41,7 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
     listMyOrders: vi.fn().mockResolvedValue([order()]),
     confirmCashPayment: vi.fn().mockResolvedValue(order()),
     createQrPayment: vi.fn().mockResolvedValue({ order: order(), paymentCode: "PAYORD001", amount: 30_000, qrImageUrl: "https://vietqr.app/img" }),
+    resetQrPayment: vi.fn().mockResolvedValue(order({ paymentMethod: null, paymentStatus: "UNPAID" })),
     reconcileQrPayment: vi.fn().mockResolvedValue({ order: order({ paymentStatus: "PAID", fulfillmentStatus: "QUEUED" }), matched: true }),
     deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
     listBaristaQueue: vi.fn().mockResolvedValue([]),

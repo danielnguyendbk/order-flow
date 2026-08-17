@@ -9,12 +9,9 @@ import { formatVnd } from "@/lib/format";
 import {
   createOrder,
   getCategories,
-  getCurrentUser,
-  getEmployees,
   getMenuItems,
   type ApiCategory,
   type ApiMenuItem,
-  type ApiUser,
 } from "@/lib/api";
 import { useApiData } from "@/lib/use-api-data";
 
@@ -28,40 +25,27 @@ export default function NewOrderPage() {
   const toast = useToast();
   const router = useRouter();
 
-  const [creatorId, setCreatorId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QR">("CASH");
   const [customerNote, setCustomerNote] = useState("");
   const [rows, setRows] = useState<OrderRow[]>([{ menuItemId: "", quantity: 1, note: "" }]);
   const [busy, setBusy] = useState(false);
 
   const loadCatalog = useCallback(async () => {
-    const [employees, categories, items, me] = await Promise.all([
-      getEmployees(500),
+    const [categories, items] = await Promise.all([
       getCategories(),
       getMenuItems(500),
-      getCurrentUser().catch(() => null),
     ]);
-    return { employees: employees.data, categories: categories.data, items: items.data, me: me?.data ?? null };
+    return { categories: categories.data, items: items.data };
   }, []);
 
   const { data: catalog, loading, error } = useApiData(loadCatalog, {
-    employees: [] as ApiUser[],
     categories: [] as ApiCategory[],
     items: [] as ApiMenuItem[],
-    me: null as ApiUser | null,
   });
 
   const availableItems = useMemo(() => catalog.items.filter((item) => item.isAvailable), [catalog.items]);
   const itemById = useMemo(() => new Map(availableItems.map((item) => [item.id, item])), [availableItems]);
   const categoryById = useMemo(() => new Map(catalog.categories.map((c) => [c.id, c])), [catalog.categories]);
-
-  const staffOptions = useMemo(() => {
-    const list = catalog.employees.filter((employee) => employee.status !== "INACTIVE");
-    if (catalog.me && !list.some((employee) => employee.id === catalog.me!.id)) {
-      list.unshift(catalog.me);
-    }
-    return list;
-  }, [catalog.employees, catalog.me]);
 
   const totalVnd = useMemo(
     () =>
@@ -86,10 +70,6 @@ export default function NewOrderPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!creatorId) {
-      toast.push("Vui lòng chọn người tạo đơn.", "error");
-      return;
-    }
     const items = rows
       .filter((row) => row.menuItemId)
       .map((row) => ({
@@ -104,7 +84,6 @@ export default function NewOrderPage() {
     setBusy(true);
     try {
       const created = await createOrder({
-        createdByUserId: creatorId,
         paymentMethod,
         customerNote: customerNote.trim() || undefined,
         items,
@@ -124,22 +103,11 @@ export default function NewOrderPage() {
       </PageHeader>
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      {loading && <div className="mb-4 text-sm text-muted">Đang tải thực đơn và nhân viên...</div>}
+      {loading && <div className="mb-4 text-sm text-muted">Đang tải thực đơn...</div>}
 
       <form onSubmit={submit} className="space-y-6">
-        <Panel title="Khách hàng" subtitle="Ai là người đứng tên đơn hàng này.">
+        <Panel title="Khách hàng" subtitle="Đơn được ghi nhận theo tài khoản đang đăng nhập.">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Người tạo đơn" hint="Mặc định là tài khoản đang đăng nhập.">
-              <select className="input" value={creatorId} onChange={(e) => setCreatorId(e.target.value)} required>
-                <option value="">Chọn người tạo…</option>
-                {staffOptions.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.fullName} ({user.role === "OWNER" ? "Chủ quán" : user.role === "BARISTA" ? "Pha chế" : "Phục vụ"})
-                    {user.username ? ` · @${user.username}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
             <Field label="Vị trí / ghi chú đơn" hint="Ví dụ: Bàn 5, mang đi, ít đá…">
               <input
                 className="input"

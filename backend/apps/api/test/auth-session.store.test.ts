@@ -12,13 +12,13 @@ function session(id: string, expiresAt = new Date(Date.now() + 60_000)) {
   };
 }
 
-test("memory session cache creates, rotates, and revokes sessions", () => {
+test("memory session cache creates, rotates, and revokes sessions", async () => {
   const store = new MemoryAuthSessionStore(10);
-  store.create(session("one"));
-  assert.equal(store.isActive("one", "user-one"), true);
+  await store.create(session("one"));
+  assert.equal(await store.isActive("one", "user-one"), true);
 
   assert.equal(
-    store.rotate({
+    await store.rotate({
       sessionId: "one",
       userId: "user-one",
       currentTokenHash: "hash-one",
@@ -28,15 +28,15 @@ test("memory session cache creates, rotates, and revokes sessions", () => {
     true,
   );
 
-  store.revoke("one", "user-one");
-  assert.equal(store.isActive("one", "user-one"), false);
+  await store.revoke("one", "user-one");
+  assert.equal(await store.isActive("one", "user-one"), false);
 });
 
-test("memory session cache rejects reuse and removes expired sessions", () => {
+test("memory session cache rejects reuse and removes expired sessions", async () => {
   const store = new MemoryAuthSessionStore(10);
-  store.create(session("one"));
+  await store.create(session("one"));
   assert.equal(
-    store.rotate({
+    await store.rotate({
       sessionId: "one",
       userId: "user-one",
       currentTokenHash: "wrong-old-hash",
@@ -45,19 +45,19 @@ test("memory session cache rejects reuse and removes expired sessions", () => {
     }),
     false,
   );
-  assert.equal(store.isActive("one", "user-one"), false);
+  assert.equal(await store.isActive("one", "user-one"), false);
 
-  store.create(session("expired", new Date(Date.now() - 1)));
-  assert.equal(store.isActive("expired", "user-expired"), false);
+  await store.create(session("expired", new Date(Date.now() - 1)));
+  assert.equal(await store.isActive("expired", "user-expired"), false);
 });
 
-test("memory session cache remains bounded", () => {
+test("memory session cache remains bounded", async () => {
   const store = new MemoryAuthSessionStore(2);
-  store.create(session("one"));
-  store.create(session("two"));
-  store.create(session("three"));
+  await store.create(session("one"));
+  await store.create(session("two"));
+  await store.create(session("three"));
 
-  assert.equal(store.isActive("one", "user-one"), false);
-  assert.equal(store.isActive("two", "user-two"), true);
-  assert.equal(store.isActive("three", "user-three"), true);
+  assert.equal(await store.isActive("one", "user-one"), false);
+  assert.equal(await store.isActive("two", "user-two"), true);
+  assert.equal(await store.isActive("three", "user-three"), true);
 });

@@ -21,7 +21,7 @@ docker compose --env-file .env.docker up -d
 docker compose --env-file .env.docker ps
 ```
 
-Open the Admin Web at `http://localhost:3000`. The API health endpoint is `http://localhost:3001/health`. Ports can be changed with `WEB_PORT`, `API_PORT`, and `BOT_WEBHOOK_PORT`.
+Set `ORDER_FLOW_VERSION` to the immutable release tag being deployed; `latest` is intentionally not accepted. Open the Admin Web at `http://localhost:3000`. The API health endpoint is `http://localhost:3001/health`. Ports can be changed with `WEB_PORT`, `API_PORT`, and `BOT_WEBHOOK_PORT`; Compose binds them to loopback, so expose them only through a TLS reverse proxy.
 
 `db-init` is expected to finish with exit code 0. It creates or refreshes only the configured OWNER login. PostgreSQL initializes the schema only when its named volume is empty. Normal restarts preserve data in `postgres_data` and Redis state in `redis_data`.
 
@@ -36,7 +36,7 @@ docker compose --env-file .env.docker down
 
 `docker compose down` keeps data. `docker compose down -v` permanently deletes the PostgreSQL and Redis volumes and must only be used when a clean database is intended.
 
-Telegram uses long polling when `TELEGRAM_WEBHOOK_DOMAIN` is empty. For webhook mode, put a TLS reverse proxy in front of port 3002 of the `telegram-bot` service and set the three webhook variables. In production, also put the public web/API ports behind an HTTPS reverse proxy.
+Telegram uses long polling when `TELEGRAM_WEBHOOK_DOMAIN` is empty. For webhook mode, put a TLS reverse proxy in front of port 3002 of the `telegram-bot` service and set the three webhook variables. In production, terminate HTTPS at that proxy and set `TRUST_PROXY=true` only when it is the sole path to the API.
 
 ## Publish images to GHCR
 
@@ -47,7 +47,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-It creates `v1.0.0`, commit-SHA, and `latest` tags under:
+It creates `v1.0.0`, commit-SHA, and `latest` tags under. Deploy the immutable `v1.0.0` or commit-SHA tag, never `latest`:
 
 ```text
 ghcr.io/danielnguyendbk/order-flow-backend

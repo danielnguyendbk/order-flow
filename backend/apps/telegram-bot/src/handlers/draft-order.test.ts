@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BackendApiError, type BackendApi } from "../api/backend-client.js";
 import type { DraftOrder, MenuCategory, MenuItem } from "../api/order-types.js";
 import { draftCallbackData, type DraftCallbackAction } from "../callbacks/callback-data.js";
-import { paymentConfirmationKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
+import { backKeyboard, categoryKeyboard, editItemKeyboard, itemKeyboard, noteKeyboard, paymentConfirmationKeyboard, quantityKeyboard, reviewKeyboard } from "../keyboards/draft-order.js";
 import type { BotSession, EmployeeSession } from "../types.js";
 import {
   handleDraftCallback,
@@ -58,6 +58,7 @@ function api(overrides: Partial<BackendApi> = {}): BackendApi {
       amount: 70_000,
       qrImageUrl: "https://vietqr.app/img?amount=70000",
     }),
+    resetQrPayment: vi.fn().mockResolvedValue(order()),
     deliverOrder: vi.fn().mockResolvedValue(order({ fulfillmentStatus: "DELIVERED" })),
     listBaristaQueue: vi.fn().mockResolvedValue([]),
     listBaristaOrders: vi.fn().mockResolvedValue([]),
@@ -127,6 +128,23 @@ function callbackContext(data: string, session: DraftOrderContext["session"]): D
 }
 
 describe("Telegram draft order flow", () => {
+  it("provides a back button on every staff draft screen", () => {
+    const keyboards = [
+      categoryKeyboard(categories, "deadbeef"),
+      itemKeyboard(menuItems, "deadbeef"),
+      quantityKeyboard("deadbeef"),
+      noteKeyboard("deadbeef"),
+      reviewKeyboard(order(), "deadbeef"),
+      paymentConfirmationKeyboard("deadbeef"),
+      editItemKeyboard(order().items[0], "deadbeef"),
+      backKeyboard("deadbeef"),
+    ];
+
+    for (const keyboard of keyboards) {
+      expect(keyboard.reply_markup.inline_keyboard.flat().map((button) => button.text)).toContain("Trở lại");
+    }
+  });
+
   it("offers CASH and QR only when the review has items", () => {
     const labels = reviewKeyboard(order(), "deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
     const emptyLabels = reviewKeyboard(order({ items: [], totalAmount: 0 }), "deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
@@ -136,7 +154,7 @@ describe("Telegram draft order flow", () => {
 
   it("shows explicit confirm and cancel actions for CASH payment", () => {
     const labels = paymentConfirmationKeyboard("deadbeef").reply_markup.inline_keyboard.flat().map((button) => button.text);
-    expect(labels).toEqual(["✅ Xác nhận thanh toán", "❌ Hủy"]);
+    expect(labels).toEqual(["✅ Xác nhận thanh toán", "Trở lại"]);
   });
 
   it("creates a backend draft and starts at category selection", async () => {
@@ -183,30 +201,26 @@ describe("Telegram draft order flow", () => {
     expect(note.replies.at(-1)).toContain("TỔNG: 70.000");
   });
 
-  it("adds common quantities with one tap and keeps adding items to the same cart", async () => {
+  it("moves a one-tap quantity to the note step before adding it to the cart", async () => {
     const session = { draftOrder: { orderId: "order-1", step: "CATEGORY" as const } };
     const backend = api();
 
     await handleDraftCallback(callbackContext("draft:category:tea", session), backend);
     await handleDraftCallback(callbackContext("draft:item:tea-peach", session), backend);
     const revision = session.draftOrder!.callbackRevision;
-    await handleDraftCallback(callbackContext(draftCallbackData(revision, "quickQuantity", "2"), session), backend);
+    const quantity = callbackContext(draftCallbackData(revision, "quickQuantity", "2"), session);
+    await handleDraftCallback(quantity, backend);
 
+    expect(backend.addDraftOrderItem).not.toHaveBeenCalled();
+    expect(session.draftOrder).toMatchObject({ step: "NOTE", selectedMenuItemId: "tea-peach", quantity: 2 });
+    expect(quantity.replies).toEqual(["Nhập ghi chú cho món, hoặc chọn Bỏ qua:"]);
+
+    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "skipNote"), session), backend);
+
+    expect(backend.addDraftOrderItem).toHaveBeenCalledOnce();
     expect(backend.addDraftOrderItem).toHaveBeenCalledWith(employee.telegramUserId, "order-1", {
       menuItemId: "tea-peach",
       quantity: 2,
-    });
-    expect(session.draftOrder?.step).toBe("REVIEW");
-
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "addMore"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "category", "tea"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "item", "tea-peach"), session), backend);
-    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "quickQuantity", "1"), session), backend);
-
-    expect(backend.addDraftOrderItem).toHaveBeenCalledTimes(2);
-    expect(backend.addDraftOrderItem).toHaveBeenLastCalledWith(employee.telegramUserId, "order-1", {
-      menuItemId: "tea-peach",
-      quantity: 1,
     });
     expect(session.draftOrder).toMatchObject({ orderId: "order-1", step: "REVIEW" });
   });
@@ -336,7 +350,7 @@ describe("Telegram draft order flow", () => {
     expect(repeated.clears).toEqual(["cleared"]);
   });
 
-  it("cancels only the payment selection and returns to the editable order", async () => {
+  it("returns from CASH confirmation to payment method selection", async () => {
     const session: BotSession = { draftOrder: { orderId: "order-1", step: "REVIEW", callbackRevision: "deadbeef" } };
     const backend = api();
 
@@ -348,7 +362,29 @@ describe("Telegram draft order flow", () => {
     expect(backend.createQrPayment).not.toHaveBeenCalled();
     expect(backend.cancelDraftOrder).not.toHaveBeenCalled();
     expect(session.draftOrder).toMatchObject({ step: "REVIEW", pendingPaymentMethod: undefined });
-    expect(cancellation.replies.at(-1)).toContain("TỔNG: 70.000");
+    expect(cancellation.replies.at(-1)).toContain("🧾 ĐƠN OF-001");
+    expect(cancellation.replies.at(-1)).toContain("💰 TỔNG: 70.000");
+  });
+
+  it("navigates back through quantity, item and category screens without mutating the order", async () => {
+    const session: BotSession = { draftOrder: { orderId: "order-1", step: "CATEGORY", callbackRevision: "deadbeef" } };
+    const backend = api();
+
+    await handleDraftCallback(callbackContext(draftCallbackData("deadbeef", "category", "tea"), session), backend);
+    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "item", "tea-peach"), session), backend);
+    expect(session.draftOrder?.step).toBe("QUANTITY");
+
+    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "goBack"), session), backend);
+    expect(session.draftOrder?.step).toBe("ITEM");
+
+    await handleDraftCallback(callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "backCategories"), session), backend);
+    expect(session.draftOrder?.step).toBe("CATEGORY");
+
+    const menu = callbackContext(draftCallbackData(session.draftOrder!.callbackRevision, "goBack"), session);
+    await handleDraftCallback(menu, backend);
+    expect(menu.clears).toEqual(["cleared"]);
+    expect(menu.replies.at(-1)).toContain("menu Staff");
+    expect(backend.addDraftOrderItem).not.toHaveBeenCalled();
   });
 
   it("clears a stale keyboard and cannot apply a callback from another draft", async () => {

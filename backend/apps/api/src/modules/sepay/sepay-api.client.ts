@@ -14,10 +14,20 @@ export class SepayApiClientError extends Error {
     public readonly statusCode: number,
     public readonly code: string,
     message: string,
+    public readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "SepayApiClientError";
   }
+}
+
+function retryAfterMilliseconds(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.ceil(seconds * 1_000);
+
+  const retryAt = new Date(value).getTime();
+  return Number.isNaN(retryAt) ? undefined : Math.max(0, retryAt - Date.now());
 }
 
 interface SepayApiTransaction {
@@ -63,7 +73,7 @@ export class SepayApiClient implements SepayTransactionLookup {
     private readonly apiToken: string = process.env.SEPAY_API_TOKEN?.trim() ?? "",
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly baseUrl = process.env.SEPAY_API_BASE_URL?.trim()
-      || "https://my.sepay.vn/userapi/transactions/list",
+      || "https://userapi.sepay.vn/v2/transactions",
   ) {}
 
   public async findIncomingTransaction(input: SepayTransactionLookupInput): Promise<Record<string, unknown> | null> {
@@ -106,6 +116,14 @@ export class SepayApiClient implements SepayTransactionLookup {
     }
 
     if (!response.ok) {
+      if (response.status === 429) {
+        throw new SepayApiClientError(
+          429,
+          "SEPAY_API_RATE_LIMITED",
+          "SePay transaction API rate limit reached",
+          retryAfterMilliseconds(response.headers.get("retry-after")),
+        );
+      }
       throw new SepayApiClientError(
         response.status === 401 || response.status === 403 ? 503 : 502,
         response.status === 401 || response.status === 403 ? "SEPAY_API_TOKEN_INVALID" : "SEPAY_API_UNAVAILABLE",

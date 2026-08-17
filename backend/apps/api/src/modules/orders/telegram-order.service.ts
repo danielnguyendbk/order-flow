@@ -63,6 +63,7 @@ export interface TelegramOrderServiceContract {
   cancelDraft(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   confirmCash(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   createQr(employeeId: string, orderId: string): Promise<TelegramQrPaymentDto>;
+  resetQr(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
   reconcileQr(employeeId: string, orderId: string): Promise<TelegramQrReconciliationDto>;
   deliver(employeeId: string, orderId: string): Promise<TelegramOrderDto>;
 }
@@ -349,6 +350,69 @@ export class TelegramOrderService implements TelegramOrderServiceContract {
       amount: Number(result.order.totalAmount),
       qrImageUrl: qrUrl.toString(),
     };
+  }
+
+  public async resetQr(employeeId: string, orderId: string): Promise<TelegramOrderDto> {
+    const order = await this.serializable(async (tx) => {
+      const current = await this.ownedOrder(tx, employeeId, orderId);
+      if (
+        current.paymentMethod === null
+        && current.paymentStatus === "UNPAID"
+        && current.fulfillmentStatus === "PENDING_PAYMENT"
+      ) {
+        return current;
+      }
+      if (
+        current.paymentMethod !== "QR"
+        || current.paymentStatus !== "PENDING"
+        || current.fulfillmentStatus !== "PENDING_PAYMENT"
+      ) {
+        throw new TelegramOrderError(409, "QR_RESET_NOT_ALLOWED", "Only a pending QR payment can be reset");
+      }
+
+      const payment = await tx.payment.findUnique({
+        where: { orderId },
+        select: {
+          id: true,
+          receivedAmount: true,
+          _count: { select: { sepayTransactions: true } },
+        },
+      });
+      if (!payment) {
+        throw new TelegramOrderError(409, "PAYMENT_STATE_INVALID", "QR payment record is incomplete");
+      }
+      if (payment.receivedAmount > 0n || payment._count.sepayTransactions > 0) {
+        throw new TelegramOrderError(409, "QR_PAYMENT_RECEIVED", "QR payment already has a received transaction");
+      }
+
+      const changed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          createdByUserId: employeeId,
+          paymentMethod: "QR",
+          paymentStatus: "PENDING",
+          fulfillmentStatus: "PENDING_PAYMENT",
+        },
+        data: { paymentMethod: null, paymentStatus: "UNPAID" },
+      });
+      if (changed.count !== 1) {
+        throw new TelegramOrderError(409, "ORDER_STATE_CHANGED", "Order state changed while resetting QR payment");
+      }
+
+      await tx.payment.delete({ where: { id: payment.id } });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          statusDomain: "PAYMENT",
+          oldStatus: "PENDING",
+          newStatus: "UNPAID",
+          changedByUserId: employeeId,
+          reason: "QR payment selection reset by service staff",
+        },
+      });
+      return this.ownedOrder(tx, employeeId, orderId);
+    });
+    return toOrderDto(order);
   }
 
   public async reconcileQr(employeeId: string, orderId: string): Promise<TelegramQrReconciliationDto> {

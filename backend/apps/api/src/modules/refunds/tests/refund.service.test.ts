@@ -48,7 +48,7 @@ describe("RefundService", () => {
     tx.auditLog.create.mockResolvedValue({ id: 1n });
 
     const result = await new RefundService().refundOrder("order-1", {
-      refundedByUserId: "owner-1",
+      actorUserId: "owner-1",
       reason: " Customer requested refund ",
       amount: 50000,
     });
@@ -91,7 +91,7 @@ describe("RefundService", () => {
 
     await expect(
       new RefundService().refundOrder("order-1", {
-        refundedByUserId: "owner-1",
+        actorUserId: "owner-1",
         reason: "Already refunded",
       }),
     ).rejects.toMatchObject({ statusCode: 409 });

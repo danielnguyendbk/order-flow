@@ -94,6 +94,9 @@ describe("SepayService", () => {
       paymentId: "payment-1",
       matchStatus: TransactionMatchStatus.MATCHED,
     });
+    expect(tx.sepayTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ rawPayload: { source: "sepay-webhook", schemaVersion: 1 } }),
+    }));
     expect(tx.order.update).toHaveBeenCalledWith({
       where: { id: "order-1" },
       data: {

@@ -27,13 +27,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package-lock.json ./apps/api/
 COPY prisma/schema.prisma ./prisma/schema.prisma
+COPY prisma/migrations ./prisma/migrations
 RUN npm ci --omit=dev && npm --prefix apps/api ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/backend/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/backend/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/backend/apps/telegram-bot/dist ./apps/telegram-bot/dist
 COPY docs ./docs
-COPY scripts/container-init.cjs ./scripts/container-init.cjs
+COPY scripts/container-init.cjs scripts/apply-migrations.cjs ./scripts/
 
 USER node
 CMD ["node", "apps/api/dist/src/server.js"]
