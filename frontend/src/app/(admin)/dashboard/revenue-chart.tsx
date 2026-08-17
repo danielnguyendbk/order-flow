@@ -51,7 +51,9 @@ function formatWeekday(date: string) {
 }
 
 function asDailyPoint(point: ApiDashboardRevenuePoint, index: number, range: DashboardRange): ChartPoint {
-  const showThirtyDayLabel = index === 0 || index % 5 === 0 || index === range - 1;
+  // Thirty daily columns need fewer, evenly spaced labels than the data points.
+  // Rendering labels independently from bars keeps dates readable at every width.
+  const showThirtyDayLabel = index === 0 || index === range - 1 || index % 6 === 0;
   return {
     key: point.date,
     axisLabel: range === 7 ? formatWeekday(point.date) : showThirtyDayLabel ? formatShortDate(point.date) : "",
@@ -208,12 +210,17 @@ export default function RevenueChart({ refreshKey = 0 }: { refreshKey?: number }
 
         {points.length > 0 && (
           <>
-            <div className={`mt-4 grid min-h-[260px] flex-1 grid-cols-[3rem_minmax(0,1fr)] gap-x-3 transition-opacity ${loading || !rangeMatchesData ? "opacity-60" : "opacity-100"}`}>
+            <div className={`mt-4 min-h-[260px] flex-1 transition-opacity ${loading || !rangeMatchesData ? "opacity-60" : "opacity-100"}`}>
+              <div className="mb-1 flex items-center justify-between pl-[3.75rem] text-[10px] font-medium text-muted" aria-hidden="true">
+                <span>Doanh thu (VND)</span>
+                <span>{range === 30 ? "Theo ngày" : range === 90 ? "Theo tuần" : "Theo ngày"}</span>
+              </div>
+              <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3">
               <div className="relative h-[230px]" aria-hidden="true">
                 {[...ticks].reverse().map((tick, index) => (
                   <span
                     key={tick}
-                    className="absolute right-0 -translate-y-1/2 whitespace-nowrap text-[10px] tabular-nums text-muted"
+                    className="absolute right-0 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium tabular-nums text-muted"
                     style={{ top: `${(index / AXIS_STEPS) * 100}%` }}
                   >
                     {formatAxisVnd(tick)}
@@ -254,13 +261,27 @@ export default function RevenueChart({ refreshKey = 0 }: { refreshKey?: number }
                     })}
                   </div>
                 </div>
-                <div className={`mt-2 flex ${range === 30 ? "gap-0.5 sm:gap-1" : "gap-1.5 sm:gap-2"}`} aria-hidden="true">
-                  {points.map((point) => (
-                    <span key={point.key} className="min-w-0 flex-1 truncate text-center text-[10px] text-muted sm:text-[11px]" title={point.fullLabel}>
-                      {point.axisLabel}
-                    </span>
-                  ))}
+                <div className="relative mt-2 h-5" aria-hidden="true">
+                  {points.map((point, index) => {
+                    const showAxisLabel = point.axisLabel && (
+                      range !== 90 || index === 0 || index === points.length - 1 || index % 2 === 0
+                    );
+                    if (!showAxisLabel) return null;
+                    const position = points.length <= 1 ? 50 : (index / (points.length - 1)) * 100;
+                    const alignment = index === 0 ? "translate-x-0" : index === points.length - 1 ? "-translate-x-full" : "-translate-x-1/2";
+                    return (
+                      <span
+                        key={point.key}
+                        className={`absolute top-0 whitespace-nowrap text-[10px] font-medium text-muted sm:text-[11px] ${alignment}`}
+                        style={{ left: `${position}%` }}
+                        title={point.fullLabel}
+                      >
+                        {point.axisLabel}
+                      </span>
+                    );
+                  })}
                 </div>
+              </div>
               </div>
             </div>
 
